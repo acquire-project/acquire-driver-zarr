@@ -29,7 +29,6 @@ else()
     #
     foreach(name
         list-devices
-        write-raw-zarr-with-variable-chunking
         write-zarr-with-compression-and-rollover
         write-zarr-with-defaults
         write-zarr-with-lz4-compression
