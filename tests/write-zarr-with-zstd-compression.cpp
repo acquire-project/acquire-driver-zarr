@@ -72,7 +72,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
     const char external_metadata[] = R"({"hello":"world"})";
     const struct PixelScale sample_spacing_um = { 1, 1 };
 
-    DEVOK(storage_properties_init(&props.video[0].storage.settings,
+    CHECK(storage_properties_init(&props.video[0].storage.settings,
                                   0,
                                   (char*)filename,
                                   strlen(filename) + 1,

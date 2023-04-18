@@ -28,6 +28,7 @@ else()
     # Tests
     #
     foreach(name
+        list-devices
         write-raw-zarr-with-variable-chunking
         write-zarr-with-compression-and-rollover
         write-zarr-with-defaults

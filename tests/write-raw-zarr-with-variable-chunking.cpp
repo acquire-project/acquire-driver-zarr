@@ -98,14 +98,14 @@ acquire(AcquireRuntime* runtime, const char* filename, const Params& params)
     const char external_metadata[] = R"({"hello":"world"})";
     const struct PixelScale sample_spacing_um = { 1, 1 };
 
-    storage_properties_init(&props.video[0].storage.settings,
-                            0,
-                            (char*)filename,
-                            strlen(filename) + 1,
-                            (char*)external_metadata,
-                            sizeof(external_metadata),
-                            sample_spacing_um,
-                            params.bytes_per_chunk());
+    CHECK(storage_properties_init(&props.video[0].storage.settings,
+                                  0,
+                                  (char*)filename,
+                                  strlen(filename) + 1,
+                                  (char*)external_metadata,
+                                  sizeof(external_metadata),
+                                  sample_spacing_um,
+                                  params.bytes_per_chunk()));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
