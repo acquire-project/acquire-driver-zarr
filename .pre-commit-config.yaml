@@ -1,0 +1,41 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+fail_fast: false
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+-   repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+    -   id: clang-format
+        args: ["-i"]
+    -   id: clang-tidy
+        args: ["-p=build"]
+
+# I'd love cppcheck to be included in the precommit by default but:
+#
+#   - it requires hard-coding the build directory
+#   - it's sensitive to the use of `cmake -G Ninja` which isn't the default
+#     on Windows.
+#   - it can take a few seconds to run, which is annoying
+#
+# Feel free to enable it yourself by uncommenting below.
+
+    # -   id: cppcheck
+    #     args: [
+    #       "--project=build/compile_commands.json",
+    #       "--inline-suppr",
+    #       "-iexamples/common/imgui",
+    #       "--suppress=*:examples/common/imgui/imgui.h",
+    #       "-isrc/devices/cameras/3rdParty",
+    #       "--suppress=constParameter:*",
+    #       "--suppress=useStlAlgorithm:*",
+    #       "--suppress=unusedStructMember:*",
+    #       "--suppress=unusedFunction:*",
+    #       "--suppress=cstyleCast:*",
+    #     ]

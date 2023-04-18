@@ -1,0 +1,7 @@
+[submodule "src/acquire-device-kit"]
+	path = src/acquire-device-kit
+	url = ../acquire-device-kit.git
+	branch = main
+[submodule "tests/acquire-video-runtime"]
+	path = tests/acquire-video-runtime
+	url = ../acquire-video-runtime/

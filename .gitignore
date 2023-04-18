@@ -1,0 +1,13 @@
+.idea
+build*/
+install
+.vscode
+.cache
+CMakeSettings.json
+.vs
+TestResults
+cmake-build*
+.DS_Store
+*.zip
+_CPack_Packages/
+.PVS-Studio
