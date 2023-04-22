@@ -1,5 +1,9 @@
 add_subdirectory(3rdParty)
-add_subdirectory(acquire-device-kit)
+
+aq_require(acquire-core-logger)
+aq_require(acquire-core-platform)
+aq_require(acquire-device-properties)
+aq_require(acquire-device-kit)
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
