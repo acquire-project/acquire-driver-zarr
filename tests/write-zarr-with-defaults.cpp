@@ -83,8 +83,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                             strlen(filename) + 1,
                             (char*)external_metadata,
                             sizeof(external_metadata),
-                            sample_spacing_um,
-                            64 << 20);
+                            sample_spacing_um);
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;

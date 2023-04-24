@@ -158,7 +158,7 @@ acquire::sink::zarr::Zarr<ChunkWriter>::set(const StorageProperties* props)
         external_metadata_json_ = props->external_metadata_json.str;
 
     pixel_scale_um_ = props->pixel_scale_um;
-    bytes_per_chunk_ = props->bytes_per_chunk;
+    bytes_per_chunk_ = props->chunking.bytes_per_chunk;
 
     // Use 16 MB default chunk size if 0 is passed in.
     bytes_per_chunk_ = bytes_per_chunk_ ? bytes_per_chunk_ : (1ULL << 24);
