@@ -1,7 +1,6 @@
 if(${NOTEST})
     message(STATUS "Skipping test targets")
 else()
-    aq_require(acquire-device-hal)
     aq_require(acquire-driver-common)
     aq_require(acquire-video-runtime)
 
