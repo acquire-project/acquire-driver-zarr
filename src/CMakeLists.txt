@@ -8,13 +8,14 @@ aq_require(acquire-device-kit)
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         prelude.h
+        tiled.frame.hh
+        tiled.frame.cpp
         zarr.hh
         zarr.cpp
-        zarr.raw.hh
-        zarr.raw.cpp
-        zarr.codec.hh
-        zarr.blosc.hh
-        zarr.blosc.cpp
+        zarr.encoder.hh
+        zarr.encoder.cpp
+        chunk.writer.hh
+        chunk.writer.cpp
         zarr.driver.c
 )
 target_enable_simd(${tgt})

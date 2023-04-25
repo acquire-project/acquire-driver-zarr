@@ -55,6 +55,16 @@ reporter(int is_error,
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
     } while (0)
 
+/// Check that a>b
+/// example: `ASSERT_GT(int,"%d",42,meaning_of_life())`
+#define ASSERT_GT(T, fmt, a, b)                                                \
+    do {                                                                       \
+        T a_ = (T)(a);                                                         \
+        T b_ = (T)(b);                                                         \
+        EXPECT(                                                                \
+          a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
+    } while (0)
+
 void
 acquire(AcquireRuntime* runtime, const char* filename)
 {
@@ -84,6 +94,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
                             (char*)external_metadata,
                             sizeof(external_metadata),
                             sample_spacing_um);
+
+    storage_properties_set_chunking_props(
+      &props.video[0].storage.settings, 64, 48, 1, 64 << 20);
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -174,16 +187,16 @@ main()
 
     const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));
-    CHECK(fs::file_size(zarray_path) > 0);
+    ASSERT_GT(size_t, "%lu", fs::file_size(zarray_path), 0);
 
     const auto external_metadata_path =
       fs::path(TEST ".zarr") / "0" / ".zattrs";
     CHECK(fs::is_regular_file(external_metadata_path));
-    CHECK(fs::file_size(external_metadata_path) > 0);
+    ASSERT_GT(size_t, "%lu", fs::file_size(external_metadata_path), 0);
 
     const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
     CHECK(fs::is_regular_file(group_zattrs_path));
-    CHECK(fs::file_size(group_zattrs_path) > 0);
+    ASSERT_GT(size_t, "%lu", fs::file_size(group_zattrs_path), 0);
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);
