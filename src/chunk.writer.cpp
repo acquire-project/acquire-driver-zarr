@@ -53,6 +53,7 @@ chunk_write_thread(acquire::sink::zarr::ChunkWriter* writer)
 
     const size_t bytes_per_row = roi.bytes_per_row();
     std::vector<uint8_t> fill(bytes_per_row);
+    std::fill(fill.begin(), fill.end(), 0);
     do {
         if (auto frame = writer->pop_frame_and_make_current()) {
             uint8_t* region = nullptr;
@@ -63,8 +64,8 @@ chunk_write_thread(acquire::sink::zarr::ChunkWriter* writer)
                     writer->write(region, region + nbytes);
                 }
                 if (nbytes < bytes_per_row) {
-                    std::fill_n(fill.data(), bytes_per_row - nbytes, 0);
-                    writer->write(fill.data(), fill.data() + bytes_per_row - nbytes);
+                    writer->write(fill.data(),
+                                  fill.data() + bytes_per_row - nbytes);
                 }
             }
 
