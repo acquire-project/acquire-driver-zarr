@@ -35,10 +35,6 @@
 // The deallocate themselves when their `destroy()` method is called.
 struct Storage*
 zarr_init();
-struct Storage*
-compressed_zarr_zstd_init();
-struct Storage*
-compressed_zarr_lz4_init();
 
 //
 //                  GLOBALS

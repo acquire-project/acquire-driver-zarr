@@ -97,8 +97,6 @@ struct Zarr final : StorageInterface
     void write_external_metadata_json_() const;
     void write_zgroup_json_() const;
     void write_group_zattrs_json_() const;
-    void rollover_();
-    void fill_zeros_();
 
     void initialize_thread_pool_(size_t nthreads);
     void finalize_thread_pool_();

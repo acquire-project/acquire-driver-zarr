@@ -42,14 +42,18 @@ struct Encoder
     size_t write(const uint8_t* beg, const uint8_t* end);
     size_t flush();
 
-    void open_file(const std::string& file_path);
+    void set_file_path(const std::string& file_path);
     void close_file();
 
   protected:
     std::vector<uint8_t> buf_;
     size_t cursor_;
     size_t bytes_per_pixel_;
-    struct file* file_;
+    std::string path_;
+    struct file* file_handle_;
+    bool file_has_been_created_;
+
+    void open_file();
 
     virtual size_t flush_impl() = 0;
     virtual void open_file_impl() = 0;

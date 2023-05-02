@@ -59,6 +59,16 @@ reporter(int is_error,
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
     } while (0)
 
+const static uint32_t frame_width = 1920;
+const static uint32_t frame_height = 1080;
+
+const static uint32_t tile_width = frame_width / 2;
+const static uint32_t tile_height = frame_height / 2;
+
+const static uint32_t max_bytes_per_chunk = 32 << 20;
+const static auto expected_frames_per_chunk =
+  (uint32_t)std::floor(max_bytes_per_chunk / (tile_width * tile_height));
+
 void
 acquire(AcquireRuntime* runtime, const char* filename)
 {
@@ -89,15 +99,20 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   sizeof(external_metadata),
                                   sample_spacing_um));
 
-    CHECK(storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, 1920 / 2, 1080 / 2, 1, 32 << 20));
+    CHECK(
+      storage_properties_set_chunking_props(&props.video[0].storage.settings,
+                                            tile_width,
+                                            tile_height,
+                                            1,
+                                            max_bytes_per_chunk));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
-    props.video[0].camera.settings.shape = { .x = 1920, .y = 1080 };
+    props.video[0].camera.settings.shape = { .x = frame_width,
+                                             .y = frame_height };
     // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 1e4;
-    props.video[0].max_frame_count = 100;
+    props.video[0].max_frame_count = expected_frames_per_chunk;
 
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
@@ -125,10 +140,23 @@ main()
     CHECK(fs::is_regular_file(zarray_path));
     CHECK(fs::file_size(zarray_path) > 0);
 
+    // check metadata
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
 
+    auto shape = zarray["shape"];
+    ASSERT_EQ(int, "%d", expected_frames_per_chunk, shape[0]);
+    ASSERT_EQ(int, "%d", 1, shape[1]);
+    ASSERT_EQ(int, "%d", frame_height, shape[2]);
+    ASSERT_EQ(int, "%d", frame_width, shape[3]);
+
     auto chunks = zarray["chunks"];
+    ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunks[0]);
+    ASSERT_EQ(int, "%d", 1, chunks[1]);
+    ASSERT_EQ(int, "%d", tile_height, chunks[2]);
+    ASSERT_EQ(int, "%d", tile_width, chunks[3]);
+
+    // check chunked data
     auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
                       chunks[2].get<int>() * chunks[3].get<int>();
 
@@ -147,6 +175,10 @@ main()
     chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/1");
     CHECK(fs::is_regular_file(chunk_file_path));
     ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    // check that there isn't a second (empty) chunk along the time dimension
+    auto second_time_chunk_path = fs::path(TEST ".zarr/0/1");
+    CHECK(!fs::exists(second_time_chunk_path));
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);

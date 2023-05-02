@@ -109,6 +109,7 @@ ChunkWriter::ChunkWriter(const acquire::sink::zarr::FrameROI& roi,
                          size_t bytes_per_chunk,
                          Encoder* encoder)
   : encoder_{ encoder }
+  , dimension_separator_{ '/' }
   , roi_{ roi }
   , bytes_per_chunk_{ 0 }
   , bytes_written_{ 0 }
@@ -309,30 +310,44 @@ ChunkWriter::bytes_written() const
 }
 
 void
+ChunkWriter::set_dimension_separator(char separator)
+{
+    EXPECT('.' == separator || '/' == separator,
+           "Expecting either '.' or '/' for dimension separator, got '%c'.",
+           separator);
+    dimension_separator_ = separator;
+}
+
+void
 ChunkWriter::set_base_directory(const std::string& base_directory)
 {
     EXPECT(fs::is_directory(base_directory),
            R"(Base directory "%s" does not exist or is not a directory.)",
            base_directory.c_str());
     base_dir_ = base_directory;
-    create_new_file();
+    set_current_chunk_file();
 }
 
 void
-ChunkWriter::create_new_file()
+ChunkWriter::set_current_chunk_file()
 {
-    lock_acquire(&lock_);
-    current_chunk_file_path_ =
-      (fs::path(base_dir_) / "0" / std::to_string(current_chunk_) / "0" /
-       std::to_string(roi_.y()) / std::to_string(roi_.x()))
-        .string();
+    char file_path[512];
+    snprintf(file_path,
+             sizeof(file_path) - 1,
+             "%s%c%d%c%d%c%d%c%d%c%d",
+             base_dir_.c_str(),
+             dimension_separator_,
+             0,
+             dimension_separator_,
+             current_chunk_,
+             dimension_separator_,
+             roi_.p(),
+             dimension_separator_,
+             roi_.y(),
+             dimension_separator_,
+             roi_.x());
 
-    fs::path chunk_file_path(current_chunk_file_path_);
-    if (!fs::is_directory(chunk_file_path.parent_path()))
-        fs::create_directories(chunk_file_path.parent_path());
-
-    encoder_->open_file(current_chunk_file_path_);
-    lock_release(&lock_);
+    encoder_->set_file_path(file_path);
 }
 
 void
@@ -352,7 +367,7 @@ void
 ChunkWriter::update_current_chunk_file()
 {
     close_current_file();
-    create_new_file();
+    set_current_chunk_file();
 }
 
 void

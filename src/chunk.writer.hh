@@ -34,8 +34,9 @@ struct ChunkWriter final
     [[nodiscard]] size_t tiles_written() const;
     [[nodiscard]] size_t bytes_written() const;
 
+    void set_dimension_separator(char separator);
     void set_base_directory(const std::string& base_directory);
-    void create_new_file();
+    void set_current_chunk_file();
     void close_current_file();
 
     /**************************
@@ -67,7 +68,7 @@ struct ChunkWriter final
 
     std::string base_dir_;
     size_t current_chunk_;
-    std::string current_chunk_file_path_;
+    char dimension_separator_;
 
     mutable lock lock_;
     thread_t* thread_;

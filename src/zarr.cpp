@@ -597,7 +597,7 @@ zarr::Zarr::allocate_writers_()
     std::for_each(
       writers_.begin(), writers_.end(), [](ChunkWriter* w) { delete w; });
     writers_.clear();
-    for (const auto& tile_idx : frame_rois) {
+    for (const auto& roi : frame_rois) {
         Encoder* encoder;
         if (compressor_.has_value()) {
             size_t bytes_per_chunk = get_bytes_per_chunk(
@@ -609,9 +609,11 @@ zarr::Zarr::allocate_writers_()
             encoder = new RawEncoder(bytes_per_tile);
         }
 
-        auto writer = new ChunkWriter(tile_idx, max_bytes_per_chunk_, encoder);
+        encoder->set_bytes_per_pixel(bytes_per_sample_type(image_shape_.type));
+        auto writer = new ChunkWriter(roi, max_bytes_per_chunk_, encoder);
         CHECK(writer);
 
+        writer->set_dimension_separator(dimension_separator_);
         writer->set_base_directory(data_dir_);
         writers_.push_back(writer);
     }
