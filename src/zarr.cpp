@@ -412,7 +412,7 @@ void
 zarr::Zarr::set_compressor(const CompressionProps& props,
                            const CompressionMeta& meta)
 {
-    if (!props.codec_id.str)
+    if (props.codec_id.nbytes < 2 || nullptr == props.codec_id.str)
         return;
 
     auto supported_codecs = BloscCompressor::supported_codecs();
@@ -602,8 +602,7 @@ zarr::Zarr::allocate_writers_()
         if (compressor_.has_value()) {
             size_t bytes_per_chunk = get_bytes_per_chunk(
               image_shape_, tile_shape_, max_bytes_per_chunk_);
-            encoder =
-              new BloscEncoder(compressor_.value(), bytes_per_chunk);
+            encoder = new BloscEncoder(compressor_.value(), bytes_per_chunk);
         } else {
             size_t bytes_per_tile =
               get_bytes_per_tile(image_shape_, tile_shape_);
