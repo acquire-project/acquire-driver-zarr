@@ -334,9 +334,7 @@ ChunkWriter::set_current_chunk_file()
     char file_path[512];
     snprintf(file_path,
              sizeof(file_path) - 1,
-             "%s%c%d%c%d%c%d%c%d%c%d",
-             base_dir_.c_str(),
-             dimension_separator_,
+             "%d%c%d%c%d%c%d%c%d",
              0,
              dimension_separator_,
              current_chunk_,
@@ -347,7 +345,7 @@ ChunkWriter::set_current_chunk_file()
              dimension_separator_,
              roi_.x());
 
-    encoder_->set_file_path(file_path);
+    encoder_->set_file_path((fs::path(base_dir_) / file_path).string());
 }
 
 void
