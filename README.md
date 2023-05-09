@@ -68,7 +68,6 @@ Supported values for `codec_id` are:
 - "blosclz"
 - "lz4"
 - "lz4hc"
-- "snappy"
 - "zlib"
 - "zstd"
 

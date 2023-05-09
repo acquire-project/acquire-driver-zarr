@@ -19,7 +19,10 @@ else()
         write-zarr-raw-with-chunking
         write-zarr-raw-with-chunking-and-rollover
         write-zarr-with-defaults
+        write-zarr-with-blosclz-compression
         write-zarr-with-lz4-compression
+        write-zarr-with-lz4hc-compression
+        write-zarr-with-zlib-compression
         write-zarr-with-zstd-compression
     )
 
