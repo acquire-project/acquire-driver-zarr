@@ -24,8 +24,9 @@ jobs:
       - name: Checkout acquire-driver-egrabber
         uses: actions/checkout@v3
         with:
-          repository: 'acquire-project/acquire-driver-egrabber'
+          repository: acquire-project/acquire-driver-egrabber
           submodules: true
+          path: acquire-driver-egrabber
 
       - name: Update the acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr submodules
         run: |
@@ -44,4 +45,4 @@ jobs:
           git add src/acquire-core-libs tests/acquire-driver-common tests/acquire-video-runtime tests/acquire-driver-zarr
           git commit -m "(automated) update acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr"
           git push
-        working-directory: ${{github.workspace}}/acquire-driver-egrabber
+        working-directory: acquire-driver-egrabber
