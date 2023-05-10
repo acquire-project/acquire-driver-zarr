@@ -24,7 +24,7 @@ jobs:
       - name: Checkout acquire-driver-egrabber
         uses: actions/checkout@v3
         with:
-          repository: 'acquire-driver-egrabber'
+          repository: 'acquire-project/acquire-driver-egrabber'
           submodules: true
 
       - name: Update the acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr submodules
