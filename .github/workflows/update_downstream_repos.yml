@@ -14,6 +14,7 @@ jobs:
 
     permissions:
       actions: write
+      pull-requests: read|write
 
     steps:
       - name: Cancel Previous Runs
@@ -30,6 +31,8 @@ jobs:
 
       - name: Update the acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr submodules
         run: |
+          git config user.name github-actions
+          git config user.email github-actions@github.com
           pushd src/acquire-core-libs
           git checkout main
           popd
@@ -42,7 +45,22 @@ jobs:
           pushd tests/acquire-driver-zarr
           git checkout main
           popd
-          git add src/acquire-core-libs tests/acquire-driver-common tests/acquire-video-runtime tests/acquire-driver-zarr
-          git commit -m "(automated) update acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr"
+          git submodule update --remote --recursive
+          git checkout -b $GITHUB_RUN_ID
+          git commit -am "(automated) update acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr"
           git push
         working-directory: acquire-driver-egrabber
+
+      - name: Create a pull request against acquire-project/acquire-driver-egrabber
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.pulls.create({
+              owner: 'acquire-project',
+              repo: 'acquire-driver-egrabber',
+              head: process.env.GITHUB_RUN_ID,
+              base: 'main',
+              title: '(automated) update acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr',
+              body: '(automated) update acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr'
+            });
