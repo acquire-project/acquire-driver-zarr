@@ -2,8 +2,8 @@ name: Create nightly release
 
 on:
   schedule:
-    - cron: "0 5 * * *"
-  pull_request:  # TODO (aliddell): delete me
+    - cron: "0 5 * * *"  # runs at 5 AM UTC
+  pull_request: # TODO (aliddell): delete me
     branches: [ "main" ]
 
 jobs:
@@ -42,8 +42,11 @@ jobs:
           path: ${{github.workspace}}/*.zip
 
   nightly-release:
-    name: "Pre Release"
+    needs: nightly-build
+    name: "Nightly Release"
     runs-on: "ubuntu-latest"
+
+    permissions: write-all
 
     steps:
       - uses: actions/checkout@v3
