@@ -33,6 +33,7 @@ jobs:
 
       - name: Update the acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr submodules
         run: |
+          git remote set-url origin https://aliddell:${{ secrets.AUTOMATION_TOKEN }}@github.com/acquire-project/acquire-driver-egrabber.git
           git config user.name github-actions
           git config user.email github-actions@github.com
           git checkout -b $GITHUB_RUN_ID
