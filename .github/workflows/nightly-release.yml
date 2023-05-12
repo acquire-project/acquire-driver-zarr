@@ -5,6 +5,8 @@ on:
     - cron: "0 5 * * *"  # runs at 5 AM UTC
   pull_request: # TODO (aliddell): delete me
     branches: [ "main" ]
+  push:
+    branches: [ "test-nightly" ]
 
 jobs:
   nightly-build:
