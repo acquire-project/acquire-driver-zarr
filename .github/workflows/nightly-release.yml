@@ -3,17 +3,16 @@ name: Create nightly release
 on:
   schedule:
     - cron: "0 5 * * *"  # runs at 5 AM UTC
-  pull_request: # TODO (aliddell): delete me
-    branches: [ "main" ]
   push:
     branches: [ "test-nightly" ]
 
 jobs:
   nightly-build:
+    name: "Nightly Build"
     strategy:
       matrix:
 #        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
-        platform: [ "ubuntu-latest" ]
+        platform: [ "windows-latest", "ubuntu-latest" ]
 
     runs-on: ${{ matrix.platform }}
 
@@ -65,11 +64,11 @@ jobs:
         run: |
           tree ${{steps.download.outputs.download-path}}
 
-#      - uses: "marvinpinto/action-automatic-releases@latest"
-#        with:
-#          repo_token: ${{ github.token }}
-#          automatic_release_tag: "nightly"
-#          prerelease: true
-#          title: "Nightly Release"
-#          files: |
-#            ${{ github.workspace }}/artifacts/*
+      - uses: "marvinpinto/action-automatic-releases@latest"
+        with:
+          repo_token: ${{ github.token }}
+          automatic_release_tag: "nightly"
+          prerelease: true
+          title: "Nightly Release"
+          files: |
+            ${{steps.download.outputs.download-path}}/*/*.zip
