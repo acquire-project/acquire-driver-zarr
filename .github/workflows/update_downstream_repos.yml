@@ -14,7 +14,6 @@ jobs:
 
     permissions:
       actions: write
-      pull-requests: read|write
 
     steps:
       - name: Cancel Previous Runs
@@ -54,7 +53,7 @@ jobs:
       - name: Create a pull request against acquire-project/acquire-driver-egrabber
         uses: actions/github-script@v6
         with:
-          github-token: ${{ github.token }}
+          github-token: ${{ secrets.PAT }}
           script: |
             await github.rest.pulls.create({
               owner: 'acquire-project',
