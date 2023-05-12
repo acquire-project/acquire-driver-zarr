@@ -51,17 +51,25 @@ jobs:
     permissions: write-all
 
     steps:
+      - run: |
+          apt update && install tree
+
       - uses: actions/checkout@v3
 
       - uses: actions/download-artifact@v3
+        id: download
         with:
           path: ${{ github.workspace }}/artifacts
 
-      - uses: "marvinpinto/action-automatic-releases@latest"
-        with:
-          repo_token: ${{ github.token }}
-          automatic_release_tag: "nightly"
-          prerelease: true
-          title: "Nightly Release"
-          files: |
-            ${{ github.workspace }}/artifacts/*
+      - name: Figure out where everything is
+        run: |
+          tree ${{steps.download.outputs.download-path}}
+
+#      - uses: "marvinpinto/action-automatic-releases@latest"
+#        with:
+#          repo_token: ${{ github.token }}
+#          automatic_release_tag: "nightly"
+#          prerelease: true
+#          title: "Nightly Release"
+#          files: |
+#            ${{ github.workspace }}/artifacts/*
