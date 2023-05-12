@@ -12,7 +12,8 @@ jobs:
   nightly-build:
     strategy:
       matrix:
-        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+#        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        platform: ubuntu-latest
 
     runs-on: ${{ matrix.platform }}
 
@@ -51,7 +52,7 @@ jobs:
 
     steps:
       - run: |
-          apt update && install tree
+          sudo apt-get update && sudo apt-get install tree
 
       - uses: actions/checkout@v3
 
