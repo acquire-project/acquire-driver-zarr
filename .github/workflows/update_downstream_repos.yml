@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - main
+  pull_request:  # TODO: remove me
+    branches:
+      - main
 
 env:
   BUILD_TYPE: Release
@@ -32,6 +35,7 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
+          git checkout -b $GITHUB_RUN_ID
           pushd src/acquire-core-libs
           git checkout main
           popd
@@ -45,8 +49,8 @@ jobs:
           git checkout main
           popd
           git submodule update --remote --recursive
-          git checkout -b $GITHUB_RUN_ID
-          git commit -am "(automated) update acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr"
+          git add src/acquire-core-libs tests/acquire-driver-common tests/acquire-video-runtime tests/acquire-driver-zarr 
+          git commit -m "(automated) update acquire-core-libs, acquire-driver-common, acquire-video-runtime, and acquire-driver-zarr"
           git push -u origin $GITHUB_RUN_ID
         working-directory: acquire-driver-egrabber
 
