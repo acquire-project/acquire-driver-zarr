@@ -55,13 +55,13 @@ jobs:
 
       - uses: actions/download-artifact@v3
         with:
-          path: ${{ github.workspace }}
+          path: ${{ github.workspace }}/artifacts
 
       - uses: "marvinpinto/action-automatic-releases@latest"
         with:
-          repo_token: "${{ github.token }}"
+          repo_token: ${{ github.token }}
           automatic_release_tag: "nightly"
           prerelease: true
           title: "Nightly Release"
           files: |
-            ${{ github.workspace }}/*.zip
+            ${{ github.workspace }}/artifacts/*
