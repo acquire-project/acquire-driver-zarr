@@ -8,7 +8,7 @@ jobs:
   build:
     strategy:
       matrix:
-        build_type: [ Debug, Release ]
+        build_type: [ Release ]
         platform: [ "macos-latest" ]
 
     runs-on: ${{ matrix.platform }}
@@ -28,14 +28,4 @@ jobs:
           ref: v1.21.4
 
       - name: CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DBUILD_SHARED=OFF -DBUILD_TESTS=OFF -DBUILD_FUZZERS=OFF -DBUILD_BENCHMARKS=OFF -DCMAKE_OSX_ARCHITECTURE="arm64;x86_64"
-
-      - name: Build
-        run: |
-          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
-          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
-          path: ${{github.workspace}}/*.zip
+        run: clang --version
