@@ -36,6 +36,7 @@ jobs:
           -DBUILD_SHARED=OFF -DBUILD_TESTS=OFF -DBUILD_FUZZERS=OFF -DBUILD_BENCHMARKS=OFF \
           -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_OSX_ARCHITECTURE="arm64;x86_64" \
           -DCMAKE_MSVC_RUNTIME_LIBRARY=${{env.MSVC_RUNTIME}}
+        shell: bash
 
       - name: Build
         run: |
