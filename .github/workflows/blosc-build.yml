@@ -45,4 +45,6 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: ${{matrix.platform}} ${{matrix.build_type}} binaries
-          path: ${{github.workspace}}/*.zip
+          path: |
+            ${{github.workspace}}/*.zip
+            ${{github.workspace}}/build/*/*/*.pdb
