@@ -1,6 +1,6 @@
 The library here was built as follows.
 
-Against v1.21.3 (98aad98) of the c-blosc source hosted at:
+Against v1.21.4 (2c2f9bd) of the c-blosc source hosted at:
 https://github.com/Blosc/c-blosc
 
 It's a universal binary compiled for `arm64` and `x86_64`.
@@ -15,6 +15,6 @@ The compiler used was:
 
 ```
 Apple clang version 14.0.0 (clang-1400.0.29.202)
-Target: arm64-apple-darwin22.3.0
+Target: x86_64-apple-darwin21.6.0
 Thread model: posix
 ```
