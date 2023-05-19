@@ -8,13 +8,16 @@ jobs:
   build:
     strategy:
       matrix:
-        build_type: [ Release ]
-        platform: [ "macos-latest" ]
+        build_type: [ Debug, Release ]
+        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
 
     runs-on: ${{ matrix.platform }}
 
     permissions:
       actions: write
+
+    env:
+      MSVC_RUNTIME: ${{ matrix.build_type == 'Debug' && 'MultiThreadedDebug' || 'MultiThreaded' }}
 
     steps:
       - name: Cancel Previous Runs
@@ -28,4 +31,18 @@ jobs:
           ref: v1.21.4
 
       - name: CMake
-        run: clang --version
+        run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} \
+          -DBUILD_SHARED=OFF -DBUILD_TESTS=OFF -DBUILD_FUZZERS=OFF -DBUILD_BENCHMARKS=OFF \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DCMAKE_OSX_ARCHITECTURE="arm64;x86_64" \
+          -DCMAKE_MSVC_RUNTIME_LIBRARY=${{env.MSVC_RUNTIME}}
+
+      - name: Build
+        run: |
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
+          path: ${{github.workspace}}/*.zip
