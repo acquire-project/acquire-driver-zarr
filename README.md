@@ -32,7 +32,7 @@ storage_properties_set_chunking_props(struct StorageProperties* out,
                                       uint32_t tile_width,
                                       uint32_t tile_height,
                                       uint32_t tile_planes,
-                                      uint32_t bytes_per_chunk)
+                                      uint32_t max_bytes_per_chunk)
 ```
 
 A _tile_ is a contiguous section, or region of interest, of a _frame_.
@@ -41,14 +41,31 @@ the same ROI in its respective frame.
 
 You can specify the width and height, in pixels, of each tile, and if your frame size has more than one plane, you can
 specify the number of planes you want per tile as well.
-If any of these values are unset, or if they are set to a value larger than the frame size, the full value of the frame
-size along that dimension will be used instead.
+If any of these values are unset (equivalently, set to 0), or if they are set to a value larger than the frame size,
+the full value of the frame size along that dimension will be used instead.
 You should take care that the values you select won't result in tile sizes that are too small or too large for your
 application.
 
-The `bytes_per_chunk` parameter can be used to cap the size of a chunk.
+The `max_bytes_per_chunk` parameter can be used to cap the size of a chunk.
 A minimum of 16 MiB is enforced, but no maximum, so if you are compressing you must ensure that you have sufficient
 memory for all your chunks to be stored in memory at once.
+
+#### Example
+
+Suppose your frame size is 1920 x 1080 x 1, with a pixel type of unsigned 8-bit integer.
+You can use a tile size of 640 x 360 x 1, which will divide your frame evenly into 9 tiles.
+You want chunk sizes of at most 64 MiB.
+You would configure your storage properties as follows:
+
+```c
+storage_properties_set_chunking_props(&storage_props,
+                                      640,
+                                      360,
+                                      1,
+                                      64 * 1024 * 1024);
+```
+
+Note that 64 * 1024 * 1024 / (640 * 360) = 291.2711111111111, so each chunk will contain 291 tiles, or about 63.94 MiB.
 
 ### Compression
 
