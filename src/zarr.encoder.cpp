@@ -3,8 +3,6 @@
 #include <filesystem>
 #include <thread>
 
-#include "blosc.h"
-
 #ifdef min
 #undef min
 #endif
@@ -32,28 +30,34 @@ from_json(const json& j, BloscCompressor& bc)
     j.at("shuffle").get_to(bc.shuffle_);
 }
 
-Encoder::Encoder(size_t buffer_size)
+BaseEncoder::BaseEncoder()
   : cursor_{ 0 }
   , bytes_per_pixel_{ 1 }
   , file_handle_{}
   , file_has_been_created_{ false }
 {
-    buf_.resize(buffer_size);
 }
 
-Encoder::~Encoder() noexcept
+BaseEncoder::~BaseEncoder() noexcept
 {
     close_file();
 }
 
 void
-Encoder::set_bytes_per_pixel(size_t bpp)
+BaseEncoder::set_bytes_per_pixel(size_t bpp)
 {
     bytes_per_pixel_ = bpp;
 }
 
+void
+BaseEncoder::allocate_buffer(size_t buf_size)
+{
+    buf_.resize(buf_size);
+    cursor_ = 0;
+}
+
 size_t
-Encoder::write(const uint8_t* beg, const uint8_t* end)
+BaseEncoder::write(const uint8_t* beg, const uint8_t* end)
 {
     /*
         Some cases:
@@ -92,7 +96,7 @@ Encoder::write(const uint8_t* beg, const uint8_t* end)
 }
 
 size_t
-Encoder::flush()
+BaseEncoder::flush()
 {
     if (0 == cursor_)
         return 0;
@@ -107,14 +111,14 @@ Encoder::flush()
 }
 
 void
-Encoder::set_file_path(const std::string& file_path)
+BaseEncoder::set_file_path(const std::string& file_path)
 {
     path_ = file_path;
     file_has_been_created_ = false;
 }
 
 void
-Encoder::open_file()
+BaseEncoder::open_file()
 {
     if (nullptr != file_handle_)
         close_file();
@@ -132,7 +136,7 @@ Encoder::open_file()
 }
 
 void
-Encoder::close_file()
+BaseEncoder::close_file()
 {
     if (!file_has_been_created_ || nullptr == file_handle_)
         return;
@@ -143,75 +147,4 @@ Encoder::close_file()
     file_has_been_created_ = false;
 }
 
-RawEncoder::RawEncoder(size_t bytes_per_tile)
-  : Encoder(bytes_per_tile)
-  , file_offset_{ 0 }
-{
-}
-
-RawEncoder::~RawEncoder() noexcept
-{
-    flush();
-    close_file();
-}
-
-size_t
-RawEncoder::flush_impl()
-{
-    CHECK(file_write(
-      file_handle_, file_offset_, buf_.data(), buf_.data() + cursor_));
-    file_offset_ += cursor_;
-
-    return cursor_;
-}
-
-void
-RawEncoder::open_file_impl()
-{
-    file_offset_ = 0;
-}
-
-BloscEncoder::BloscEncoder(const BloscCompressor& compressor,
-                           size_t bytes_per_chunk)
-  : Encoder(bytes_per_chunk)
-  , codec_id_{ compressor.codec_id_ }
-  , clevel_{ compressor.clevel_ }
-  , shuffle_{ compressor.shuffle_ }
-{
-}
-
-BloscEncoder::~BloscEncoder() noexcept
-{
-    flush();
-    close_file();
-}
-
-size_t
-BloscEncoder::flush_impl()
-{
-    auto* buf_c = new uint8_t[cursor_ + BLOSC_MAX_OVERHEAD];
-    CHECK(buf_c);
-
-    const auto nbytes_out =
-      (size_t)blosc_compress_ctx(clevel_,
-                                 shuffle_,
-                                 bytes_per_pixel_,
-                                 cursor_,
-                                 buf_.data(),
-                                 buf_c,
-                                 cursor_ + BLOSC_MAX_OVERHEAD,
-                                 codec_id_.c_str(),
-                                 0 /* blocksize - 0:automatic */,
-                                 (int)std::thread::hardware_concurrency());
-
-    CHECK(file_write(file_handle_, 0, buf_c, buf_c + nbytes_out));
-
-    delete[] buf_c;
-    return nbytes_out;
-}
-
-void
-BloscEncoder::open_file_impl()
-{
-}
 } // namespace acquire::sink::zarr

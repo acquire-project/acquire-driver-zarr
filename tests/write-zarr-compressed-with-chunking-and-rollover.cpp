@@ -79,8 +79,6 @@ const static uint32_t max_bytes_per_chunk = 32 << 20;
 const static auto expected_frames_per_chunk =
   (uint32_t)std::floor(max_bytes_per_chunk / (tile_width * tile_height));
 
-static const std::string codec = "zstd";
-
 void
 acquire(AcquireRuntime* runtime, const char* filename)
 {
@@ -97,7 +95,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("Zarr"),
+                                SIZED("ZarrBlosc1ZstdByteShuffle"),
                                 &props.video[0].storage.identifier));
 
     const char external_metadata[] = R"({"hello":"world"})";
@@ -110,13 +108,6 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   (char*)external_metadata,
                                   sizeof(external_metadata),
                                   sample_spacing_um));
-
-    CHECK(
-      storage_properties_set_compression_props(&props.video[0].storage.settings,
-                                               codec.c_str(),
-                                               codec.length() + 1,
-                                               1,
-                                               1));
 
     CHECK(
       storage_properties_set_chunking_props(&props.video[0].storage.settings,

@@ -59,7 +59,6 @@ reporter(int is_error,
 static const size_t nframes = 70;
 static const size_t image_width = 64;
 static const size_t image_height = 48;
-static const std::string codec = "zstd";
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -77,7 +76,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("Zarr"),
+                                SIZED("ZarrBlosc1ZstdByteShuffle"),
                                 &props.video[0].storage.identifier));
 
     const char external_metadata[] = R"({"hello":"world"})";
@@ -93,13 +92,6 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     storage_properties_set_chunking_props(
       &props.video[0].storage.settings, image_width, image_height, 1, 64 << 20);
-
-    CHECK(
-      storage_properties_set_compression_props(&props.video[0].storage.settings,
-                                               codec.c_str(),
-                                               codec.length() + 1,
-                                               1,
-                                               1));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;

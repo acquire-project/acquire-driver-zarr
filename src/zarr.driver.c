@@ -35,6 +35,10 @@
 // The deallocate themselves when their `destroy()` method is called.
 struct Storage*
 zarr_init();
+struct Storage*
+compressed_zarr_zstd_init();
+struct Storage*
+compressed_zarr_lz4_init();
 
 //
 //                  GLOBALS
@@ -43,6 +47,8 @@ zarr_init();
 enum StorageKind
 {
     Storage_Zarr,
+    Storage_ZarrBlosc1ZstdByteShuffle,
+    Storage_ZarrBlosc1Lz4ByteShuffle,
     Storage_Number_Of_Kinds
 };
 
@@ -63,6 +69,8 @@ storage_kind_to_string(const enum StorageKind kind)
     case e:                                                                    \
         return #e
         CASE(Storage_Zarr);
+        CASE(Storage_ZarrBlosc1ZstdByteShuffle);
+        CASE(Storage_ZarrBlosc1Lz4ByteShuffle);
 #undef CASE
         default:
             return "(unknown)";
@@ -89,6 +97,8 @@ zarr_describe(const struct Driver* driver,
     // clang-format off
     static struct DeviceIdentifier identifiers[] = {
         XXX(Zarr),
+        XXX(ZarrBlosc1ZstdByteShuffle),
+        XXX(ZarrBlosc1Lz4ByteShuffle),
     };
     // clang-format on
 #undef XXX
@@ -148,6 +158,8 @@ acquire_driver_init_v0(acquire_reporter_t reporter)
         CHECK(globals.constructors = (struct Storage * (**)()) malloc(nbytes));
         struct Storage* (*impls[])() = {
             [Storage_Zarr] = zarr_init,
+            [Storage_ZarrBlosc1ZstdByteShuffle] = compressed_zarr_zstd_init,
+            [Storage_ZarrBlosc1Lz4ByteShuffle] = compressed_zarr_lz4_init,
         };
         memcpy(
           globals.constructors, impls, nbytes); // cppcheck-suppress uninitvar

@@ -10,6 +10,8 @@ This is an Acquire Driver that supports chunked streaming to [zarr][].
 ### Storage
 
 - **Zarr**
+- **ZarrBlosc1ZstdByteShuffle**
+- **ZarrBlosc1Lz4ByteShuffle**
 
 ## Using the Zarr storage device
 
@@ -48,32 +50,11 @@ The `bytes_per_chunk` parameter can be used to cap the size of a chunk.
 A minimum of 16 MiB is enforced, but no maximum, so if you are compressing you must ensure that you have sufficient
 memory for all your chunks to be stored in memory at once.
 
-### Configuring compression
+### Compression
 
 Compression is done via [Blosc][].
-As with chunking, you can configure compression by calling `storage_properties_set_compression_props()` on your
-Zarr `Storage` object _after_ calling `storage_properties_init()`.
-The 3 parameters you can set to determine compression behavior are `codec_id`, `clevel` (compression level),
-and `shuffle`:
-
-```c
-storage_properties_set_compression_props(struct StorageProperties* out,
-                                         const char* codec_id,
-                                         size_t bytes_of_codec_id,
-                                         int clevel,
-                                         int shuffle)
-```
-
-Supported values for `clevel` are integers 1-9, corresponding to the various compression levels supported by Blosc. 
-Supported values for `shuffle` are the integers 0 (no shuffle), 1 (byte shuffle), and 2 (bitshuffle).
-Supported values for `codec_id` are:
-
-- "blosclz"
-- "lz4"
-- "lz4hc"
-- "zlib"
-- "zstd"
-
+Supported codecs are **lz4** and **zstd**, which can be used by using the **ZarrBlosc1Lz4ByteShuffle** and
+**ZarrBlosc1ZstdByteShuffle** devices, respectively.
 For a comparison of these codecs, please refer to the [Blosc docs][Blosc].
 
 [zarr]: https://zarr.readthedocs.io/en/stable/spec/v2.html

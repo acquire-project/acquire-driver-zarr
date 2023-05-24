@@ -10,6 +10,7 @@
 #include <platform.h>
 
 #include "zarr.encoder.hh"
+#include "zarr.blosc.hh"
 #include "tiled.frame.hh"
 
 #ifdef min
@@ -25,7 +26,8 @@ struct ChunkWriter final
 {
   public:
     ChunkWriter() = delete;
-    ChunkWriter(const FrameROI& roi, size_t bytes_per_chunk, Encoder* encoder);
+    ChunkWriter(const FrameROI& roi, size_t bytes_per_chunk,
+                BaseEncoder* encoder);
     ~ChunkWriter();
 
     [[nodiscard]] FrameROI& roi();
@@ -59,7 +61,7 @@ struct ChunkWriter final
     size_t write(const uint8_t* beg, const uint8_t* end);
 
   private:
-    Encoder* encoder_{};
+    BaseEncoder* encoder_{};
 
     FrameROI roi_;
     size_t bytes_per_chunk_;

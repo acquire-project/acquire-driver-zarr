@@ -82,7 +82,6 @@ namespace acquire::sink::zarr {
 BloscCompressor::BloscCompressor()
   : clevel_{ 1 }
   , shuffle_{ 1 }
-  , available_threads_{ (int)std::thread::hardware_concurrency() }
 {
 }
 
@@ -92,22 +91,12 @@ BloscCompressor::BloscCompressor(const std::string& codec_id,
   : codec_id_{ codec_id }
   , clevel_{ clevel }
   , shuffle_{ shuffle }
-  , available_threads_{ (int)std::thread::hardware_concurrency() }
 {
-}
-
-std::vector<std::string>
-BloscCompressor::supported_codecs()
-{
-    return {
-        BLOSC_BLOSCLZ_COMPNAME, BLOSC_LZ4_COMPNAME,  BLOSC_LZ4HC_COMPNAME,
-        BLOSC_ZLIB_COMPNAME, BLOSC_ZSTD_COMPNAME,
-    };
 }
 
 ChunkWriter::ChunkWriter(const acquire::sink::zarr::FrameROI& roi,
                          size_t bytes_per_chunk,
-                         Encoder* encoder)
+                         BaseEncoder* encoder)
   : encoder_{ encoder }
   , dimension_separator_{ '/' }
   , roi_{ roi }

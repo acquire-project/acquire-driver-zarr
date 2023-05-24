@@ -9,12 +9,16 @@ add_library(${tgt} MODULE
         prelude.h
         tiled.frame.hh
         tiled.frame.cpp
+        chunk.writer.hh
+        chunk.writer.cpp
         zarr.hh
         zarr.cpp
         zarr.encoder.hh
         zarr.encoder.cpp
-        chunk.writer.hh
-        chunk.writer.cpp
+        zarr.raw.hh
+        zarr.raw.cpp
+        zarr.blosc.hh
+        zarr.blosc.cpp
         zarr.driver.c
 )
 target_enable_simd(${tgt})
