@@ -16,8 +16,8 @@ This is an Acquire Driver that supports chunked streaming to [zarr][].
 ## Using the Zarr storage device
 
 Zarr has additional capabilities relative to the basic storage devices, namely _chunking_ and _compression_.
-These can be configured using the `storage_properties_set_chunking_props()`
-and `storage_properties_set_compression_props()` functions, respectively.
+These can be configured using the `storage_properties_set_chunking_props()`, or by selecting one of the `ZarrBlosc1*`
+devices, respectively.
 
 ### Configuring chunking
 
