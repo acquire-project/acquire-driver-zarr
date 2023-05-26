@@ -3,7 +3,7 @@
 
   Author: Francesc Alted <francesc@blosc.org>
 
-  See LICENSES/BLOSC.txt for details about copyright and rights to use.
+  See LICENSE.txt for details about copyright and rights to use.
 **********************************************************************/
 #ifndef BLOSC_H
 #define BLOSC_H
@@ -20,13 +20,11 @@ extern "C"
 /* Version numbers */
 #define BLOSC_VERSION_MAJOR 1   /* for major interface/format changes  */
 #define BLOSC_VERSION_MINOR 21  /* for minor interface/format changes  */
-#define BLOSC_VERSION_RELEASE 0 /* for tweaks, bug-fixes, or development */
+#define BLOSC_VERSION_RELEASE 4 /* for tweaks, bug-fixes, or development */
 
-#define BLOSC_VERSION_STRING "1.21.0"  /* string version.  Sync with above! */
+#define BLOSC_VERSION_STRING "1.21.4"  /* string version.  Sync with above! */
 #define BLOSC_VERSION_REVISION "$Rev$" /* revision version */
-#define BLOSC_VERSION_DATE "$Date:: 2020-12-22 #$" /* date version */
-
-#define BLOSCLZ_VERSION_STRING "2.3.0" /* the internal compressor version */
+#define BLOSC_VERSION_DATE "$Date:: 2023-05-16 #$" /* date version */
 
 /* The *_FORMAT symbols should be just 1-byte long */
 #define BLOSC_VERSION_FORMAT 2 /* Blosc format version, starting at 1 */
@@ -171,13 +169,13 @@ extern "C"
 
       A negative return value means that an internal error happened.  This
       should never happen.  If you see this, please report it back
-      together with the buffer data causing this and compression properties.
+      together with the buffer data causing this and compression settings.
 
       Environment variables
       ---------------------
 
       blosc_compress() honors different environment variables to control
-      internal parameters without the need of doing that programatically.
+      internal parameters without the need of doing that programmatically.
       Here are the ones supported:
 
       BLOSC_CLEVEL=(INTEGER): This will overwrite the `clevel` parameter
@@ -244,7 +242,7 @@ extern "C"
 
       A negative return value means that an internal error happened.  This
       should never happen.  If you see this, please report it back
-      together with the buffer data causing this and compression properties.
+      together with the buffer data causing this and compression settings.
     */
     BLOSC_EXPORT int blosc_compress_ctx(int clevel,
                                         int doshuffle,
@@ -277,7 +275,7 @@ extern "C"
       ---------------------
 
       blosc_decompress() honors different environment variables to control
-      internal parameters without the need of doing that programatically.
+      internal parameters without the need of doing that programmatically.
       Here are the ones supported:
 
       BLOSC_NTHREADS=(INTEGER): This will call
