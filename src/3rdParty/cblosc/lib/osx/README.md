@@ -8,13 +8,13 @@ It's a universal binary compiled for `arm64` and `x86_64`.
 If you're rebuilding this later, configure with:
 
 ```
-CMAKE_OSX_ARCHITECTURE="arm64;x86_64"
+CMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 ```
 
 The compiler used was:
 
 ```
-Apple clang version 14.0.0 (clang-1400.0.29.202)
-Target: x86_64-apple-darwin21.6.0
+Apple clang version 14.0.3 (clang-1403.0.22.14.1)
+Target: arm64-apple-darwin22.5.0
 Thread model: posix
 ```
