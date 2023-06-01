@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  pull_request_target:
     branches:
       - main
 
@@ -12,14 +12,14 @@ env:
   BUILD_TYPE: Release
 
 jobs:
-  build:
+  test:
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
-        platform: ["windows-latest", "ubuntu-latest", "macos-latest"]
+        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
     permissions:
       actions: write
 
@@ -52,3 +52,29 @@ jobs:
       - name: Test
         working-directory: ${{github.workspace}}/build
         run: ctest -C ${{env.BUILD_TYPE}} -L anyplatform --output-on-failure
+
+  auto-merge:
+    name: "Auto-merge Dependabot PRs"
+    needs: test
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    steps:
+      - name: "Get Dependabot metadata"
+        id: dependabot-metadata
+        uses: dependabot/fetch-metadata@v1.1.1
+        with:
+          github-token: ${{ github.token }}
+
+      - name: "Approve the PR"
+        run: gh pr review --approve "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.PAT }}
+
+      # Don't auto-merge major version updates
+      - name: "Auto-merge the PR"
+        if: ${{ steps.dependabot-metadata.outputs.update-type != 'version-update:semver-major' }}
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.PAT }}
