@@ -11,25 +11,6 @@ namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
 
-using json = nlohmann::json;
-
-void
-to_json(json& j, const BloscCompressor& bc)
-{
-    j = json{ { "id", std::string(bc.id_) },
-              { "cname", bc.codec_id_ },
-              { "clevel", bc.clevel_ },
-              { "shuffle", bc.shuffle_ } };
-}
-
-void
-from_json(const json& j, BloscCompressor& bc)
-{
-    j.at("cname").get_to(bc.codec_id_);
-    j.at("clevel").get_to(bc.clevel_);
-    j.at("shuffle").get_to(bc.shuffle_);
-}
-
 BaseEncoder::BaseEncoder()
   : cursor_{ 0 }
   , bytes_per_pixel_{ 1 }

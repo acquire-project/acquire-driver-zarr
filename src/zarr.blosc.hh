@@ -11,6 +11,23 @@
 
 namespace acquire::sink::zarr {
 
+struct BloscCompressor
+{
+    static constexpr char id_[] = "blosc";
+    std::string codec_id_;
+    int clevel_;
+    int shuffle_;
+
+    BloscCompressor();
+    BloscCompressor(const std::string& codec_id, int clevel, int shuffle);
+};
+
+void
+to_json(nlohmann::json&, const BloscCompressor&);
+
+void
+from_json(const nlohmann::json&, BloscCompressor&);
+
 enum class BloscCodecId
 {
     Lz4 = 0,
@@ -35,14 +52,11 @@ compression_codec_as_string<BloscCodecId::Lz4>()
     return "lz4";
 }
 
-template<BloscCodecId CodecId, int CLevel, int Shuffle>
 struct BloscEncoder final : public BaseEncoder
 {
   public:
-    BloscEncoder();
+    explicit BloscEncoder(const BloscCompressor& compressor);
     ~BloscEncoder() noexcept override;
-
-    BloscCompressor* get_compressor() override;
 
   private:
     size_t flush_impl() override;
@@ -50,57 +64,6 @@ struct BloscEncoder final : public BaseEncoder
 
     BloscCompressor compressor_;
 };
-
-template<BloscCodecId CodecId, int CLevel, int Shuffle>
-BloscEncoder<CodecId, CLevel, Shuffle>::BloscEncoder()
-  : compressor_(compression_codec_as_string<CodecId>(), CLevel, Shuffle)
-{
-}
-
-template<BloscCodecId CodecId, int CLevel, int Shuffle>
-BloscEncoder<CodecId, CLevel, Shuffle>::~BloscEncoder() noexcept
-{
-    flush();
-    close_file();
-}
-
-template<BloscCodecId CodecId, int CLevel, int Shuffle>
-BloscCompressor*
-BloscEncoder<CodecId, CLevel, Shuffle>::get_compressor()
-{
-    return &compressor_;
-}
-
-template<BloscCodecId CodecId, int CLevel, int Shuffle>
-size_t
-BloscEncoder<CodecId, CLevel, Shuffle>::flush_impl()
-{
-    auto* buf_c = new uint8_t[cursor_ + BLOSC_MAX_OVERHEAD];
-    CHECK(buf_c);
-
-    const auto nbytes_out =
-      (size_t)blosc_compress_ctx(CLevel,
-                                 Shuffle,
-                                 bytes_per_pixel_,
-                                 cursor_,
-                                 buf_.data(),
-                                 buf_c,
-                                 cursor_ + BLOSC_MAX_OVERHEAD,
-                                 compression_codec_as_string<CodecId>(),
-                                 0 /* blocksize - 0:automatic */,
-                                 (int)std::thread::hardware_concurrency());
-
-    CHECK(file_write(file_handle_, 0, buf_c, buf_c + nbytes_out));
-
-    delete[] buf_c;
-    return nbytes_out;
-}
-
-template<BloscCodecId CodecId, int CLevel, int Shuffle>
-void
-BloscEncoder<CodecId, CLevel, Shuffle>::open_file_impl()
-{
-}
 } // namespace acquire::sink::zarr
 
 #endif // __cplusplus

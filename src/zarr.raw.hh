@@ -12,7 +12,6 @@ struct RawEncoder final : public BaseEncoder
   public:
     RawEncoder();
     ~RawEncoder() noexcept override;
-    BloscCompressor* get_compressor() override;
 
   private:
     size_t file_offset_;

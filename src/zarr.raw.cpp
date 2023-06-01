@@ -12,12 +12,6 @@ RawEncoder::~RawEncoder() noexcept
     close_file();
 }
 
-BloscCompressor*
-RawEncoder::get_compressor()
-{
-    return nullptr; // No compression
-}
-
 size_t
 RawEncoder::flush_impl()
 {
