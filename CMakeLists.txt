@@ -4,6 +4,7 @@ cmake_policy(SET CMP0079 NEW) # allows use with targets in other directories
 enable_testing()
 
 include(cmake/aq_require.cmake)
+include(cmake/git-versioning.cmake)
 include(cmake/ide.cmake)
 include(cmake/install-prefix.cmake)
 include(cmake/wsl.cmake)
@@ -15,4 +16,4 @@ set(CMAKE_CXX_STANDARD 20)
 add_subdirectory(src)
 add_subdirectory(tests)
 
-include(cmake/cpack.cmake)
+include(CPack)
