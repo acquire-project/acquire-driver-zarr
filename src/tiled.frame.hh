@@ -20,11 +20,6 @@ struct TileShape
     {
         uint32_t width, height, planes;
     } dims;
-    struct tile_shape_frame_channels_s
-    {
-        uint8_t nchannels;
-        uint32_t frames_per_channel;
-    } frame_channels;
 };
 
 struct FrameROI
@@ -53,7 +48,6 @@ struct FrameROI
     [[nodiscard]] bool finished() const;
     void reset();
 
-    [[nodiscard]] const ImageShape& image() const;
     [[nodiscard]] const TileShape& shape() const;
 
   private:
@@ -70,20 +64,22 @@ class TiledFrame
   public:
     TiledFrame() = delete;
     TiledFrame(VideoFrame* frame, const TileShape& tile_shape);
-    ~TiledFrame() = default;
+    ~TiledFrame();
 
     [[nodiscard]] size_t size() const;
     [[nodiscard]] size_t bytes_of_image() const;
 
     [[nodiscard]] uint64_t frame_id() const;
-    [[nodiscard]] const ImageShape& image_shape() const;
     [[nodiscard]] uint8_t* data() const;
 
     [[nodiscard]] size_t next_contiguous_region(FrameROI& idx,
                                                 uint8_t** region) const;
 
   private:
-    VideoFrame* frame_;
+    size_t bytes_of_image_;
+    uint64_t frame_id_;
+    uint8_t* buf_;
+    ImageShape image_shape_;
     TileShape tile_shape_;
 };
 

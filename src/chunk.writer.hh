@@ -4,6 +4,7 @@
 #ifdef __cplusplus
 
 #include <queue>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
@@ -20,13 +21,12 @@
 
 namespace acquire::sink::zarr {
 
-using thread_t = thread;
-
 struct ChunkWriter final
 {
   public:
     ChunkWriter() = delete;
-    ChunkWriter(const FrameROI& roi, size_t bytes_per_chunk,
+    ChunkWriter(const FrameROI& roi,
+                size_t bytes_per_chunk,
                 BaseEncoder* encoder);
     ~ChunkWriter();
 
@@ -41,16 +41,14 @@ struct ChunkWriter final
     void set_current_chunk_file();
     void close_current_file();
 
+    std::mutex& mutex() noexcept;
+
     /**************************
      * For use by Zarr writer *
      **************************/
     void push_frame(const TiledFrame* frame);
     [[nodiscard]] bool has_frame(uint64_t frame_id) const;
-    [[nodiscard]] bool has_thread() const;
     [[nodiscard]] size_t active_frames() const;
-
-    void assign_thread(thread_t** t);
-    thread_t* release_thread();
 
     /**********************************
      * For use in chunk writer thread *
@@ -69,21 +67,35 @@ struct ChunkWriter final
     size_t bytes_written_;
 
     std::string base_dir_;
-    size_t current_chunk_;
+    int current_chunk_;
     char dimension_separator_;
 
-    mutable lock lock_;
-    thread_t* thread_;
     std::queue<const TiledFrame*> frame_ptrs_;
     std::unordered_set<uint64_t> frame_ids_;
     std::optional<uint64_t> current_frame_id_;
     std::optional<BloscCompressor> compressor_;
     bool should_wait_for_work_;
 
+    std::mutex mutex_;
+
     void update_current_chunk_file();
     void finalize_chunk();
     void rollover();
 };
+
+struct WriterContext final
+{
+    ChunkWriter* writer;
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool should_stop;
+    //    std::thread thread;
+    //    std::atomic<bool> is_running;
+};
+
+void
+chunk_write_thread(WriterContext* context);
+
 } // namespace acquire::sink::zarr
 #endif // __cplusplus
 #endif // H_ACQUIRE_ZARR_CHUNK_WRITER_V0

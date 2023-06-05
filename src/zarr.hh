@@ -7,6 +7,7 @@
 
 #include "prelude.h"
 #include "chunk.writer.hh"
+#include "thread.pool.hh"
 
 #include <string>
 #include <optional>
@@ -51,7 +52,6 @@ struct StorageInterface : public Storage
 struct Zarr final : StorageInterface
 {
     Zarr();
-    explicit Zarr(size_t nthreads);
     explicit Zarr(BloscCompressor&& compressor);
     ~Zarr() override;
 
@@ -74,15 +74,16 @@ struct Zarr final : StorageInterface
     // static - set on construction
     char dimension_separator_;
     std::optional<BloscCompressor> compressor_;
+    ThreadPool thread_pool_;
 
     // changes on set()
-    std::queue<thread_t*> thread_pool_;
     std::string data_dir_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     size_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
+    std::vector<WriterContext> writer_contexts_;
     std::vector<ChunkWriter*> writers_;
     size_t tiles_per_chunk_;
 
@@ -97,9 +98,6 @@ struct Zarr final : StorageInterface
     void write_external_metadata_json_() const;
     void write_zgroup_json_() const;
     void write_group_zattrs_json_() const;
-
-    void initialize_thread_pool_(size_t nthreads);
-    void finalize_thread_pool_();
 
     void allocate_writers_();
     void clear_writers_();

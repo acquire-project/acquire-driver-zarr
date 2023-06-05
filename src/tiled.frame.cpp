@@ -146,12 +146,6 @@ FrameROI::reset()
     row_offset_ = plane_offset_ = 0;
 }
 
-const ImageShape&
-FrameROI::image() const
-{
-    return image_;
-}
-
 const TileShape&
 FrameROI::shape() const
 {
@@ -165,41 +159,45 @@ operator==(const FrameROI& lhs, const FrameROI& rhs)
 }
 
 TiledFrame::TiledFrame(VideoFrame* frame, const TileShape& tile_shape)
-  : frame_{ nullptr }
+  : buf_{ nullptr }
+  , bytes_of_image_{ 0 }
   , tile_shape_{ tile_shape }
 {
     CHECK(frame);
-    frame_ = frame;
+    CHECK(buf_ = new uint8_t[frame->bytes_of_frame - sizeof(*frame)]);
+    bytes_of_image_ = frame->bytes_of_frame - sizeof(*frame);
+    memcpy(buf_, frame->data, bytes_of_image_);
+    memcpy(&image_shape_, &frame->shape, sizeof(image_shape_));
+    frame_id_ = frame->frame_id;
+}
+
+TiledFrame::~TiledFrame()
+{
+    delete buf_;
 }
 
 size_t
 TiledFrame::size() const
 {
-    return bytes_of_image() / bytes_of_type(frame_->shape.type);
+    return bytes_of_image() / bytes_of_type(image_shape_.type);
 }
 
 size_t
 TiledFrame::bytes_of_image() const
 {
-    return frame_->bytes_of_frame - sizeof(*frame_);
+    return bytes_of_image_;
 }
 
 uint64_t
 TiledFrame::frame_id() const
 {
-    return frame_->frame_id;
-}
-
-const ImageShape&
-TiledFrame::image_shape() const
-{
-    return frame_->shape;
+    return frame_id_;
 }
 
 uint8_t*
 TiledFrame::data() const
 {
-    return frame_->data;
+    return buf_;
 }
 
 size_t
@@ -207,17 +205,17 @@ TiledFrame::next_contiguous_region(FrameROI& idx, uint8_t** region) const
 {
     size_t nbytes = 0;
 
-    if (idx.row() >= frame_->shape.dims.height ||
-        idx.plane() >= frame_->shape.dims.planes) {
+    if (idx.row() >= image_shape_.dims.height ||
+        idx.plane() >= image_shape_.dims.planes) {
         *region = nullptr;
     } else {
         // widths are in pixels
-        size_t img_width = frame_->shape.dims.width;
+        size_t img_width = image_shape_.dims.width;
         size_t tile_width = tile_shape_.dims.width;
         size_t region_width =
           std::min(idx.col() + tile_width, img_width) - idx.col();
-        nbytes = region_width * bytes_of_type(frame_->shape.type);
-        *region = frame_->data + idx.offset();
+        nbytes = region_width * bytes_of_type(image_shape_.type);
+        *region = buf_ + idx.offset();
     }
 
     idx.increment_row();

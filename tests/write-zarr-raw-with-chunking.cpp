@@ -1,11 +1,9 @@
 #include <filesystem>
 #include <fstream>
-#include <string>
 #include <stdexcept>
 
 #include "device/hal/device.manager.h"
 #include "acquire.h"
-#include "platform.h"
 #include "logger.h"
 
 #include "json.hpp"

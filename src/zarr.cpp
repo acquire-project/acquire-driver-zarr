@@ -7,7 +7,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <thread>
 
 #include "json.hpp"
 
@@ -197,23 +196,8 @@ zarr::Zarr::Zarr()
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , writer_contexts_(std::thread::hardware_concurrency())
 {
-    initialize_thread_pool_(1);
-}
-
-zarr::Zarr::Zarr(size_t nthreads)
-  : dimension_separator_{ '/' }
-  , frame_count_{ 0 }
-  , pixel_scale_um_{ 1, 1 }
-  , max_bytes_per_chunk_{ 0 }
-  , tiles_per_chunk_{ 0 }
-  , image_shape_{ 0 }
-  , tile_shape_{ 0 }
-{
-    nthreads = std::clamp(
-      nthreads, (size_t)1, (size_t)std::thread::hardware_concurrency());
-
-    initialize_thread_pool_(nthreads);
 }
 
 zarr::Zarr::Zarr(BloscCompressor&& compressor)
@@ -224,8 +208,8 @@ zarr::Zarr::Zarr(BloscCompressor&& compressor)
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , writer_contexts_(std::thread::hardware_concurrency())
 {
-    initialize_thread_pool_(1);
     compressor_ = std::move(compressor);
 }
 
@@ -309,7 +293,6 @@ zarr::Zarr::stop() noexcept
                 clock_sleep_ms(nullptr, 50.0);
             }
             recover_threads_();
-            finalize_thread_pool_();
             clear_writers_();
             is_ok = 1;
         } catch (const std::exception& exc) {
@@ -346,8 +329,10 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         validate_image_shapes_equal(image_shape_, cur->shape);
 
         // push the new frame to our writers
-        for (auto& writer : writers_)
+        for (auto& writer : writers_) {
+            std::scoped_lock lock(writer->mutex());
             writer->push_frame(tiled_frame);
+        }
 
         ++frame_count_;
     }
@@ -411,28 +396,7 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
           .height = tile_height,
           .planes = tile_planes,
         },
-        .frame_channels = {0}
     };
-}
-
-void
-zarr::Zarr::initialize_thread_pool_(size_t nthreads)
-{
-    for (auto i = 0; i < nthreads; ++i) {
-        auto t = new thread_t;
-        thread_init(t);
-        thread_pool_.push(t);
-    }
-}
-
-void
-zarr::Zarr::finalize_thread_pool_()
-{
-    while (!thread_pool_.empty()) {
-        thread_t* t = thread_pool_.front();
-        thread_pool_.pop();
-        delete t;
-    }
 }
 
 void
@@ -592,10 +556,20 @@ zarr::Zarr::allocate_writers_()
         writers_.push_back(writer);
     }
 
-    while (writers_.size() < thread_pool_.size()) {
-        thread_t* t = thread_pool_.front();
-        thread_pool_.pop();
-        delete t;
+    size_t ncontexts = std::min(writers_.size(), thread_pool_.capacity());
+    for (auto i = 0; i < thread_pool_.capacity() - ncontexts; ++i) {
+        writer_contexts_.pop_back();
+    }
+
+    for (size_t i = 0; i < ncontexts; i++) {
+        auto& context = writer_contexts_.at(i);
+        std::scoped_lock lock(context.mutex);
+        context.writer = writers_.at(i);
+        context.should_stop = false;
+    }
+
+    for (auto& context : writer_contexts_) {
+        thread_pool_.emplace(chunk_write_thread, &context);
     }
 }
 
@@ -603,7 +577,10 @@ void
 zarr::Zarr::clear_writers_()
 {
     for (auto& writer : writers_) {
-        writer->close_current_file();
+        {
+            std::scoped_lock lock(writer->mutex());
+            writer->close_current_file();
+        }
         delete writer;
     }
     writers_.clear();
@@ -618,30 +595,39 @@ zarr::Zarr::assign_threads_()
           return a->active_frames() > b->active_frames();
       });
 
-    // thread_pool_ has at most as many threads as there are writers
-    while (!thread_pool_.empty()) {
-        thread_t* t = thread_pool_.front();
-        thread_pool_.pop();
+    // assign threads to writers
+    for (auto i = 0; i < writer_contexts_.size(); ++i) {
+        WriterContext& context = writer_contexts_.at(i);
 
-        while (t != nullptr) {
-            for (auto& writer : writers_) {
-                if (!writer->has_thread()) {
-                    writer->assign_thread(&t);
-                    break;
-                }
-            }
-        }
+        std::scoped_lock lock(context.mutex);
+        context.writer = writers_.at(i);
     }
+
+    //    // thread_pool_ has at most as many threads as there are writers
+    //    while (!thread_pool_.empty()) {
+    //        thread_t* t = thread_pool_.front();
+    //        thread_pool_.pop();
+    //
+    //        while (t != nullptr) {
+    //            for (auto& writer : writers_) {
+    //                if (!writer->has_thread()) {
+    //                    writer->assign_thread(&t);
+    //                    break;
+    //                }
+    //            }
+    //        }
+    //    }
 }
 
 void
 zarr::Zarr::recover_threads_()
 {
-    for (auto& writer : writers_) {
-        thread_t* t = writer->release_thread();
-        if (nullptr != t)
-            thread_pool_.push(t);
+    for (auto& context : writer_contexts_) {
+        std::scoped_lock lock(context.mutex);
+        context.should_stop = true;
     }
+
+    thread_pool_.join_all();
 }
 
 /// make a single pass through the frame queue and check if any writers are
@@ -657,6 +643,7 @@ zarr::Zarr::release_finished_frames_()
 
         bool replace_frame = false;
         for (auto& writer : writers_) {
+            std::scoped_lock lock(writer->mutex());
             if (writer->has_frame(frame->frame_id())) {
                 replace_frame = true;
                 break;
@@ -673,9 +660,6 @@ zarr::Zarr::release_finished_frames_()
 size_t
 zarr::Zarr::cycle_()
 {
-    if (writers_.size() > thread_pool_.size())
-        recover_threads_();
-
     release_finished_frames_();
 
     if (!frame_ptrs_.empty())
@@ -921,8 +905,7 @@ extern "C" struct Storage*
 zarr_init()
 {
     try {
-        auto nthreads = (int)std::thread::hardware_concurrency();
-        return new zarr::Zarr(std::max(nthreads - 3, 1));
+        return new zarr::Zarr();
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
     } catch (...) {

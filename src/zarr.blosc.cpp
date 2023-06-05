@@ -4,6 +4,7 @@
 #include "logger.h"
 
 #include <stdexcept>
+#include <thread>
 
 namespace zarr = acquire::sink::zarr;
 using json = nlohmann::json;

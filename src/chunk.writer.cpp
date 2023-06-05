@@ -103,8 +103,6 @@ ChunkWriter::ChunkWriter(const acquire::sink::zarr::FrameROI& roi,
   , bytes_per_chunk_{ 0 }
   , bytes_written_{ 0 }
   , current_chunk_{ 0 }
-  , lock_{}
-  , thread_{ nullptr }
   , compressor_{}
   , should_wait_for_work_{ false }
 {
@@ -121,10 +119,6 @@ ChunkWriter::ChunkWriter(const acquire::sink::zarr::FrameROI& roi,
 
 ChunkWriter::~ChunkWriter()
 {
-    if (thread_) {
-        LOGE("WARNING: Manually releasing thread!");
-        release_thread();
-    }
     close_current_file();
     delete encoder_;
 }
@@ -132,31 +126,20 @@ ChunkWriter::~ChunkWriter()
 void
 ChunkWriter::push_frame(const TiledFrame* frame)
 {
-    lock_acquire(&lock_);
     CHECK(frame);
     frame_ptrs_.emplace(frame);
     frame_ids_.emplace(frame->frame_id());
-    lock_release(&lock_);
 }
 
 bool
 ChunkWriter::has_frame(uint64_t frame_id) const
 {
-    lock_acquire(&lock_);
     if (current_frame_id_.has_value() && current_frame_id_ == frame_id) {
-        lock_release(&lock_);
         return true;
     }
 
     bool contains = frame_ids_.contains(frame_id);
-    lock_release(&lock_);
     return contains;
-}
-
-bool
-ChunkWriter::has_thread() const
-{
-    return thread_ != nullptr;
 }
 
 size_t
@@ -170,11 +153,7 @@ ChunkWriter::active_frames() const
 bool
 ChunkWriter::should_wait_for_work() const
 {
-    lock_acquire(&lock_);
-    bool res = should_wait_for_work_;
-    lock_release(&lock_);
-
-    return res;
+    return should_wait_for_work_;
 }
 
 size_t
@@ -211,10 +190,8 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
 const TiledFrame*
 ChunkWriter::pop_frame_and_make_current()
 {
-    lock_acquire(&lock_);
     if (frame_ptrs_.empty()) {
         current_frame_id_.reset();
-        lock_release(&lock_);
         return nullptr;
     }
 
@@ -223,7 +200,6 @@ ChunkWriter::pop_frame_and_make_current()
 
     frame_ptrs_.pop();
     roi_.reset();
-    lock_release(&lock_);
 
     return frame;
 }
@@ -231,41 +207,10 @@ ChunkWriter::pop_frame_and_make_current()
 void
 ChunkWriter::release_current_frame()
 {
-    lock_acquire(&lock_);
     if (current_frame_id_.has_value()) {
         frame_ids_.erase(current_frame_id_.value());
         current_frame_id_.reset();
     }
-    lock_release(&lock_);
-}
-
-void
-ChunkWriter::assign_thread(thread_t** t)
-{
-    EXPECT(!thread_, "Thread already assigned.");
-    EXPECT(t, "Null thread passed.");
-
-    thread_ = *t;
-    *t = nullptr;
-    should_wait_for_work_ = true;
-    thread_create(thread_, (void (*)(void*))chunk_write_thread, (void*)this);
-}
-
-thread_t*
-ChunkWriter::release_thread()
-{
-    lock_acquire(&lock_);
-    should_wait_for_work_ = false;
-    lock_release(&lock_);
-
-    if (!thread_)
-        return nullptr;
-
-    thread_join(thread_);
-
-    thread_t* tmp = thread_;
-    thread_ = nullptr;
-    return tmp;
 }
 
 FrameROI&
@@ -373,11 +318,101 @@ void
 ChunkWriter::rollover()
 {
     TRACE("Rolling over");
-
-    lock_acquire(&lock_);
     ++current_chunk_;
-    lock_release(&lock_);
-
     update_current_chunk_file();
+}
+
+std::mutex&
+ChunkWriter::mutex() noexcept
+{
+    return mutex_;
+}
+
+void
+chunk_write_thread(WriterContext* context)
+{
+    struct clock throttle = {};
+    clock_init(&throttle);
+
+    while (true) {
+        ChunkWriter* writer;
+        {
+            std::scoped_lock context_lock(context->mutex);
+
+            writer = context->writer;
+        }
+        if (!writer)
+            continue;
+
+        {
+            std::scoped_lock writer_lock(writer->mutex());
+            FrameROI& roi = writer->roi();
+
+            const size_t bytes_per_row = roi.bytes_per_row();
+            std::vector<uint8_t> fill(bytes_per_row);
+            std::fill(fill.begin(), fill.end(), 0);
+
+            if (auto frame = writer->pop_frame_and_make_current()) {
+                uint8_t* region = nullptr;
+                while (!roi.finished()) {
+                    size_t nbytes = frame->next_contiguous_region(roi, &region);
+                    if (0 < nbytes) {
+                        CHECK(nullptr != region);
+                        writer->write(region, region + nbytes);
+                    }
+                    if (nbytes < bytes_per_row) {
+                        writer->write(fill.data(),
+                                      fill.data() + bytes_per_row - nbytes);
+                    }
+                }
+
+                roi.reset();
+
+                writer->release_current_frame();
+            }
+
+            //        if (writer.should_wait_for_work()) {
+            //            std::unique_lock<std::mutex> lock(context->mutex);
+            //            context->cv.wait(lock,
+            //                             [&]() { return
+            //                             !writer.should_wait_for_work(); });
+            //        }
+            //
+            //        const TiledFrame* frame =
+            //        writer.pop_frame_and_make_current(); if (nullptr == frame)
+            //            break;
+            //
+            //        const size_t bytes_per_tile = writer.bytes_per_tile();
+            //        const size_t bytes_per_chunk = writer.bytes_per_chunk();
+            //
+            //        const size_t tiles_per_chunk = bytes_per_chunk /
+            //        bytes_per_tile; const size_t tiles_per_frame =
+            //        frame->tiles_per_frame();
+            //
+            //        const size_t tiles_remaining = tiles_per_frame -
+            //        writer.tiles_written(); const size_t tiles_to_write =
+            //          std::min(tiles_remaining, tiles_per_chunk);
+            //
+            //        const size_t bytes_to_write = tiles_to_write *
+            //        bytes_per_tile;
+            //
+            //        const uint8_t* beg =
+            //          frame->data() + writer.tiles_written() * bytes_per_tile;
+            //        const uint8_t* end = beg + bytes_to_write;
+            //
+            //        writer.write(beg, end);
+            //
+            //        if (writer.tiles_written() == tiles_per_frame) {
+            //            writer.release_current_frame();
+            //        }
+            {
+                std::scoped_lock context_lock(context->mutex);
+                if (context->should_stop)
+                    break;
+            }
+        }
+
+        clock_sleep_ms(&throttle, 10.0);
+    }
 }
 } // namespace acquire::sink::zarr

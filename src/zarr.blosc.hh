@@ -5,8 +5,6 @@
 
 #include "zarr.encoder.hh"
 
-#include <thread>
-
 #include "blosc.h"
 
 namespace acquire::sink::zarr {
