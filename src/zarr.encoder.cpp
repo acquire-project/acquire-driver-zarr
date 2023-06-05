@@ -14,14 +14,8 @@ namespace acquire::sink::zarr {
 BaseEncoder::BaseEncoder()
   : cursor_{ 0 }
   , bytes_per_pixel_{ 1 }
-  , file_handle_{}
-  , file_has_been_created_{ false }
+  , file_handle_{ nullptr }
 {
-}
-
-BaseEncoder::~BaseEncoder() noexcept
-{
-    close_file();
 }
 
 void
@@ -68,8 +62,7 @@ BaseEncoder::write(const uint8_t* beg, const uint8_t* end)
         }
 
         if (buf_.size() == cursor_) {
-            const size_t nbytes_out = flush();
-            //            TRACE("Flushed %lu bytes to disk.", nbytes_out);
+            flush();
         }
     }
 
@@ -82,8 +75,7 @@ BaseEncoder::flush()
     if (0 == cursor_)
         return 0;
 
-    if (!file_has_been_created_)
-        open_file();
+    EXPECT(nullptr != file_handle_, "Data on buffer, but no file to flush to.");
 
     size_t nbytes_out = flush_impl();
     cursor_ = 0;
@@ -92,40 +84,8 @@ BaseEncoder::flush()
 }
 
 void
-BaseEncoder::set_file_path(const std::string& file_path)
+BaseEncoder::set_file(struct file* file_handle)
 {
-    path_ = file_path;
-    file_has_been_created_ = false;
+    file_handle_ = file_handle;
 }
-
-void
-BaseEncoder::open_file()
-{
-    if (nullptr != file_handle_)
-        close_file();
-
-    auto parent_path = fs::path(path_).parent_path();
-    if (!fs::is_directory(parent_path))
-        fs::create_directories(parent_path);
-
-    file_handle_ = new file;
-    CHECK(file_create(file_handle_, path_.c_str(), path_.size()));
-
-    open_file_impl();
-
-    file_has_been_created_ = true;
-}
-
-void
-BaseEncoder::close_file()
-{
-    if (!file_has_been_created_ || nullptr == file_handle_)
-        return;
-
-    file_close(file_handle_);
-    delete file_handle_;
-    file_handle_ = nullptr;
-    file_has_been_created_ = false;
-}
-
 } // namespace acquire::sink::zarr

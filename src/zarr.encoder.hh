@@ -16,29 +16,24 @@ namespace acquire::sink::zarr {
 struct BaseEncoder
 {
   public:
-    virtual ~BaseEncoder() noexcept;
+    BaseEncoder();
+    virtual ~BaseEncoder() noexcept = default;
 
     size_t write(const uint8_t* beg, const uint8_t* end);
     size_t flush();
     void set_bytes_per_pixel(size_t bpp);
     void allocate_buffer(size_t buf_size);
 
-    void set_file_path(const std::string& file_path);
-    void close_file();
+    virtual void set_file(struct file* file_handle);
 
   protected:
     std::vector<uint8_t> buf_;
     size_t cursor_;
     size_t bytes_per_pixel_;
     std::string path_;
-    struct file* file_handle_;
-    bool file_has_been_created_;
-
-    BaseEncoder();
-    void open_file();
+    struct file* file_handle_; // non-owning
 
     virtual size_t flush_impl() = 0;
-    virtual void open_file_impl() = 0;
 };
 } // namespace acquire::sink::zarr
 

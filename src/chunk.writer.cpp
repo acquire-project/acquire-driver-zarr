@@ -3,12 +3,9 @@
 #include <algorithm>
 #include <filesystem>
 #include <string>
-#include <thread>
 
 #include "device/props/components.h"
 #include "platform.h"
-
-#include "blosc.h"
 
 /// Check that a==b
 /// example: `ASSERT_EQ(int,"%d",42,meaning_of_life())`
@@ -43,38 +40,11 @@ bytes_of_type(const SampleType& type) noexcept
     return table[type];
 }
 
-void
-chunk_write_thread(acquire::sink::zarr::ChunkWriter* writer)
+size_t
+bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
 {
-    struct clock throttle = {};
-    clock_init(&throttle);
-
-    auto& roi = writer->roi();
-
-    const size_t bytes_per_row = roi.bytes_per_row();
-    std::vector<uint8_t> fill(bytes_per_row);
-    std::fill(fill.begin(), fill.end(), 0);
-    do {
-        if (auto frame = writer->pop_frame_and_make_current()) {
-            uint8_t* region = nullptr;
-            while (!roi.finished()) {
-                size_t nbytes = frame->next_contiguous_region(roi, &region);
-                if (0 < nbytes) {
-                    CHECK(nullptr != region);
-                    writer->write(region, region + nbytes);
-                }
-                if (nbytes < bytes_per_row) {
-                    writer->write(fill.data(),
-                                  fill.data() + bytes_per_row - nbytes);
-                }
-            }
-
-            roi.reset();
-
-            writer->release_current_frame();
-        } else
-            clock_sleep_ms(&throttle, 50.0);
-    } while (writer->should_wait_for_work());
+    return bytes_of_type(image.type) * image.dims.channels * tile.dims.width *
+           tile.dims.height * tile.dims.planes;
 }
 } // ::{anonymous}
 
@@ -94,27 +64,36 @@ BloscCompressor::BloscCompressor(const std::string& codec_id,
 {
 }
 
-ChunkWriter::ChunkWriter(const acquire::sink::zarr::FrameROI& roi,
-                         size_t bytes_per_chunk,
-                         BaseEncoder* encoder)
+ChunkWriter::ChunkWriter(const ImageShape& image,
+                         const TileShape& tile,
+                         uint32_t tile_col,
+                         uint32_t tile_row,
+                         uint32_t tile_plane,
+                         size_t max_bytes_per_chunk,
+                         acquire::sink::zarr::BaseEncoder* encoder)
   : encoder_{ encoder }
-  , dimension_separator_{ '/' }
-  , roi_{ roi }
   , bytes_per_chunk_{ 0 }
+  , tiles_per_chunk_{ 0 }
   , bytes_written_{ 0 }
   , current_chunk_{ 0 }
-  , compressor_{}
-  , should_wait_for_work_{ false }
+  , dimension_separator_{ '/' }
+  , current_file_{ nullptr }
+  , tile_col{ tile_col }
+  , tile_row{ tile_row }
+  , tile_plane{ tile_plane }
+  , image_shape_{ image }
+  , tile_shape_{ tile }
 {
     CHECK(encoder_);
-    const auto bpt = (float)roi.bytes_per_tile();
-    tiles_per_chunk_ = std::floor((float)bytes_per_chunk / bpt);
+    const auto bpt = (float)::bytes_per_tile(image_shape_, tile_shape_);
+    EXPECT(bpt > 0, "Computed zero bytes per tile.", bpt);
+    tiles_per_chunk_ = std::floor((float)max_bytes_per_chunk / bpt);
     EXPECT(tiles_per_chunk_ > 0,
-           "Given %lu bytes per chunk, %lu bytes per roi.",
-           bytes_per_chunk,
-           roi.bytes_per_tile());
+           "Given %lu bytes per chunk, %lu bytes per tile.",
+           max_bytes_per_chunk,
+           ::bytes_of_type(image.type));
 
-    bytes_per_chunk_ = tiles_per_chunk_ * roi.bytes_per_tile();
+    bytes_per_chunk_ = tiles_per_chunk_ * (size_t)bpt;
 }
 
 ChunkWriter::~ChunkWriter()
@@ -150,22 +129,23 @@ ChunkWriter::active_frames() const
     return nf;
 }
 
-bool
-ChunkWriter::should_wait_for_work() const
-{
-    return should_wait_for_work_;
-}
-
 size_t
 ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
 {
+    const size_t bytes_in = (uint8_t*)end - (uint8_t*)beg;
+    if (0 == bytes_in)
+        return 0;
+
+    if (nullptr == current_file_)
+        open_chunk_file();
+
     size_t bytes_out = 0;
     auto* cur = (uint8_t*)beg;
 
     // we should never see this, but if the number of bytes brings us past
     // the chunk boundary, we need to rollover
     const size_t bytes_of_this_chunk = bytes_written_ % bytes_per_chunk_;
-    if ((end - beg) + bytes_of_this_chunk > bytes_per_chunk_) {
+    if (bytes_in + bytes_of_this_chunk > bytes_per_chunk_) {
         const size_t bytes_remaining = bytes_per_chunk_ - bytes_of_this_chunk;
 
         bytes_out = encoder_->write(beg, beg + bytes_remaining);
@@ -199,7 +179,6 @@ ChunkWriter::pop_frame_and_make_current()
     current_frame_id_ = frame->frame_id();
 
     frame_ptrs_.pop();
-    roi_.reset();
 
     return frame;
 }
@@ -211,36 +190,6 @@ ChunkWriter::release_current_frame()
         frame_ids_.erase(current_frame_id_.value());
         current_frame_id_.reset();
     }
-}
-
-FrameROI&
-ChunkWriter::roi()
-{
-    return roi_;
-}
-
-size_t
-ChunkWriter::bytes_per_tile() const
-{
-    return roi_.bytes_per_tile();
-}
-
-size_t
-ChunkWriter::bytes_per_chunk() const
-{
-    return bytes_per_chunk_;
-}
-
-size_t
-ChunkWriter::tiles_written() const
-{
-    return bytes_written() / bytes_per_tile();
-}
-
-size_t
-ChunkWriter::bytes_written() const
-{
-    return bytes_written_;
 }
 
 void
@@ -259,11 +208,10 @@ ChunkWriter::set_base_directory(const std::string& base_directory)
            R"(Base directory "%s" does not exist or is not a directory.)",
            base_directory.c_str());
     base_dir_ = base_directory;
-    set_current_chunk_file();
 }
 
 void
-ChunkWriter::set_current_chunk_file()
+ChunkWriter::open_chunk_file()
 {
     char file_path[512];
     snprintf(file_path,
@@ -273,40 +221,51 @@ ChunkWriter::set_current_chunk_file()
              dimension_separator_,
              current_chunk_,
              dimension_separator_,
-             roi_.p(),
+             tile_plane,
              dimension_separator_,
-             roi_.y(),
+             tile_row,
              dimension_separator_,
-             roi_.x());
+             tile_col);
 
-    encoder_->set_file_path((fs::path(base_dir_) / file_path).string());
+    std::string path = (fs::path(base_dir_) / file_path).string();
+    auto parent_path = fs::path(path).parent_path();
+
+    if (!fs::is_directory(parent_path))
+        fs::create_directories(parent_path);
+
+    current_file_ = new file;
+    CHECK(file_create(current_file_, path.c_str(), path.size()));
+
+    encoder_->set_file(current_file_);
 }
 
 void
 ChunkWriter::close_current_file()
 {
-    if (nullptr == encoder_)
+    if (nullptr == encoder_ || nullptr == current_file_)
         return;
 
-    const size_t tiles_out = tiles_written();
-    if (tiles_out > tiles_per_chunk_ && tiles_out % tiles_per_chunk_ > 0)
+    const size_t tiles_written =
+      bytes_written_ / bytes_per_tile(image_shape_, tile_shape_);
+
+    if (tiles_written > tiles_per_chunk_ &&
+        tiles_written % tiles_per_chunk_ > 0)
         finalize_chunk();
 
-    encoder_->close_file();
-}
+    encoder_->flush();
 
-void
-ChunkWriter::update_current_chunk_file()
-{
-    close_current_file();
-    set_current_chunk_file();
+    file_close(current_file_);
+    delete current_file_;
+    current_file_ = nullptr;
+
+    encoder_->set_file(nullptr);
 }
 
 void
 ChunkWriter::finalize_chunk()
 {
     size_t bytes_remaining =
-      bytes_per_chunk() - (bytes_written_ % bytes_per_chunk_);
+      bytes_per_chunk_ - (bytes_written_ % bytes_per_chunk_);
     std::vector<uint8_t> zeros(bytes_remaining);
     std::fill(zeros.begin(), zeros.end(), 0);
 
@@ -318,8 +277,8 @@ void
 ChunkWriter::rollover()
 {
     TRACE("Rolling over");
+    close_current_file();
     ++current_chunk_;
-    update_current_chunk_file();
 }
 
 std::mutex&
@@ -328,87 +287,55 @@ ChunkWriter::mutex() noexcept
     return mutex_;
 }
 
+const ImageShape&
+ChunkWriter::image_shape() const noexcept
+{
+    return image_shape_;
+}
+
+const TileShape&
+ChunkWriter::tile_shape() const noexcept
+{
+    return tile_shape_;
+}
+
 void
 chunk_write_thread(WriterContext* context)
 {
     struct clock throttle = {};
     clock_init(&throttle);
 
+    std::vector<uint8_t> tile;
+
     while (true) {
         ChunkWriter* writer;
         {
             std::scoped_lock context_lock(context->mutex);
+            if (context->should_stop)
+                break;
 
             writer = context->writer;
         }
-        if (!writer)
-            continue;
 
-        {
+        if (writer) {
             std::scoped_lock writer_lock(writer->mutex());
-            FrameROI& roi = writer->roi();
 
-            const size_t bytes_per_row = roi.bytes_per_row();
-            std::vector<uint8_t> fill(bytes_per_row);
-            std::fill(fill.begin(), fill.end(), 0);
+            const ImageShape& image_shape = writer->image_shape();
+            const TileShape& tile_shape = writer->tile_shape();
+
+            const size_t bpt = ::bytes_per_tile(image_shape, tile_shape);
+            if (tile.size() != bpt)
+                tile.resize(bpt);
 
             if (auto frame = writer->pop_frame_and_make_current()) {
-                uint8_t* region = nullptr;
-                while (!roi.finished()) {
-                    size_t nbytes = frame->next_contiguous_region(roi, &region);
-                    if (0 < nbytes) {
-                        CHECK(nullptr != region);
-                        writer->write(region, region + nbytes);
-                    }
-                    if (nbytes < bytes_per_row) {
-                        writer->write(fill.data(),
-                                      fill.data() + bytes_per_row - nbytes);
-                    }
-                }
-
-                roi.reset();
+                uint8_t* data = tile.data();
+                size_t nbytes = frame->get_tile(writer->tile_col,
+                                                writer->tile_row,
+                                                writer->tile_plane,
+                                                &data);
+                writer->write(data, data + nbytes);
 
                 writer->release_current_frame();
-            }
-
-            //        if (writer.should_wait_for_work()) {
-            //            std::unique_lock<std::mutex> lock(context->mutex);
-            //            context->cv.wait(lock,
-            //                             [&]() { return
-            //                             !writer.should_wait_for_work(); });
-            //        }
-            //
-            //        const TiledFrame* frame =
-            //        writer.pop_frame_and_make_current(); if (nullptr == frame)
-            //            break;
-            //
-            //        const size_t bytes_per_tile = writer.bytes_per_tile();
-            //        const size_t bytes_per_chunk = writer.bytes_per_chunk();
-            //
-            //        const size_t tiles_per_chunk = bytes_per_chunk /
-            //        bytes_per_tile; const size_t tiles_per_frame =
-            //        frame->tiles_per_frame();
-            //
-            //        const size_t tiles_remaining = tiles_per_frame -
-            //        writer.tiles_written(); const size_t tiles_to_write =
-            //          std::min(tiles_remaining, tiles_per_chunk);
-            //
-            //        const size_t bytes_to_write = tiles_to_write *
-            //        bytes_per_tile;
-            //
-            //        const uint8_t* beg =
-            //          frame->data() + writer.tiles_written() * bytes_per_tile;
-            //        const uint8_t* end = beg + bytes_to_write;
-            //
-            //        writer.write(beg, end);
-            //
-            //        if (writer.tiles_written() == tiles_per_frame) {
-            //            writer.release_current_frame();
-            //        }
-            {
-                std::scoped_lock context_lock(context->mutex);
-                if (context->should_stop)
-                    break;
             }
         }
 

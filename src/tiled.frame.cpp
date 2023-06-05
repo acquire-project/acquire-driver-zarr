@@ -5,6 +5,8 @@
 
 #include "device/props/components.h"
 
+namespace zarr = acquire::sink::zarr;
+
 namespace {
 size_t
 bytes_of_type(const SampleType& type)
@@ -23,141 +25,16 @@ bytes_of_type(const SampleType& type)
 #undef XXX
     return table[type];
 }
+
+size_t
+bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
+{
+    return bytes_of_type(image.type) * image.dims.channels * tile.dims.width *
+           tile.dims.height * tile.dims.planes;
+}
 } // ::{anonymous}
 
 namespace acquire::sink::zarr {
-FrameROI::FrameROI(const ImageShape& image,
-                   const TileShape& tile,
-                   uint32_t x,
-                   uint32_t y,
-                   uint32_t p)
-  : row_offset_{ 0 }
-  , plane_offset_{ 0 }
-  , image_{}
-  , shape_{}
-{
-    size_t x_max = std::ceil((float)(image.dims.width * image.dims.channels) /
-                             (float)tile.dims.width);
-    EXPECT(x < x_max,
-           "ChunkWriter column index given as %lu, but maximum value is %lu",
-           x,
-           x_max - 1);
-
-    size_t y_max =
-      std::ceil((float)image.dims.height / (float)tile.dims.height);
-    EXPECT(y < y_max,
-           "ChunkWriter row index given as %lu, but maximum value is %lu",
-           y,
-           y_max - 1);
-
-    size_t p_max =
-      std::ceil((float)image.dims.planes / (float)tile.dims.planes);
-    EXPECT(p < p_max,
-           "ChunkWriter plane index given as %lu, but maximum value is %lu",
-           p,
-           p_max - 1);
-
-    x_ = x;
-    y_ = y;
-    p_ = p;
-    image_ = image;
-    shape_ = tile;
-}
-
-uint32_t
-FrameROI::x() const
-{
-    return x_;
-}
-
-uint32_t
-FrameROI::y() const
-{
-    return y_;
-}
-
-uint32_t
-FrameROI::p() const
-{
-    return p_;
-}
-
-uint32_t
-FrameROI::col() const
-{
-    return x_ * shape_.dims.width * image_.dims.channels;
-}
-
-uint32_t
-FrameROI::row() const
-{
-    return y_ * shape_.dims.height + row_offset_;
-}
-
-uint32_t
-FrameROI::plane() const
-{
-    return p_ * shape_.dims.planes + plane_offset_;
-}
-
-uint64_t
-FrameROI::offset() const
-{
-    return col() + row() * image_.strides.height +
-           plane() * image_.strides.planes;
-}
-
-size_t
-FrameROI::bytes_per_row() const
-{
-    return bytes_of_type(image_.type) * image_.dims.channels *
-           shape_.dims.width;
-}
-
-size_t
-FrameROI::bytes_per_tile() const
-{
-    return bytes_per_row() * shape_.dims.height * shape_.dims.planes;
-}
-
-void
-FrameROI::increment_row()
-{
-    row_offset_ = (row_offset_ + 1) % shape_.dims.height;
-    if (0 == row_offset_)
-        increment_plane();
-}
-
-void
-FrameROI::increment_plane()
-{
-    plane_offset_ += 1;
-}
-
-bool
-FrameROI::finished() const
-{
-    return plane_offset_ == shape_.dims.planes;
-}
-
-void
-FrameROI::reset()
-{
-    row_offset_ = plane_offset_ = 0;
-}
-
-const TileShape&
-FrameROI::shape() const
-{
-    return shape_;
-}
-
-bool
-operator==(const FrameROI& lhs, const FrameROI& rhs)
-{
-    return lhs.offset() == rhs.offset();
-}
-
 TiledFrame::TiledFrame(VideoFrame* frame, const TileShape& tile_shape)
   : buf_{ nullptr }
   , bytes_of_image_{ 0 }
@@ -201,49 +78,78 @@ TiledFrame::data() const
 }
 
 size_t
-TiledFrame::next_contiguous_region(FrameROI& idx, uint8_t** region) const
+TiledFrame::get_tile(uint32_t tile_col,
+                     uint32_t tile_row,
+                     uint32_t tile_plane,
+                     uint8_t** tile) const
+{
+    CHECK(tile);
+    uint8_t* region = nullptr;
+
+    const size_t bytes_per_row = bytes_of_type(image_shape_.type) *
+                                 image_shape_.dims.channels *
+                                 tile_shape_.dims.width;
+    std::vector<uint8_t> fill(bytes_per_row, 0);
+
+    size_t nbytes_out = 0;
+
+    size_t offset = 0;
+    size_t frame_col =
+      tile_col * tile_shape_.dims.width * image_shape_.dims.channels;
+    for (auto p = 0; p < tile_shape_.dims.planes; ++p) {
+        size_t frame_plane = tile_plane * tile_shape_.dims.planes + p;
+        for (auto r = 0; r < tile_shape_.dims.height; ++r) {
+            size_t frame_row = tile_row * tile_shape_.dims.height + r;
+            size_t frame_offset = frame_col +
+                                  frame_row * image_shape_.strides.height +
+                                  frame_plane * image_shape_.strides.planes;
+
+            size_t nbytes_row = get_contiguous_region(
+              frame_col, frame_row, frame_plane, frame_offset, &region);
+
+            // copy frame data into the tile buffer
+            if (0 < nbytes_row) {
+                CHECK(nullptr != region);
+                memcpy(*tile + offset, region, nbytes_row);
+            }
+            offset += nbytes_row;
+
+            // fill the rest of the row with zeroes
+            if (nbytes_row < bytes_per_row) {
+                memcpy(*tile + offset, fill.data(), bytes_per_row - nbytes_row);
+            }
+            offset += bytes_per_row - nbytes_row;
+
+            nbytes_out += bytes_per_row;
+        }
+    }
+
+    return nbytes_out;
+}
+
+size_t
+TiledFrame::get_contiguous_region(size_t frame_col,
+                                  size_t frame_row,
+                                  size_t frame_plane,
+                                  size_t frame_offset,
+                                  uint8_t** region) const
 {
     size_t nbytes = 0;
 
-    if (idx.row() >= image_shape_.dims.height ||
-        idx.plane() >= image_shape_.dims.planes) {
+    if (frame_row >= image_shape_.dims.height ||
+        frame_plane >= image_shape_.dims.planes) {
         *region = nullptr;
     } else {
         // widths are in pixels
         size_t img_width = image_shape_.dims.width;
         size_t tile_width = tile_shape_.dims.width;
         size_t region_width =
-          std::min(idx.col() + tile_width, img_width) - idx.col();
+          std::min(frame_col + tile_width, img_width) - frame_col;
         nbytes = region_width * bytes_of_type(image_shape_.type);
-        *region = buf_ + idx.offset();
+        *region = buf_ + frame_offset;
     }
 
-    idx.increment_row();
     return nbytes;
-}
-
-std::vector<FrameROI>
-make_frame_rois(const ImageShape& image_shape, const TileShape& tile_shape)
-{
-    std::vector<FrameROI> frame_rois;
-    size_t img_px_x = image_shape.dims.channels * image_shape.dims.width;
-    size_t x_max = std::ceil((float)img_px_x / (float)tile_shape.dims.width);
-
-    size_t img_px_y = image_shape.dims.height;
-    size_t y_max = std::ceil((float)img_px_y / (float)tile_shape.dims.height);
-
-    size_t img_px_p = image_shape.dims.planes;
-    size_t p_max = std::ceil((float)img_px_p / (float)tile_shape.dims.planes);
-
-    for (auto p = 0; p < p_max; ++p) {
-        for (auto i = 0; i < y_max; ++i) {
-            for (auto j = 0; j < x_max; ++j) {
-                frame_rois.emplace_back(image_shape, tile_shape, j, i, p);
-            }
-        }
-    }
-
-    return frame_rois;
 }
 } // acquire::sink::zarr
 

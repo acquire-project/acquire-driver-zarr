@@ -6,10 +6,11 @@ RawEncoder::RawEncoder()
 {
 }
 
-RawEncoder::~RawEncoder() noexcept
+void
+  RawEncoder::set_file(struct file* file_handle)
 {
-    flush();
-    close_file();
+    BaseEncoder::set_file(file_handle);
+    file_offset_ = 0;
 }
 
 size_t
@@ -20,11 +21,5 @@ RawEncoder::flush_impl()
     file_offset_ += cursor_;
 
     return cursor_;
-}
-
-void
-RawEncoder::open_file_impl()
-{
-    file_offset_ = 0;
 }
 } // namespace acquire::sink::zarr

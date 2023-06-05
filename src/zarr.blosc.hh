@@ -58,7 +58,6 @@ struct BloscEncoder final : public BaseEncoder
 
   private:
     size_t flush_impl() override;
-    void open_file_impl() override;
 
     BloscCompressor compressor_;
 };

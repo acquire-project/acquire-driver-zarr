@@ -527,33 +527,54 @@ zarr::Zarr::write_zgroup_json_() const
 void
 zarr::Zarr::allocate_writers_()
 {
-    auto frame_rois = make_frame_rois(image_shape_, tile_shape_);
-    CHECK(!frame_rois.empty());
-    TRACE("Allocating %llu writers", frame_rois.size());
+    clear_writers_();
 
-    std::for_each(
-      writers_.begin(), writers_.end(), [](ChunkWriter* w) { delete w; });
-    writers_.clear();
-    for (const auto& roi : frame_rois) {
-        BaseEncoder* encoder;
-        size_t buf_size;
-        if (compressor_.has_value()) {
-            buf_size = get_bytes_per_chunk(
-              image_shape_, tile_shape_, max_bytes_per_chunk_);
-            CHECK(encoder = new BloscEncoder(compressor_.value()));
-        } else {
-            buf_size = get_bytes_per_tile(image_shape_, tile_shape_);
-            CHECK(encoder = new RawEncoder());
+    size_t img_px_x = image_shape_.dims.channels * image_shape_.dims.width;
+    size_t tile_cols =
+      std::ceil((float)img_px_x / (float)tile_shape_.dims.width);
+
+    size_t img_px_y = image_shape_.dims.height;
+    size_t tile_rows =
+      std::ceil((float)img_px_y / (float)tile_shape_.dims.height);
+
+    size_t img_px_p = image_shape_.dims.planes;
+    size_t tile_planes =
+      std::ceil((float)img_px_p / (float)tile_shape_.dims.planes);
+
+    TRACE("Allocating %llu writers", tile_cols * tile_rows * tile_planes);
+
+    size_t buf_size =
+      compressor_.has_value()
+        ? get_bytes_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_)
+        : get_bytes_per_tile(image_shape_, tile_shape_);
+
+    for (auto plane = 0; plane < tile_planes; ++plane) {
+        for (auto row = 0; row < tile_rows; ++row) {
+            for (auto col = 0; col < tile_cols; ++col) {
+                BaseEncoder* encoder;
+                if (compressor_.has_value()) {
+                    CHECK(encoder = new BloscEncoder(compressor_.value()));
+                } else {
+                    CHECK(encoder = new RawEncoder());
+                }
+
+                encoder->allocate_buffer(buf_size);
+                encoder->set_bytes_per_pixel(
+                  bytes_per_sample_type(image_shape_.type));
+                auto writer = new ChunkWriter(image_shape_,
+                                              tile_shape_,
+                                              col,
+                                              row,
+                                              plane,
+                                              max_bytes_per_chunk_,
+                                              encoder);
+                CHECK(writer);
+
+                writer->set_dimension_separator(dimension_separator_);
+                writer->set_base_directory(data_dir_);
+                writers_.push_back(writer);
+            }
         }
-
-        encoder->allocate_buffer(buf_size);
-        encoder->set_bytes_per_pixel(bytes_per_sample_type(image_shape_.type));
-        auto writer = new ChunkWriter(roi, max_bytes_per_chunk_, encoder);
-        CHECK(writer);
-
-        writer->set_dimension_separator(dimension_separator_);
-        writer->set_base_directory(data_dir_);
-        writers_.push_back(writer);
     }
 
     size_t ncontexts = std::min(writers_.size(), thread_pool_.capacity());
@@ -577,10 +598,6 @@ void
 zarr::Zarr::clear_writers_()
 {
     for (auto& writer : writers_) {
-        {
-            std::scoped_lock lock(writer->mutex());
-            writer->close_current_file();
-        }
         delete writer;
     }
     writers_.clear();
@@ -602,21 +619,6 @@ zarr::Zarr::assign_threads_()
         std::scoped_lock lock(context.mutex);
         context.writer = writers_.at(i);
     }
-
-    //    // thread_pool_ has at most as many threads as there are writers
-    //    while (!thread_pool_.empty()) {
-    //        thread_t* t = thread_pool_.front();
-    //        thread_pool_.pop();
-    //
-    //        while (t != nullptr) {
-    //            for (auto& writer : writers_) {
-    //                if (!writer->has_thread()) {
-    //                    writer->assign_thread(&t);
-    //                    break;
-    //                }
-    //            }
-    //        }
-    //    }
 }
 
 void

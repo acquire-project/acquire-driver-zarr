@@ -55,8 +55,13 @@ zarr::BloscEncoder::BloscEncoder(const BloscCompressor& compressor)
 
 zarr::BloscEncoder::~BloscEncoder() noexcept
 {
-    flush();
-    close_file();
+    try {
+        flush();
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
+    } catch (...) {
+        LOGE("Exception: (unknown)");
+    }
 }
 
 size_t
@@ -81,11 +86,6 @@ zarr::BloscEncoder::flush_impl()
 
     delete[] buf_c;
     return nbytes_out;
-}
-
-void
-zarr::BloscEncoder::open_file_impl()
-{
 }
 
 extern "C" struct Storage*

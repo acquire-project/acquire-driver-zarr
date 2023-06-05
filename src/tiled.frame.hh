@@ -22,43 +22,6 @@ struct TileShape
     } dims;
 };
 
-struct FrameROI
-{
-  public:
-    FrameROI() = delete;
-    FrameROI(const ImageShape& image,
-             const TileShape& tile,
-             uint32_t x,
-             uint32_t y,
-             uint32_t p);
-
-    [[nodiscard]] uint32_t x() const;
-    [[nodiscard]] uint32_t y() const;
-    [[nodiscard]] uint32_t p() const;
-
-    [[nodiscard]] uint32_t col() const;
-    [[nodiscard]] uint32_t row() const;
-    [[nodiscard]] uint32_t plane() const;
-    [[nodiscard]] uint64_t offset() const;
-    [[nodiscard]] size_t bytes_per_row() const;
-    [[nodiscard]] size_t bytes_per_tile() const;
-
-    void increment_row();
-    void increment_plane();
-    [[nodiscard]] bool finished() const;
-    void reset();
-
-    [[nodiscard]] const TileShape& shape() const;
-
-  private:
-    ImageShape image_;
-    TileShape shape_;
-
-    uint32_t row_offset_;
-    uint32_t plane_offset_;
-    uint32_t x_, y_, p_;
-};
-
 class TiledFrame
 {
   public:
@@ -72,8 +35,10 @@ class TiledFrame
     [[nodiscard]] uint64_t frame_id() const;
     [[nodiscard]] uint8_t* data() const;
 
-    [[nodiscard]] size_t next_contiguous_region(FrameROI& idx,
-                                                uint8_t** region) const;
+    [[nodiscard]] size_t get_tile(uint32_t tile_col,
+                                  uint32_t tile_row,
+                                  uint32_t tile_plane,
+                                  uint8_t** tile) const;
 
   private:
     size_t bytes_of_image_;
@@ -81,10 +46,13 @@ class TiledFrame
     uint8_t* buf_;
     ImageShape image_shape_;
     TileShape tile_shape_;
-};
 
-std::vector<FrameROI>
-make_frame_rois(const ImageShape& image_shape, const TileShape& tile_shape);
+    [[nodiscard]] size_t get_contiguous_region(size_t frame_col,
+                                               size_t frame_row,
+                                               size_t frame_plane,
+                                               size_t frame_offset,
+                                               uint8_t** region) const;
+};
 } // acquire::sink::zarr
 
 #endif // H_ACQUIRE_STORAGE_ZARR_TILED_FRAME_V0

@@ -11,13 +11,13 @@ struct RawEncoder final : public BaseEncoder
 {
   public:
     RawEncoder();
-    ~RawEncoder() noexcept override;
+
+    void set_file(struct file* file_handle) override;
 
   private:
     size_t file_offset_;
 
     size_t flush_impl() override;
-    void open_file_impl() override;
 };
 } // namespace acquire::sink::zarr
 

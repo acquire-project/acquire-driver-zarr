@@ -25,23 +25,23 @@ struct ChunkWriter final
 {
   public:
     ChunkWriter() = delete;
-    ChunkWriter(const FrameROI& roi,
-                size_t bytes_per_chunk,
+    ChunkWriter(const ImageShape& image,
+                const TileShape& tile,
+                uint32_t tile_col,
+                uint32_t tile_row,
+                uint32_t tile_plane,
+                size_t max_bytes_per_chunk,
                 BaseEncoder* encoder);
     ~ChunkWriter();
 
-    [[nodiscard]] FrameROI& roi();
-    [[nodiscard]] size_t bytes_per_tile() const;
-    [[nodiscard]] size_t bytes_per_chunk() const;
-    [[nodiscard]] size_t tiles_written() const;
-    [[nodiscard]] size_t bytes_written() const;
-
     void set_dimension_separator(char separator);
     void set_base_directory(const std::string& base_directory);
-    void set_current_chunk_file();
+    void open_chunk_file();
     void close_current_file();
 
     std::mutex& mutex() noexcept;
+    const ImageShape& image_shape() const noexcept;
+    const TileShape& tile_shape() const noexcept;
 
     /**************************
      * For use by Zarr writer *
@@ -55,13 +55,15 @@ struct ChunkWriter final
      **********************************/
     [[nodiscard]] const TiledFrame* pop_frame_and_make_current();
     void release_current_frame();
-    [[nodiscard]] bool should_wait_for_work() const;
     size_t write(const uint8_t* beg, const uint8_t* end);
+
+    const uint32_t tile_col;
+    const uint32_t tile_row;
+    const uint32_t tile_plane;
 
   private:
     BaseEncoder* encoder_{};
 
-    FrameROI roi_;
     size_t bytes_per_chunk_;
     size_t tiles_per_chunk_;
     size_t bytes_written_;
@@ -69,16 +71,17 @@ struct ChunkWriter final
     std::string base_dir_;
     int current_chunk_;
     char dimension_separator_;
+    struct file* current_file_;
 
     std::queue<const TiledFrame*> frame_ptrs_;
     std::unordered_set<uint64_t> frame_ids_;
     std::optional<uint64_t> current_frame_id_;
     std::optional<BloscCompressor> compressor_;
-    bool should_wait_for_work_;
 
     std::mutex mutex_;
+    ImageShape image_shape_;
+    TileShape tile_shape_;
 
-    void update_current_chunk_file();
     void finalize_chunk();
     void rollover();
 };
@@ -89,8 +92,6 @@ struct WriterContext final
     std::mutex mutex;
     std::condition_variable cv;
     bool should_stop;
-    //    std::thread thread;
-    //    std::atomic<bool> is_running;
 };
 
 void
