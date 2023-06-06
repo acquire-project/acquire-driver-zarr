@@ -262,7 +262,7 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
                 .supported = 1,
                 .max_bytes_per_chunk = { .writable = 1,
                                          .low = (float)(16 << 20),
-                                         .high = (float)(1 << 31),
+                                         .high = (float)(1 << 30),
                                          .type = PropertyType_FixedPrecision },
               } };
 }
