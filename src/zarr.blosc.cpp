@@ -82,7 +82,7 @@ zarr::BloscEncoder::flush_impl()
                                  0 /* blocksize - 0:automatic */,
                                  (int)std::thread::hardware_concurrency());
 
-    CHECK(file_write(file_handle_, 0, buf_c, buf_c + nbytes_out));
+    CHECK(file_write(file_, 0, buf_c, buf_c + nbytes_out));
 
     delete[] buf_c;
     return nbytes_out;

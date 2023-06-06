@@ -16,8 +16,7 @@ void
 size_t
 RawEncoder::flush_impl()
 {
-    CHECK(file_write(
-      file_handle_, file_offset_, buf_.data(), buf_.data() + cursor_));
+    CHECK(file_write(file_, file_offset_, buf_.data(), buf_.data() + cursor_));
     file_offset_ += cursor_;
 
     return cursor_;

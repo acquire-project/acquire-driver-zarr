@@ -14,7 +14,7 @@ namespace acquire::sink::zarr {
 BaseEncoder::BaseEncoder()
   : cursor_{ 0 }
   , bytes_per_pixel_{ 1 }
-  , file_handle_{ nullptr }
+  , file_{ nullptr }
 {
 }
 
@@ -75,7 +75,7 @@ BaseEncoder::flush()
     if (0 == cursor_)
         return 0;
 
-    EXPECT(nullptr != file_handle_, "Data on buffer, but no file to flush to.");
+    EXPECT(nullptr != file_, "Data on buffer, but no file to flush to.");
 
     size_t nbytes_out = flush_impl();
     cursor_ = 0;
@@ -86,6 +86,6 @@ BaseEncoder::flush()
 void
 BaseEncoder::set_file(struct file* file_handle)
 {
-    file_handle_ = file_handle;
+    file_ = file_handle;
 }
 } // namespace acquire::sink::zarr

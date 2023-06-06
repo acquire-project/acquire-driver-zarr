@@ -192,15 +192,15 @@ main()
     const auto external_metadata_path =
       fs::path(TEST ".zarr") / "0" / ".zattrs";
     CHECK(fs::is_regular_file(external_metadata_path));
-    ASSERT_GT(size_t, "%lu", fs::file_size(external_metadata_path), 0);
+    ASSERT_GT(size_t, "%zu", fs::file_size(external_metadata_path), 0);
 
     const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
     CHECK(fs::is_regular_file(group_zattrs_path));
-    ASSERT_GT(size_t, "%lu", fs::file_size(group_zattrs_path), 0);
+    ASSERT_GT(size_t, "%zu", fs::file_size(group_zattrs_path), 0);
 
     const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));
-    ASSERT_GT(size_t, "%lu", fs::file_size(zarray_path), 0);
+    ASSERT_GT(size_t, "%zu", fs::file_size(zarray_path), 0);
 
     // check metadata
     std::ifstream f(zarray_path);

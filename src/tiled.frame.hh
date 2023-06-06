@@ -26,7 +26,9 @@ class TiledFrame
 {
   public:
     TiledFrame() = delete;
-    TiledFrame(VideoFrame* frame, const TileShape& tile_shape);
+    TiledFrame(const VideoFrame* frame,
+               const ImageShape&,
+               const TileShape& tile_shape);
     ~TiledFrame();
 
     [[nodiscard]] size_t size() const;
@@ -44,8 +46,8 @@ class TiledFrame
     size_t bytes_of_image_;
     uint64_t frame_id_;
     uint8_t* buf_;
-    ImageShape image_shape_;
-    TileShape tile_shape_;
+    const ImageShape& image_shape_;
+    const TileShape& tile_shape_;
 
     [[nodiscard]] size_t get_contiguous_region(size_t frame_col,
                                                size_t frame_row,

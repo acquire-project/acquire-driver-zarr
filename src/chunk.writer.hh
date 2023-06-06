@@ -3,6 +3,7 @@
 
 #ifdef __cplusplus
 
+#include <condition_variable>
 #include <queue>
 #include <thread>
 #include <unordered_set>
@@ -62,7 +63,7 @@ struct ChunkWriter final
     const uint32_t tile_plane;
 
   private:
-    BaseEncoder* encoder_{};
+    BaseEncoder* const encoder_{};
 
     size_t bytes_per_chunk_;
     size_t tiles_per_chunk_;
@@ -79,8 +80,8 @@ struct ChunkWriter final
     std::optional<BloscCompressor> compressor_;
 
     std::mutex mutex_;
-    ImageShape image_shape_;
-    TileShape tile_shape_;
+    const ImageShape& image_shape_;
+    const TileShape& tile_shape_;
 
     void finalize_chunk();
     void rollover();

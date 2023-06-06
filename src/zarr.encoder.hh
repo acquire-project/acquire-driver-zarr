@@ -31,7 +31,7 @@ struct BaseEncoder
     size_t cursor_;
     size_t bytes_per_pixel_;
     std::string path_;
-    struct file* file_handle_; // non-owning
+    struct file* file_; // non-owning
 
     virtual size_t flush_impl() = 0;
 };

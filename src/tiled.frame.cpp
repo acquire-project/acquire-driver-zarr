@@ -1,6 +1,7 @@
 #include "tiled.frame.hh"
 
 #include <algorithm>
+#include <cstring>
 #include <stdexcept>
 
 #include "device/props/components.h"
@@ -35,16 +36,21 @@ bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
 } // ::{anonymous}
 
 namespace acquire::sink::zarr {
-TiledFrame::TiledFrame(VideoFrame* frame, const TileShape& tile_shape)
+TiledFrame::TiledFrame(const VideoFrame* frame,
+                       const ImageShape& image_shape,
+                       const TileShape& tile_shape)
   : buf_{ nullptr }
   , bytes_of_image_{ 0 }
+  , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
 {
     CHECK(frame);
+
+    CHECK(frame->data);
     CHECK(buf_ = new uint8_t[frame->bytes_of_frame - sizeof(*frame)]);
     bytes_of_image_ = frame->bytes_of_frame - sizeof(*frame);
     memcpy(buf_, frame->data, bytes_of_image_);
-    memcpy(&image_shape_, &frame->shape, sizeof(image_shape_));
+
     frame_id_ = frame->frame_id;
 }
 
@@ -182,7 +188,7 @@ unit_test__tiled_frame_size()
             .acq_thread = 0,
         },
     };
-    acquire::sink::zarr::TiledFrame tf(&vf, {});
+    acquire::sink::zarr::TiledFrame tf(&vf, {}, {});
 
     try {
         CHECK(48 * 64 == tf.size());

@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <mutex>
 
 #include "json.hpp"
 
@@ -321,8 +322,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     };
 
     for (cur = frames; cur < end; cur = next()) {
-        frame_ptrs_.push(
-          new TiledFrame(const_cast<VideoFrame*>(cur), tile_shape_));
+        frame_ptrs_.push(new TiledFrame(cur, image_shape_, tile_shape_));
         auto* tiled_frame = frame_ptrs_.back();
 
         // handle incoming image shape
@@ -584,9 +584,10 @@ zarr::Zarr::allocate_writers_()
 
     for (size_t i = 0; i < ncontexts; i++) {
         auto& context = writer_contexts_.at(i);
-        std::scoped_lock lock(context.mutex);
+        std::unique_lock lock(context.mutex);
         context.writer = writers_.at(i);
         context.should_stop = false;
+        context.cv.notify_one();
     }
 
     for (auto& context : writer_contexts_) {

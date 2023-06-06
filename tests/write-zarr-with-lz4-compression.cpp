@@ -117,8 +117,8 @@ main()
     CHECK(fs::is_regular_file(data_file_path));
 
     const auto raw_file_size = nframes * image_width * image_height;
-    ASSERT_GT(size_t, "%lu", fs::file_size(data_file_path), 0);
-    ASSERT_GT(size_t, "%lu", raw_file_size, fs::file_size(data_file_path));
+    ASSERT_GT(size_t, "%zu", fs::file_size(data_file_path), 0);
+    ASSERT_GT(size_t, "%zu", raw_file_size, fs::file_size(data_file_path));
 
     const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));

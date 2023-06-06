@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <mutex>
 #include <string>
 
 #include "device/props/components.h"
@@ -87,12 +88,14 @@ ChunkWriter::ChunkWriter(const ImageShape& image,
     CHECK(encoder_);
     const auto bpt = (float)::bytes_per_tile(image_shape_, tile_shape_);
     EXPECT(bpt > 0, "Computed zero bytes per tile.", bpt);
+
     tiles_per_chunk_ = std::floor((float)max_bytes_per_chunk / bpt);
     EXPECT(tiles_per_chunk_ > 0,
            "Given %lu bytes per chunk, %lu bytes per tile.",
            max_bytes_per_chunk,
            ::bytes_of_type(image.type));
 
+    // this is guaranteed to be positive
     bytes_per_chunk_ = tiles_per_chunk_ * (size_t)bpt;
 }
 
@@ -242,7 +245,7 @@ ChunkWriter::open_chunk_file()
 void
 ChunkWriter::close_current_file()
 {
-    if (nullptr == encoder_ || nullptr == current_file_)
+    if (nullptr == current_file_)
         return;
 
     const size_t tiles_written =
@@ -302,22 +305,20 @@ ChunkWriter::tile_shape() const noexcept
 void
 chunk_write_thread(WriterContext* context)
 {
-    struct clock throttle = {};
-    clock_init(&throttle);
-
+    CHECK(context);
     std::vector<uint8_t> tile;
 
     while (true) {
-        ChunkWriter* writer;
+        std::unique_lock context_lock(context->mutex);
+        context->cv.wait(context_lock, [&]() {
+            return context->should_stop || nullptr != context->writer;
+        });
+
+        if (context->should_stop)
+            break;
+
+        auto* writer = context->writer;
         {
-            std::scoped_lock context_lock(context->mutex);
-            if (context->should_stop)
-                break;
-
-            writer = context->writer;
-        }
-
-        if (writer) {
             std::scoped_lock writer_lock(writer->mutex());
 
             const ImageShape& image_shape = writer->image_shape();
@@ -338,8 +339,8 @@ chunk_write_thread(WriterContext* context)
                 writer->release_current_frame();
             }
         }
-
-        clock_sleep_ms(&throttle, 10.0);
     }
+
+    TRACE("Chunk write thread exiting.");
 }
 } // namespace acquire::sink::zarr
