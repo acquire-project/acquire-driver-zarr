@@ -46,8 +46,8 @@ class TiledFrame
     size_t bytes_of_image_;
     uint64_t frame_id_;
     uint8_t* buf_;
-    const ImageShape& image_shape_;
-    const TileShape& tile_shape_;
+    ImageShape image_shape_;
+    TileShape tile_shape_;
 
     [[nodiscard]] size_t get_contiguous_region(size_t frame_col,
                                                size_t frame_row,

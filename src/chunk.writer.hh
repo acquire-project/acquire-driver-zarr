@@ -80,8 +80,8 @@ struct ChunkWriter final
     std::optional<BloscCompressor> compressor_;
 
     std::mutex mutex_;
-    const ImageShape& image_shape_;
-    const TileShape& tile_shape_;
+    ImageShape image_shape_;
+    TileShape tile_shape_;
 
     void finalize_chunk();
     void rollover();
