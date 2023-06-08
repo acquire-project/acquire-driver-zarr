@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <mutex>
 
 #include "json.hpp"
@@ -183,6 +184,12 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
         LOGE("Exception: (unknown)");
     }
 }
+
+void
+zarr_enqueue_frame(zarr::Zarr* writer, zarr::TiledFrame* frame)
+{
+    writer->enqueue_frame(frame);
+}
 } // end namespace ::{anonymous}
 
 //
@@ -197,7 +204,9 @@ zarr::Zarr::Zarr()
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
-  , writer_contexts_(std::thread::hardware_concurrency())
+  , writer_contexts_(std::thread::hardware_concurrency() - 1)
+  , scaler_{ nullptr }
+  , scaler_context_{}
 {
 }
 
@@ -209,7 +218,9 @@ zarr::Zarr::Zarr(BloscCompressor&& compressor)
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
-  , writer_contexts_(std::thread::hardware_concurrency())
+  , writer_contexts_(std::thread::hardware_concurrency() - 1)
+  , scaler_{ nullptr }
+  , scaler_context_{}
 {
     compressor_ = std::move(compressor);
 }
@@ -218,6 +229,7 @@ zarr::Zarr::~Zarr()
 {
     if (!stop())
         LOGE("Failed to stop on destruct!");
+    delete scaler_;
 }
 
 void
@@ -240,6 +252,9 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // chunking
     set_chunking(props->chunking, meta.chunking);
+
+    // multiscale
+    set_multiscale(props->multiscale, meta.multiscale);
 }
 
 void
@@ -258,13 +273,35 @@ void
 zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
 {
     CHECK(meta);
-    *meta = { .chunking = {
-                .supported = 1,
-                .max_bytes_per_chunk = { .writable = 1,
-                                         .low = (float)(16 << 20),
-                                         .high = (float)(1 << 30),
-                                         .type = PropertyType_FixedPrecision },
-              } };
+    *meta = {
+        .chunking = {
+          .supported = 1,
+          .max_bytes_per_chunk = {
+            .writable = 1,
+            .low = (float)(16 << 20),
+            .high = (float)(1 << 30),
+            .type = PropertyType_FixedPrecision },
+        },
+        .multiscale = {
+          .supported = 1,
+          .strategy = {
+            .writable = 1,
+            .type = PropertyType_String,
+          },
+          .max_layer = {
+            .writable = 1,
+            .low = -1,
+            .high = 255,
+            .type = PropertyType_FixedPrecision,
+          },
+          .downscale = {
+            .writable = 1,
+            .low = 0,
+            .high = 255,
+            .type = PropertyType_FixedPrecision,
+          }
+        }
+    };
 }
 
 void
@@ -276,6 +313,8 @@ zarr::Zarr::start()
     write_group_zattrs_json_();
     write_zarray_json_();
     write_external_metadata_json_();
+
+    thread_pool_.emplace(scale_thread, &scaler_context_);
 }
 
 int
@@ -328,10 +367,9 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         // handle incoming image shape
         validate_image_shapes_equal(image_shape_, cur->shape);
 
-        // push the new frame to our writers
-        for (auto& writer : writers_) {
-            std::scoped_lock lock(writer->mutex());
-            writer->push_frame(tiled_frame);
+        {
+            std::scoped_lock lock(scaler_->mutex());
+            scaler_->push_frame(tiled_frame);
         }
 
         ++frame_count_;
@@ -397,6 +435,28 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
           .planes = tile_planes,
         },
     };
+}
+
+void
+zarr::Zarr::set_multiscale(const MultiscaleProps& props,
+                           const MultiscaleMeta& meta)
+{
+    auto max_layer = std::clamp(props.max_layer,
+                                (int16_t)meta.max_layer.low,
+                                (int16_t)meta.max_layer.high);
+    auto downscale = std::clamp(props.downscale,
+                                (uint8_t)meta.downscale.low,
+                                (uint8_t)meta.downscale.high);
+    CHECK(scaler_ =
+            new Scaler(image_shape_, tile_shape_, max_layer, downscale));
+
+    scaler_context_.scaler = scaler_;
+    scaler_context_.should_stop = false;
+    scaler_context_.callback =
+      std::bind(&zarr::Zarr::enqueue_frame, this, std::placeholders::_1);
+
+    std::function<void(TiledFrame*)> f =
+      std::bind(::zarr_enqueue_frame, this, std::placeholders::_1);
 }
 
 void
@@ -587,7 +647,6 @@ zarr::Zarr::allocate_writers_()
         std::unique_lock lock(context.mutex);
         context.writer = writers_.at(i);
         context.should_stop = false;
-        context.cv.notify_one();
     }
 
     for (auto& context : writer_contexts_) {
@@ -628,6 +687,7 @@ zarr::Zarr::recover_threads_()
     for (auto& context : writer_contexts_) {
         std::scoped_lock lock(context.mutex);
         context.should_stop = true;
+        context.cv.notify_one();
     }
 
     thread_pool_.join_all();
@@ -653,6 +713,13 @@ zarr::Zarr::release_finished_frames_()
             }
         }
 
+        if (!replace_frame) {
+            std::scoped_lock scaler_lock(scaler_->mutex());
+            if (scaler_->has_frame(frame->frame_id())) {
+                replace_frame = true;
+            }
+        }
+
         if (replace_frame)
             frame_ptrs_.push(frame);
         else
@@ -669,6 +736,16 @@ zarr::Zarr::cycle_()
         assign_threads_();
 
     return frame_ptrs_.size();
+}
+
+void
+zarr::Zarr::enqueue_frame(TiledFrame* frame)
+{
+    // push the new frame to our writers
+    for (auto& writer : writers_) {
+        std::scoped_lock lock(writer->mutex());
+        writer->push_frame(frame);
+    }
 }
 
 /// \brief Check that the StorageProperties are valid.

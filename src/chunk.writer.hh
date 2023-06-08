@@ -5,7 +5,6 @@
 
 #include <condition_variable>
 #include <queue>
-#include <thread>
 #include <unordered_set>
 #include <vector>
 

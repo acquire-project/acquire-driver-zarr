@@ -7,7 +7,7 @@ RawEncoder::RawEncoder()
 }
 
 void
-  RawEncoder::set_file(struct file* file_handle)
+RawEncoder::set_file(struct file* file_handle)
 {
     BaseEncoder::set_file(file_handle);
     file_offset_ = 0;

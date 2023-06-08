@@ -54,6 +54,22 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
     frame_id_ = frame->frame_id;
 }
 
+TiledFrame::TiledFrame(uint8_t* data,
+                       size_t bytes_of_image,
+                       uint64_t frame_id,
+                       const ImageShape& image_shape,
+                       const TileShape& tile_shape)
+  : buf_{ nullptr }
+  , bytes_of_image_{ bytes_of_image }
+  , frame_id_{ frame_id }
+  , image_shape_{ image_shape }
+  , tile_shape_{ tile_shape }
+{
+    CHECK(data);
+    CHECK(buf_ = new uint8_t[bytes_of_image]);
+    memcpy(buf_, data, bytes_of_image);
+}
+
 TiledFrame::~TiledFrame()
 {
     delete buf_;

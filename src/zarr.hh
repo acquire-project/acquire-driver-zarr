@@ -6,8 +6,9 @@
 #include "logger.h"
 
 #include "prelude.h"
-#include "chunk.writer.hh"
 #include "thread.pool.hh"
+#include "chunk.writer.hh"
+#include "zarr.scaler.hh"
 
 #include <string>
 #include <optional>
@@ -66,10 +67,16 @@ struct Zarr final : StorageInterface
 
     void reserve_image_shape(const ImageShape* shape) override;
 
+    void enqueue_frame(TiledFrame* frame);
+
   private:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
+
+    using MultiscaleProps = StorageProperties::storage_properties_multiscale_s;
+    using MultiscaleMeta =
+      StoragePropertyMetadata::storage_property_metadata_multiscale_s;
 
     // static - set on construction
     char dimension_separator_;
@@ -85,6 +92,8 @@ struct Zarr final : StorageInterface
     TileShape tile_shape_;
     std::vector<WriterContext> writer_contexts_;
     std::vector<ChunkWriter*> writers_;
+    ScalerContext scaler_context_;
+    Scaler* scaler_;
     size_t tiles_per_chunk_;
 
     // changes during acquisition
@@ -92,6 +101,8 @@ struct Zarr final : StorageInterface
     std::queue<TiledFrame*> frame_ptrs_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
+    void set_multiscale(const MultiscaleProps& props,
+                        const MultiscaleMeta& meta);
 
     void create_data_directory_() const;
     void write_zarray_json_() const;
