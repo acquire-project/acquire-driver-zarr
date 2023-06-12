@@ -45,10 +45,10 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
   , tile_shape_{ tile_shape }
 {
     CHECK(frame);
+    bytes_of_image_ = frame->bytes_of_frame - sizeof(*frame);
 
     CHECK(frame->data);
-    CHECK(buf_ = new uint8_t[frame->bytes_of_frame - sizeof(*frame)]);
-    bytes_of_image_ = frame->bytes_of_frame - sizeof(*frame);
+    CHECK(buf_ = new uint8_t[bytes_of_image_]);
     memcpy(buf_, frame->data, bytes_of_image_);
 
     frame_id_ = frame->frame_id;
@@ -84,10 +84,10 @@ TiledFrame::data() const
 }
 
 size_t
-TiledFrame::get_tile(uint32_t tile_col,
-                     uint32_t tile_row,
-                     uint32_t tile_plane,
-                     uint8_t** tile) const
+TiledFrame::copy_tile(uint8_t** tile,
+                      uint32_t tile_col,
+                      uint32_t tile_row,
+                      uint32_t tile_plane) const
 {
     CHECK(tile);
     uint8_t* region = nullptr;
@@ -111,7 +111,7 @@ TiledFrame::get_tile(uint32_t tile_col,
                                   frame_plane * image_shape_.strides.planes;
 
             size_t nbytes_row = get_contiguous_region(
-              frame_col, frame_row, frame_plane, frame_offset, &region);
+              &region, frame_col, frame_row, frame_plane, frame_offset);
 
             // copy frame data into the tile buffer
             if (0 < nbytes_row) {
@@ -134,11 +134,11 @@ TiledFrame::get_tile(uint32_t tile_col,
 }
 
 size_t
-TiledFrame::get_contiguous_region(size_t frame_col,
+TiledFrame::get_contiguous_region(uint8_t** region,
+                                  size_t frame_col,
                                   size_t frame_row,
                                   size_t frame_plane,
-                                  size_t frame_offset,
-                                  uint8_t** region) const
+                                  size_t frame_offset) const
 {
     size_t nbytes = 0;
 

@@ -26,13 +26,13 @@ struct ChunkWriter final
 {
   public:
     ChunkWriter() = delete;
-    ChunkWriter(const ImageShape& image,
+    ChunkWriter(BaseEncoder* encoder,
+                const ImageShape& image,
                 const TileShape& tile,
                 uint32_t tile_col,
                 uint32_t tile_row,
                 uint32_t tile_plane,
-                size_t max_bytes_per_chunk,
-                BaseEncoder* encoder);
+                size_t max_bytes_per_chunk);
     ~ChunkWriter();
 
     void set_dimension_separator(char separator);
@@ -41,22 +41,15 @@ struct ChunkWriter final
     void close_current_file();
 
     std::mutex& mutex() noexcept;
-    const ImageShape& image_shape() const noexcept;
-    const TileShape& tile_shape() const noexcept;
 
     /**************************
      * For use by Zarr writer *
      **************************/
-    void push_frame(const TiledFrame* frame);
-    [[nodiscard]] bool has_frame(uint64_t frame_id) const;
-    [[nodiscard]] size_t active_frames() const;
 
-    /**********************************
-     * For use in chunk writer thread *
-     **********************************/
-    [[nodiscard]] const TiledFrame* pop_frame_and_make_current();
-    void release_current_frame();
-    size_t write(const uint8_t* beg, const uint8_t* end);
+    /****************************
+     * For use in worker thread *
+     ****************************/
+    size_t write_frame(const std::shared_ptr<TiledFrame>& frame);
 
     const uint32_t tile_col;
     const uint32_t tile_row;
@@ -74,15 +67,16 @@ struct ChunkWriter final
     char dimension_separator_;
     struct file* current_file_;
 
-    std::queue<const TiledFrame*> frame_ptrs_;
-    std::unordered_set<uint64_t> frame_ids_;
-    std::optional<uint64_t> current_frame_id_;
+    std::unordered_set<uint64_t> written_frame_ids_;
     std::optional<BloscCompressor> compressor_;
 
     std::mutex mutex_;
     ImageShape image_shape_;
     TileShape tile_shape_;
 
+    std::vector<uint8_t> buffer_;
+
+    size_t write(const uint8_t* beg, const uint8_t* end);
     void finalize_chunk();
     void rollover();
 };
@@ -94,10 +88,6 @@ struct WriterContext final
     std::condition_variable cv;
     bool should_stop;
 };
-
-void
-chunk_write_thread(WriterContext* context);
-
 } // namespace acquire::sink::zarr
 #endif // __cplusplus
 #endif // H_ACQUIRE_ZARR_CHUNK_WRITER_V0

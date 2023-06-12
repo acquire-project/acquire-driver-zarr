@@ -13,6 +13,7 @@
 #include <optional>
 #include <filesystem>
 #include <queue>
+#include <tuple>
 #include <vector>
 
 #ifndef __cplusplus
@@ -21,7 +22,23 @@
 
 namespace acquire::sink::zarr {
 
-using thread_t = thread;
+struct Zarr;
+
+struct ThreadContext
+{
+    Zarr* zarr;
+    std::thread thread;
+    std::mutex mutex;
+    std::condition_variable cv;
+    bool should_stop;
+};
+
+struct ThreadJob
+{
+    std::shared_ptr<TiledFrame> frame;
+    ChunkWriter* writer;
+    std::function<bool(std::shared_ptr<TiledFrame>, ChunkWriter*)> f;
+};
 
 // StorageInterface
 
@@ -66,15 +83,18 @@ struct Zarr final : StorageInterface
 
     void reserve_image_shape(const ImageShape* shape) override;
 
+    [[nodiscard]] bool pop_from_job_queue(ThreadJob& job);
+
   private:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
+    using JobT = ThreadJob;
 
     // static - set on construction
     char dimension_separator_;
     std::optional<BloscCompressor> compressor_;
-    ThreadPool thread_pool_;
+    std::vector<ThreadContext> thread_pool_;
 
     // changes on set()
     std::string data_dir_;
@@ -83,13 +103,13 @@ struct Zarr final : StorageInterface
     size_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
-    std::vector<WriterContext> writer_contexts_;
     std::vector<ChunkWriter*> writers_;
     size_t tiles_per_chunk_;
 
     // changes during acquisition
     size_t frame_count_;
-    std::queue<TiledFrame*> frame_ptrs_;
+    mutable std::mutex job_queue_mutex_;
+    std::queue<JobT> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
 
@@ -102,11 +122,8 @@ struct Zarr final : StorageInterface
     void allocate_writers_();
     void clear_writers_();
 
-    void assign_threads_();
+    void start_threads_();
     void recover_threads_();
-
-    void release_finished_frames_();
-    size_t cycle_();
 };
 
 // utilities
@@ -155,6 +172,8 @@ get_bytes_per_chunk(const ImageShape& image_shape,
 void
 write_string(const std::string& path, const std::string& str);
 
+void
+worker_thread(ThreadContext* ctx);
 } // namespace acquire::sink::zarr
 
 #endif // H_ACQUIRE_STORAGE_ZARR_V0

@@ -6,6 +6,7 @@
 #include "zarr.raw.hh"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <mutex>
 
@@ -197,8 +198,9 @@ zarr::Zarr::Zarr()
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
-  , writer_contexts_(std::thread::hardware_concurrency())
+  , thread_pool_(std::thread::hardware_concurrency())
 {
+    start_threads_();
 }
 
 zarr::Zarr::Zarr(BloscCompressor&& compressor)
@@ -209,15 +211,17 @@ zarr::Zarr::Zarr(BloscCompressor&& compressor)
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
-  , writer_contexts_(std::thread::hardware_concurrency())
+  , thread_pool_(std::thread::hardware_concurrency())
 {
     compressor_ = std::move(compressor);
+    start_threads_();
 }
 
 zarr::Zarr::~Zarr()
 {
     if (!stop())
         LOGE("Failed to stop on destruct!");
+    recover_threads_();
 }
 
 void
@@ -289,8 +293,8 @@ zarr::Zarr::stop() noexcept
 
         try {
             write_zarray_json_(); // must precede close of chunk file
-            while (!frame_ptrs_.empty()) {
-                TRACE("Cycling: %llu frames remaining", cycle_());
+            while (!job_queue_.empty()) {
+                TRACE("Cycling: %llu jobs remaining", job_queue_.size());
                 clock_sleep_ms(nullptr, 50.0);
             }
             recover_threads_();
@@ -322,22 +326,34 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     };
 
     for (cur = frames; cur < end; cur = next()) {
-        frame_ptrs_.push(new TiledFrame(cur, image_shape_, tile_shape_));
-        auto* tiled_frame = frame_ptrs_.back();
-
         // handle incoming image shape
         validate_image_shapes_equal(image_shape_, cur->shape);
 
+        std::scoped_lock lock(job_queue_mutex_);
+
+        // create a new frame
+        auto frame =
+          std::make_shared<TiledFrame>(cur, image_shape_, tile_shape_);
+
         // push the new frame to our writers
         for (auto& writer : writers_) {
-            std::scoped_lock lock(writer->mutex());
-            writer->push_frame(tiled_frame);
+            job_queue_.emplace(
+              frame,
+              writer,
+              [](std::shared_ptr<TiledFrame> frame, ChunkWriter* writer) {
+                  // Write the frame to the chunk.
+                  std::scoped_lock writer_lock(writer->mutex());
+                  size_t nbytes = writer->write_frame(frame);
+                  return nbytes > 0;
+              });
+        }
+
+        for (auto& ctx : thread_pool_) {
+            ctx.cv.notify_one();
         }
 
         ++frame_count_;
     }
-
-    TRACE("Cycling: %lu frames on queue", cycle_());
 
     return nbytes;
 }
@@ -351,6 +367,19 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 
     tiles_per_chunk_ =
       get_tiles_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_);
+}
+
+bool
+zarr::Zarr::pop_from_job_queue(ThreadJob& job)
+{
+    std::scoped_lock lock(job_queue_mutex_);
+    if (job_queue_.empty())
+        return false;
+
+    job = job_queue_.front();
+    job_queue_.pop();
+
+    return true;
 }
 
 void
@@ -530,14 +559,17 @@ zarr::Zarr::allocate_writers_()
     clear_writers_();
 
     size_t img_px_x = image_shape_.dims.channels * image_shape_.dims.width;
+    CHECK(tile_shape_.dims.width > 0);
     size_t tile_cols =
       std::ceil((float)img_px_x / (float)tile_shape_.dims.width);
 
     size_t img_px_y = image_shape_.dims.height;
+    CHECK(tile_shape_.dims.height > 0);
     size_t tile_rows =
       std::ceil((float)img_px_y / (float)tile_shape_.dims.height);
 
     size_t img_px_p = image_shape_.dims.planes;
+    CHECK(tile_shape_.dims.planes > 0);
     size_t tile_planes =
       std::ceil((float)img_px_p / (float)tile_shape_.dims.planes);
 
@@ -561,13 +593,13 @@ zarr::Zarr::allocate_writers_()
                 encoder->allocate_buffer(buf_size);
                 encoder->set_bytes_per_pixel(
                   bytes_per_sample_type(image_shape_.type));
-                auto writer = new ChunkWriter(image_shape_,
+                auto writer = new ChunkWriter(encoder,
+                                              image_shape_,
                                               tile_shape_,
                                               col,
                                               row,
                                               plane,
-                                              max_bytes_per_chunk_,
-                                              encoder);
+                                              max_bytes_per_chunk_);
                 CHECK(writer);
 
                 writer->set_dimension_separator(dimension_separator_);
@@ -575,23 +607,6 @@ zarr::Zarr::allocate_writers_()
                 writers_.push_back(writer);
             }
         }
-    }
-
-    size_t ncontexts = std::min(writers_.size(), thread_pool_.capacity());
-    for (auto i = 0; i < thread_pool_.capacity() - ncontexts; ++i) {
-        writer_contexts_.pop_back();
-    }
-
-    for (size_t i = 0; i < ncontexts; i++) {
-        auto& context = writer_contexts_.at(i);
-        std::unique_lock lock(context.mutex);
-        context.writer = writers_.at(i);
-        context.should_stop = false;
-        context.cv.notify_one();
-    }
-
-    for (auto& context : writer_contexts_) {
-        thread_pool_.emplace(chunk_write_thread, &context);
     }
 }
 
@@ -605,70 +620,31 @@ zarr::Zarr::clear_writers_()
 }
 
 void
-zarr::Zarr::assign_threads_()
+zarr::Zarr::start_threads_()
 {
-    // sort threads by number of frames still needing to be written
-    std::sort(
-      writers_.begin(), writers_.end(), [](ChunkWriter* a, ChunkWriter* b) {
-          return a->active_frames() > b->active_frames();
-      });
-
-    // assign threads to writers
-    for (auto i = 0; i < writer_contexts_.size(); ++i) {
-        WriterContext& context = writer_contexts_.at(i);
-
-        std::scoped_lock lock(context.mutex);
-        context.writer = writers_.at(i);
+    for (auto& ctx : thread_pool_) {
+        std::scoped_lock lock(ctx.mutex);
+        ctx.zarr = this;
+        ctx.should_stop = false;
+        ctx.thread = std::thread(worker_thread, &ctx);
+        ctx.cv.notify_one();
     }
 }
 
 void
 zarr::Zarr::recover_threads_()
 {
-    for (auto& context : writer_contexts_) {
-        std::scoped_lock lock(context.mutex);
-        context.should_stop = true;
-    }
-
-    thread_pool_.join_all();
-}
-
-/// make a single pass through the frame queue and check if any writers are
-/// still using any queued frames
-
-void
-zarr::Zarr::release_finished_frames_()
-{
-    const size_t nframes = frame_ptrs_.size();
-    for (auto i = 0; i < nframes; ++i) {
-        TiledFrame* frame = frame_ptrs_.front();
-        frame_ptrs_.pop();
-
-        bool replace_frame = false;
-        for (auto& writer : writers_) {
-            std::scoped_lock lock(writer->mutex());
-            if (writer->has_frame(frame->frame_id())) {
-                replace_frame = true;
-                break;
-            }
+    for (auto& ctx : thread_pool_) {
+        {
+            std::scoped_lock lock(ctx.mutex);
+            ctx.should_stop = true;
+            ctx.cv.notify_one();
         }
 
-        if (replace_frame)
-            frame_ptrs_.push(frame);
-        else
-            delete frame;
+        if (ctx.thread.joinable()) {
+            ctx.thread.join();
+        }
     }
-}
-
-size_t
-zarr::Zarr::cycle_()
-{
-    release_finished_frames_();
-
-    if (!frame_ptrs_.empty())
-        assign_threads_();
-
-    return frame_ptrs_.size();
 }
 
 /// \brief Check that the StorageProperties are valid.
@@ -887,6 +863,34 @@ zarr::write_string(const std::string& path, const std::string& str)
     EXPECT(is_ok, "Write to \"%s\" failed.", path.c_str());
     TRACE("Wrote %d bytes to \"%s\".", str.size(), path.c_str());
     file_close(&f);
+}
+
+void
+zarr::worker_thread(ThreadContext* ctx)
+{
+    using namespace std::chrono_literals;
+
+    LOG("Worker thread starting.");
+    CHECK(ctx);
+
+    while (true) {
+        std::unique_lock lock(ctx->mutex);
+        ctx->cv.wait_for(lock, 10ms, [&] { return ctx->should_stop; });
+
+        if (ctx->should_stop) {
+            break;
+        }
+
+        ThreadJob job;
+        if (ctx->zarr->pop_from_job_queue(job)) {
+            CHECK(job.frame);
+            CHECK(job.writer);
+
+            CHECK(job.f(job.frame, job.writer));
+        }
+    }
+
+    TRACE("Worker thread exiting.");
 }
 
 zarr::StorageInterface::StorageInterface()

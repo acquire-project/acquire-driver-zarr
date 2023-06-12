@@ -65,13 +65,13 @@ BloscCompressor::BloscCompressor(const std::string& codec_id,
 {
 }
 
-ChunkWriter::ChunkWriter(const ImageShape& image,
+ChunkWriter::ChunkWriter(BaseEncoder* encoder,
+                         const ImageShape& image,
                          const TileShape& tile,
                          uint32_t tile_col,
                          uint32_t tile_row,
                          uint32_t tile_plane,
-                         size_t max_bytes_per_chunk,
-                         acquire::sink::zarr::BaseEncoder* encoder)
+                         size_t max_bytes_per_chunk)
   : encoder_{ encoder }
   , bytes_per_chunk_{ 0 }
   , tiles_per_chunk_{ 0 }
@@ -105,31 +105,20 @@ ChunkWriter::~ChunkWriter()
     delete encoder_;
 }
 
-void
-ChunkWriter::push_frame(const TiledFrame* frame)
-{
-    CHECK(frame);
-    frame_ptrs_.emplace(frame);
-    frame_ids_.emplace(frame->frame_id());
-}
-
-bool
-ChunkWriter::has_frame(uint64_t frame_id) const
-{
-    if (current_frame_id_.has_value() && current_frame_id_ == frame_id) {
-        return true;
-    }
-
-    bool contains = frame_ids_.contains(frame_id);
-    return contains;
-}
-
 size_t
-ChunkWriter::active_frames() const
+ChunkWriter::write_frame(const std::shared_ptr<TiledFrame>& frame)
 {
-    size_t nf = frame_ptrs_.size() + current_frame_id_.has_value();
+    const size_t bpt = ::bytes_per_tile(image_shape_, tile_shape_);
+    if (buffer_.size() < bpt)
+        buffer_.resize(bpt);
 
-    return nf;
+    uint8_t* data = buffer_.data();
+    size_t nbytes = frame->copy_tile(&data, tile_col, tile_row, tile_plane);
+
+    nbytes = write(data, data + nbytes);
+    written_frame_ids_.insert(frame->frame_id());
+
+    return nbytes;
 }
 
 size_t
@@ -168,31 +157,6 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
     }
 
     return bytes_out;
-}
-
-const TiledFrame*
-ChunkWriter::pop_frame_and_make_current()
-{
-    if (frame_ptrs_.empty()) {
-        current_frame_id_.reset();
-        return nullptr;
-    }
-
-    const TiledFrame* frame = frame_ptrs_.front();
-    current_frame_id_ = frame->frame_id();
-
-    frame_ptrs_.pop();
-
-    return frame;
-}
-
-void
-ChunkWriter::release_current_frame()
-{
-    if (current_frame_id_.has_value()) {
-        frame_ids_.erase(current_frame_id_.value());
-        current_frame_id_.reset();
-    }
 }
 
 void
@@ -288,59 +252,5 @@ std::mutex&
 ChunkWriter::mutex() noexcept
 {
     return mutex_;
-}
-
-const ImageShape&
-ChunkWriter::image_shape() const noexcept
-{
-    return image_shape_;
-}
-
-const TileShape&
-ChunkWriter::tile_shape() const noexcept
-{
-    return tile_shape_;
-}
-
-void
-chunk_write_thread(WriterContext* context)
-{
-    CHECK(context);
-    std::vector<uint8_t> tile;
-
-    while (true) {
-        std::unique_lock context_lock(context->mutex);
-        context->cv.wait(context_lock, [&]() {
-            return context->should_stop || nullptr != context->writer;
-        });
-
-        if (context->should_stop)
-            break;
-
-        auto* writer = context->writer;
-        {
-            std::scoped_lock writer_lock(writer->mutex());
-
-            const ImageShape& image_shape = writer->image_shape();
-            const TileShape& tile_shape = writer->tile_shape();
-
-            const size_t bpt = ::bytes_per_tile(image_shape, tile_shape);
-            if (tile.size() != bpt)
-                tile.resize(bpt);
-
-            if (auto frame = writer->pop_frame_and_make_current()) {
-                uint8_t* data = tile.data();
-                size_t nbytes = frame->get_tile(writer->tile_col,
-                                                writer->tile_row,
-                                                writer->tile_plane,
-                                                &data);
-                writer->write(data, data + nbytes);
-
-                writer->release_current_frame();
-            }
-        }
-    }
-
-    TRACE("Chunk write thread exiting.");
 }
 } // namespace acquire::sink::zarr
