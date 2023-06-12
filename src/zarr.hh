@@ -35,7 +35,6 @@ struct ThreadContext
 struct ThreadJob
 {
     std::shared_ptr<TiledFrame> frame;
-    ChunkWriter* writer;
     std::function<bool(std::shared_ptr<TiledFrame>)> f;
 };
 

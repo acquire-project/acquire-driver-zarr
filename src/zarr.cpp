@@ -338,7 +338,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         // push the new frame to our writers
         for (auto& writer : writers_) {
             job_queue_.emplace(
-              frame, writer, [&writer](std::shared_ptr<TiledFrame> frame) {
+              frame, [&writer](std::shared_ptr<TiledFrame> frame) {
                   std::scoped_lock writer_lock(writer->mutex());
                   return writer->write_frame(frame) > 0;
               });
@@ -880,8 +880,6 @@ zarr::worker_thread(ThreadContext* ctx)
         ThreadJob job;
         if (ctx->zarr->pop_from_job_queue(job)) {
             CHECK(job.frame);
-            CHECK(job.writer);
-
             CHECK(job.f(job.frame));
         }
     }
