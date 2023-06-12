@@ -29,7 +29,7 @@ class TiledFrame
     TiledFrame(const VideoFrame* frame,
                const ImageShape&,
                const TileShape& tile_shape);
-//    TiledFrame(const TiledFrame&) = delete;
+    TiledFrame(const TiledFrame&) = delete;
     ~TiledFrame();
 
     [[nodiscard]] size_t size() const;
