@@ -37,8 +37,7 @@ struct ThreadJob
 {
     std::shared_ptr<TiledFrame> frame;
     ChunkWriter* writer;
-    std::function<bool(std::shared_ptr<TiledFrame>, ChunkWriter*)> f;
-    std::function<bool(std::shared_ptr<TiledFrame>)> g;
+    std::function<bool(std::shared_ptr<TiledFrame>)> f;
 };
 
 // StorageInterface
@@ -95,8 +94,6 @@ struct Zarr final : StorageInterface
     using MultiscaleMeta =
       StoragePropertyMetadata::storage_property_metadata_multiscale_s;
 
-    using JobT = ThreadJob;
-
     // static - set on construction
     char dimension_separator_;
     std::optional<BloscCompressor> compressor_;
@@ -116,7 +113,7 @@ struct Zarr final : StorageInterface
     // changes during acquisition
     size_t frame_count_;
     mutable std::mutex job_queue_mutex_;
-    std::queue<JobT> job_queue_;
+    std::queue<ThreadJob> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
     void set_multiscale(const MultiscaleProps& props,
