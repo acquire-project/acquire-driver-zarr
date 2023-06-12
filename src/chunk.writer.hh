@@ -3,10 +3,6 @@
 
 #ifdef __cplusplus
 
-#include <condition_variable>
-#include <queue>
-#include <thread>
-#include <unordered_set>
 #include <vector>
 
 #include <platform.h>
@@ -59,7 +55,6 @@ struct ChunkWriter final
     char dimension_separator_;
     struct file* current_file_;
 
-    std::unordered_set<uint64_t> written_frame_ids_;
     std::optional<BloscCompressor> compressor_;
 
     std::mutex mutex_;
@@ -71,14 +66,6 @@ struct ChunkWriter final
     size_t write(const uint8_t* beg, const uint8_t* end);
     void finalize_chunk();
     void rollover();
-};
-
-struct WriterContext final
-{
-    ChunkWriter* writer;
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool should_stop;
 };
 } // namespace acquire::sink::zarr
 #endif // __cplusplus
