@@ -116,7 +116,6 @@ ChunkWriter::write_frame(const std::shared_ptr<TiledFrame>& frame)
     size_t nbytes = frame->copy_tile(&data, tile_col, tile_row, tile_plane);
 
     nbytes = write(data, data + nbytes);
-    written_frame_ids_.insert(frame->frame_id());
 
     return nbytes;
 }
