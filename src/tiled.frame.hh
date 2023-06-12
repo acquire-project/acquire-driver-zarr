@@ -29,6 +29,11 @@ class TiledFrame
     TiledFrame(const VideoFrame* frame,
                const ImageShape&,
                const TileShape& tile_shape);
+    TiledFrame(uint8_t* const data,
+               size_t bytes_of_image,
+               uint64_t frame_id,
+               const ImageShape& image_shape,
+               const TileShape& tile_shape);
     TiledFrame(const TiledFrame&) = delete;
     ~TiledFrame();
 

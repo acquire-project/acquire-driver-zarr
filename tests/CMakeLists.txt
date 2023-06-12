@@ -16,6 +16,7 @@ else()
         list-devices
         write-zarr-compressed-with-chunking
         write-zarr-compressed-with-chunking-and-rollover
+        write-zarr-raw-multiscale
         write-zarr-raw-with-chunking
         write-zarr-raw-with-chunking-and-rollover
         write-zarr-with-defaults

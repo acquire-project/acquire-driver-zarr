@@ -7,7 +7,6 @@
 
 #include "prelude.h"
 #include "chunk.writer.hh"
-#include "thread.pool.hh"
 
 #include <string>
 #include <optional>
