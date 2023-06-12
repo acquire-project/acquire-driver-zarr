@@ -44,10 +44,6 @@ struct FrameScaler final
     const int16_t max_layer_;
     const uint8_t downscale_;
 
-    std::queue<TiledFrame*> frame_ptrs_;
-    std::unordered_set<uint64_t> frame_ids_;
-    std::optional<uint64_t> current_frame_id_;
-
     std::mutex mutex_;
 };
 
