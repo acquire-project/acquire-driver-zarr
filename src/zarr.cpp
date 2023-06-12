@@ -198,6 +198,7 @@ zarr::Zarr::Zarr()
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , scaler_{ nullptr }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     start_threads_();
@@ -211,6 +212,7 @@ zarr::Zarr::Zarr(BloscCompressor&& compressor)
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , scaler_{ nullptr }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     compressor_ = std::move(compressor);
@@ -244,6 +246,9 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // chunking
     set_chunking(props->chunking, meta.chunking);
+
+    // multiscale
+    set_multiscale(props->multiscale, meta.multiscale);
 }
 
 void
@@ -426,6 +431,19 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
           .planes = tile_planes,
         },
     };
+}
+
+void
+zarr::Zarr::set_multiscale(const MultiscaleProps& props,
+                           const MultiscaleMeta& meta)
+{
+    auto max_layer = std::clamp(props.max_layer,
+                                (int16_t)meta.max_layer.low,
+                                (int16_t)meta.max_layer.high);
+    auto downscale = std::clamp(props.downscale,
+                                (uint8_t)meta.downscale.low,
+                                (uint8_t)meta.downscale.high);
+    CHECK(scaler_ = std::make_unique<FrameScaler>(image_shape_, tile_shape_, max_layer, downscale));
 }
 
 void

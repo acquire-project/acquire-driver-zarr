@@ -18,16 +18,10 @@ struct FrameScaler final
   public:
     FrameScaler() = delete;
     FrameScaler(const ImageShape& image_shape,
-           const TileShape& tile_shape,
-           int16_t max_layer,
-           uint8_t downscale);
-    ~FrameScaler();
-
-    void push_frame(TiledFrame* frame);
-    [[nodiscard]] bool has_frame(uint64_t frame_id) const;
-    [[nodiscard]] size_t active_frames() const;
-    const TiledFrame* pop_frame_and_make_current();
-    void release_current_frame();
+                const TileShape& tile_shape,
+                int16_t max_layer,
+                uint8_t downscale);
+    ~FrameScaler() = default;
 
     const ImageShape& image_shape() const noexcept;
     const TileShape& tile_shape() const noexcept;

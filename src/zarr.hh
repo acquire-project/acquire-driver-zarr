@@ -7,6 +7,7 @@
 
 #include "prelude.h"
 #include "chunk.writer.hh"
+#include "frame.scaler.hh"
 
 #include <string>
 #include <optional>
@@ -37,6 +38,7 @@ struct ThreadJob
     std::shared_ptr<TiledFrame> frame;
     ChunkWriter* writer;
     std::function<bool(std::shared_ptr<TiledFrame>, ChunkWriter*)> f;
+    std::function<bool(std::shared_ptr<TiledFrame>)> g;
 };
 
 // StorageInterface
@@ -88,6 +90,11 @@ struct Zarr final : StorageInterface
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
+
+    using MultiscaleProps = StorageProperties::storage_properties_multiscale_s;
+    using MultiscaleMeta =
+      StoragePropertyMetadata::storage_property_metadata_multiscale_s;
+
     using JobT = ThreadJob;
 
     // static - set on construction
@@ -104,6 +111,7 @@ struct Zarr final : StorageInterface
     TileShape tile_shape_;
     std::vector<ChunkWriter*> writers_;
     size_t tiles_per_chunk_;
+    std::unique_ptr<FrameScaler> scaler_;
 
     // changes during acquisition
     size_t frame_count_;
@@ -111,6 +119,8 @@ struct Zarr final : StorageInterface
     std::queue<JobT> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
+    void set_multiscale(const MultiscaleProps& props,
+                        const MultiscaleMeta& meta);
 
     void create_data_directory_() const;
     void write_zarray_json_() const;
