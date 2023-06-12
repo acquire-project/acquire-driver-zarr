@@ -344,10 +344,6 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
               });
         }
 
-        for (auto& ctx : thread_pool_) {
-            ctx.cv.notify_one();
-        }
-
         ++frame_count_;
     }
 
