@@ -122,6 +122,18 @@ ChunkWriter::write_frame(const std::shared_ptr<TiledFrame>& frame)
     return nbytes;
 }
 
+const ImageShape&
+ChunkWriter::image_shape() const noexcept
+{
+    return image_shape_;
+}
+
+const TileShape&
+ChunkWriter::tile_shape() const noexcept
+{
+    return tile_shape_;
+}
+
 size_t
 ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
 {

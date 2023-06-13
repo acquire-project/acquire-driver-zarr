@@ -106,39 +106,6 @@ FrameScaler::scale_frame(
           im.data(), frame->frame_id(), layer, image_shape, tile_shape));
     }
 
-    //    size_t layer = 0;
-    //    while (b) {
-    //        bin(im.data(), downscale_, w, h);
-    //        b >>= 1;
-    //        w >>= 1;
-    //        h >>= 1;
-    //
-    //        ImageShape im_shape = image_shape_;
-    //        im_shape.dims.width = w;
-    //        im_shape.dims.height = h;
-    //        im_shape.strides.width = im_shape.strides.channels * w;
-    //        im_shape.strides.height = im_shape.strides.width * h;
-    //        im_shape.strides.planes =
-    //          im_shape.strides.height * im_shape.dims.planes;
-    //
-    //        TileShape tile_shape = tile_shape_;
-    //        if (tile_shape.dims.width > w)
-    //            tile_shape.dims.width = w;
-    //
-    //        if (tile_shape.dims.height > h)
-    //            tile_shape.dims.height = h;
-    //
-    //        auto new_frame =
-    //          std::make_shared<TiledFrame>(im.data(),
-    //                                       w * h *
-    //                                       bytes_of_type(image_shape_.type),
-    //                                       frame->frame_id(),
-    //                                       ++layer,
-    //                                       im_shape,
-    //                                       tile_shape);
-    //
-    //        callback(new_frame);
-    //    }
     return true;
 }
 
@@ -169,10 +136,9 @@ get_tile_shapes(const ImageShape& base_image_shape,
         ImageShape im_shape = base_image_shape;
         im_shape.dims.width = w;
         im_shape.dims.height = h;
-        im_shape.strides.width = im_shape.strides.channels * w;
+        im_shape.strides.width = im_shape.strides.channels;
         im_shape.strides.height = im_shape.strides.width * h;
-        im_shape.strides.planes =
-          im_shape.strides.height * im_shape.dims.planes;
+        im_shape.strides.planes = im_shape.strides.height * w;
 
         TileShape tile_shape = base_tile_shape;
         if (tile_shape.dims.width > w)

@@ -221,8 +221,9 @@ zarr::Zarr::Zarr(BloscCompressor&& compressor)
 
 zarr::Zarr::~Zarr()
 {
-    if (!stop())
+    if (!stop()) {
         LOGE("Failed to stop on destruct!");
+    }
     recover_threads_();
 }
 
@@ -319,12 +320,13 @@ zarr::Zarr::stop() noexcept
         is_ok = 0;
 
         try {
-            write_zarray_json_(); // must precede close of chunk file
             while (!job_queue_.empty()) {
                 TRACE("Cycling: %llu jobs remaining", job_queue_.size());
                 clock_sleep_ms(nullptr, 50.0);
             }
             recover_threads_();
+            write_zarray_json_();       // must precede close of chunk file
+            write_group_zattrs_json_(); // write multiscales metadata
             clear_writers_();
             is_ok = 1;
         } catch (const std::exception& exc) {
@@ -505,9 +507,27 @@ void
 zarr::Zarr::write_zarray_json_() const
 {
     namespace fs = std::filesystem;
-    using namespace acquire::sink::zarr;
     using json = nlohmann::json;
 
+    if (writers_.empty()) {
+        write_zarray_json_inner_(0, image_shape_, tile_shape_);
+    } else {
+        for (const auto& [layer, writers] : writers_) {
+            ChunkWriter* const writer = writers.front();
+            const auto& is = writer->image_shape();
+            const auto& ts = writer->tile_shape();
+            write_zarray_json_inner_(layer, is, ts);
+        }
+    }
+}
+
+void
+zarr::Zarr::write_zarray_json_inner_(size_t layer,
+                                     const ImageShape& is,
+                                     const TileShape& ts) const
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
     const auto frames_per_chunk = std::min(frame_count_, tiles_per_chunk_);
 
     json zarray_attrs = {
@@ -515,18 +535,18 @@ zarr::Zarr::write_zarray_json_() const
         { "shape",
           {
             (uint64_t)frame_count_,
-            image_shape_.dims.channels,
-            image_shape_.dims.height,
-            image_shape_.dims.width,
+            is.dims.channels,
+            is.dims.height,
+            is.dims.width,
           } },
         { "chunks",
           {
             (uint64_t)frames_per_chunk,
             1,
-            tile_shape_.dims.height,
-            tile_shape_.dims.width,
+            ts.dims.height,
+            ts.dims.width,
           } },
-        { "dtype", sample_type_to_dtype(image_shape_.type) },
+        { "dtype", sample_type_to_dtype(is.type) },
         { "fill_value", 0 },
         { "order", "C" },
         { "filters", nullptr },
@@ -538,7 +558,8 @@ zarr::Zarr::write_zarray_json_() const
     else
         zarray_attrs["compressor"] = nullptr;
 
-    std::string zarray_path = (fs::path(data_dir_) / "0" / ".zarray").string();
+    std::string zarray_path =
+      (fs::path(data_dir_) / std::to_string(layer) / ".zarray").string();
     write_string(zarray_path, zarray_attrs.dump());
 }
 
@@ -581,18 +602,48 @@ zarr::Zarr::write_group_zattrs_json_() const
           { "unit", "micrometer" },
         },
     };
-    zgroup_attrs["multiscales"][0]["datasets"] = {
-        {
-          { "path", "0" },
-          { "coordinateTransformations",
+    if (writers_.empty() || nullptr == scaler_) {
+        zgroup_attrs["multiscales"][0]["datasets"] = {
             {
-              {
-                { "type", "scale" },
-                { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
-              },
-            } },
-        },
-    };
+              { "path", "0" },
+              { "coordinateTransformations",
+                {
+                  {
+                    { "type", "scale" },
+                    { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
+                  },
+                } },
+            },
+        };
+    } else {
+        for (const auto& [layer, _] : writers_) {
+            zgroup_attrs["multiscales"][layer]["datasets"] = {
+                {
+                  { "path", std::to_string(layer) },
+                  { "coordinateTransformations",
+                    {
+                      {
+                        { "type", "scale" },
+                        { "scale",
+                          { 1,
+                            1,
+                            std::pow(scaler_->downscale(), layer) *
+                              pixel_scale_um_.y,
+                            std::pow(scaler_->downscale(), layer) *
+                              pixel_scale_um_.x } },
+                      },
+                    } },
+                },
+            };
+        }
+
+        zgroup_attrs["type"] = "local_mean";
+        zgroup_attrs["metadata"] = {
+            { "description", "" },  { "method", "binning" },
+            { "version", "0.1.2" }, { "args", "" },
+            { "kwargs", "" },
+        };
+    }
 
     std::string zattrs_path = (fs::path(data_dir_) / ".zattrs").string();
     write_string(zattrs_path, zgroup_attrs.dump(4));

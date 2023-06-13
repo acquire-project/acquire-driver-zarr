@@ -38,6 +38,9 @@ struct ChunkWriter final
     void close_current_file();
     size_t write_frame(const std::shared_ptr<TiledFrame>& frame);
 
+    const ImageShape& image_shape() const noexcept;
+    const TileShape& tile_shape() const noexcept;
+
     std::mutex& mutex() noexcept;
 
     const uint32_t tile_col;

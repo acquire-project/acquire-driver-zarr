@@ -124,6 +124,9 @@ struct Zarr final : StorageInterface
 
     void create_data_directory_() const;
     void write_zarray_json_() const;
+    void write_zarray_json_inner_(size_t layer,
+                                  const ImageShape& is,
+                                  const TileShape& ts) const;
     void write_external_metadata_json_() const;
     void write_zgroup_json_() const;
     void write_group_zattrs_json_() const;

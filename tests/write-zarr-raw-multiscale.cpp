@@ -126,6 +126,36 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_stop(runtime));
 }
 
+void
+verify_layer(int layer)
+{
+    const auto zarray_path =
+      fs::path(TEST ".zarr") / std::to_string(layer) / ".zarray";
+    CHECK(fs::is_regular_file(zarray_path));
+    CHECK(fs::file_size(zarray_path) > 0);
+
+    // check metadata
+    std::ifstream f(zarray_path);
+    json zarray = json::parse(f);
+
+    const auto shape = zarray["shape"];
+    const auto chunks = zarray["chunks"];
+
+    // check chunked data
+    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
+                      chunks[2].get<int>() * chunks[3].get<int>();
+
+    auto chunk_file_path =
+      fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" / "0" / "0";
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    // check that there isn't a second (empty) chunk along the time dimension
+    auto second_time_chunk_path =
+      fs::path(TEST ".zarr") / std::to_string(layer) / "1";
+    CHECK(!fs::exists(second_time_chunk_path));
+}
+
 int
 main()
 {
@@ -183,25 +213,17 @@ main()
     CHECK(fs::is_regular_file(chunk_file_path));
     ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
 
-    chunk_file_path = fs::path(TEST ".zarr/1/0/0/0/0");
-    CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-
-    chunk_file_path = fs::path(TEST ".zarr/1/0/0/0/1");
-    CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-
-    chunk_file_path = fs::path(TEST ".zarr/1/0/0/1/0");
-    CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-
-    chunk_file_path = fs::path(TEST ".zarr/1/0/0/1/1");
-    CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-
-    // check that there isn't a second (empty) chunk along the time dimension
-    auto second_time_chunk_path = fs::path(TEST ".zarr/0/1");
-    CHECK(!fs::exists(second_time_chunk_path));
+    verify_layer(0);
+    verify_layer(1);
+    verify_layer(2);
+    verify_layer(3);
+    verify_layer(4);
+    verify_layer(5);
+    verify_layer(6);
+    verify_layer(7);
+    verify_layer(8);
+    verify_layer(9);
+    verify_layer(10);
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);
