@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <queue>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 #ifndef __cplusplus
@@ -82,6 +83,7 @@ struct Zarr final : StorageInterface
 
     void reserve_image_shape(const ImageShape* shape) override;
 
+    void push_frame_to_writers(std::shared_ptr<TiledFrame> frame);
     [[nodiscard]] bool pop_from_job_queue(ThreadJob& job);
 
   private:
@@ -105,9 +107,11 @@ struct Zarr final : StorageInterface
     size_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
-    std::vector<ChunkWriter*> writers_;
     size_t tiles_per_chunk_;
+
     std::unique_ptr<FrameScaler> scaler_;
+    /// Chunk writers for each layer/scale
+    std::map<size_t, std::vector<ChunkWriter*>> writers_;
 
     // changes during acquisition
     size_t frame_count_;

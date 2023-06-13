@@ -267,13 +267,35 @@ void
 zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
 {
     CHECK(meta);
-    *meta = { .chunking = {
-                .supported = 1,
-                .max_bytes_per_chunk = { .writable = 1,
-                                         .low = (float)(16 << 20),
-                                         .high = (float)(1 << 30),
-                                         .type = PropertyType_FixedPrecision },
-              } };
+    *meta = {
+        .chunking = {
+          .supported = 1,
+          .max_bytes_per_chunk = {
+            .writable = 1,
+            .low = (float)(16 << 20),
+            .high = (float)(1 << 30),
+            .type = PropertyType_FixedPrecision },
+        },
+        .multiscale = {
+          .supported = 1,
+          .strategy = {
+            .writable = 1,
+            .type = PropertyType_String,
+          },
+          .max_layer = {
+            .writable = 1,
+            .low = -1,
+            .high = 255,
+            .type = PropertyType_FixedPrecision,
+          },
+          .downscale = {
+            .writable = 1,
+            .low = 0,
+            .high = 255,
+            .type = PropertyType_FixedPrecision,
+          }
+        }
+    };
 }
 
 void
@@ -334,19 +356,24 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         // handle incoming image shape
         validate_image_shapes_equal(image_shape_, cur->shape);
 
-        std::scoped_lock lock(job_queue_mutex_);
-
         // create a new frame
         auto frame =
           std::make_shared<TiledFrame>(cur, image_shape_, tile_shape_);
 
-        // push the new frame to our writers
-        for (auto& writer : writers_) {
-            job_queue_.emplace(
-              frame, [&writer](std::shared_ptr<TiledFrame> frame) {
-                  std::scoped_lock writer_lock(writer->mutex());
-                  return writer->write_frame(frame) > 0;
-              });
+        if (scaler_) {
+            std::scoped_lock lock(job_queue_mutex_);
+
+            // push the new frame to our scaler
+            job_queue_.emplace(frame,
+                               [this](std::shared_ptr<TiledFrame> frame) {
+                                   return scaler_->scale_frame(
+                                     frame,
+                                     std::bind(&Zarr::push_frame_to_writers,
+                                               this,
+                                               std::placeholders::_1));
+                               });
+        } else {
+            push_frame_to_writers(frame);
         }
 
         ++frame_count_;
@@ -364,6 +391,20 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 
     tiles_per_chunk_ =
       get_tiles_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_);
+}
+
+void
+zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
+{
+    std::scoped_lock lock(job_queue_mutex_);
+    CHECK(writers_.find(frame->layer()) != writers_.end());
+
+    for (auto& writer : writers_.at(frame->layer())) {
+        job_queue_.emplace(frame, [&writer](std::shared_ptr<TiledFrame> frame) {
+            std::scoped_lock writer_lock(writer->mutex());
+            return writer->write_frame(frame) > 0;
+        });
+    }
 }
 
 bool
@@ -429,13 +470,18 @@ void
 zarr::Zarr::set_multiscale(const MultiscaleProps& props,
                            const MultiscaleMeta& meta)
 {
+    if (0 == props.max_layer || 0 == props.downscale) {
+        return;
+    }
+
     auto max_layer = std::clamp(props.max_layer,
                                 (int16_t)meta.max_layer.low,
                                 (int16_t)meta.max_layer.high);
     auto downscale = std::clamp(props.downscale,
                                 (uint8_t)meta.downscale.low,
                                 (uint8_t)meta.downscale.high);
-    CHECK(scaler_ = std::make_unique<FrameScaler>(image_shape_, tile_shape_, max_layer, downscale));
+    CHECK(scaler_ = std::make_unique<FrameScaler>(
+            image_shape_, tile_shape_, max_layer, downscale));
 }
 
 void
@@ -568,53 +614,73 @@ zarr::Zarr::allocate_writers_()
 {
     clear_writers_();
 
-    size_t img_px_x = image_shape_.dims.channels * image_shape_.dims.width;
-    CHECK(tile_shape_.dims.width > 0);
-    size_t tile_cols =
-      std::ceil((float)img_px_x / (float)tile_shape_.dims.width);
+    std::vector<Multiscale> multiscales;
+    if (scaler_) {
+        multiscales = get_tile_shapes(image_shape_,
+                                      tile_shape_,
+                                      scaler_->max_layer(),
+                                      scaler_->downscale());
+    } else {
+        multiscales.emplace_back(image_shape_, tile_shape_);
+    }
 
-    size_t img_px_y = image_shape_.dims.height;
-    CHECK(tile_shape_.dims.height > 0);
-    size_t tile_rows =
-      std::ceil((float)img_px_y / (float)tile_shape_.dims.height);
+    for (auto layer = 0; layer < multiscales.size(); ++layer) {
+        auto multiscale = multiscales.at(layer);
+        auto& image_shape = multiscale.image;
+        auto& tile_shape = multiscale.tile;
 
-    size_t img_px_p = image_shape_.dims.planes;
-    CHECK(tile_shape_.dims.planes > 0);
-    size_t tile_planes =
-      std::ceil((float)img_px_p / (float)tile_shape_.dims.planes);
+        CHECK(tile_shape.dims.width > 0);
+        size_t img_px_x = image_shape.dims.channels * image_shape.dims.width;
+        size_t tile_cols =
+          std::ceil((float)img_px_x / (float)tile_shape.dims.width);
 
-    TRACE("Allocating %llu writers", tile_cols * tile_rows * tile_planes);
+        CHECK(tile_shape.dims.height > 0);
+        size_t img_px_y = image_shape.dims.height;
+        size_t tile_rows =
+          std::ceil((float)img_px_y / (float)tile_shape.dims.height);
 
-    size_t buf_size =
-      compressor_.has_value()
-        ? get_bytes_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_)
-        : get_bytes_per_tile(image_shape_, tile_shape_);
+        CHECK(tile_shape.dims.planes > 0);
+        size_t img_px_p = image_shape.dims.planes;
+        size_t tile_planes =
+          std::ceil((float)img_px_p / (float)tile_shape.dims.planes);
 
-    for (auto plane = 0; plane < tile_planes; ++plane) {
-        for (auto row = 0; row < tile_rows; ++row) {
-            for (auto col = 0; col < tile_cols; ++col) {
-                BaseEncoder* encoder;
-                if (compressor_.has_value()) {
-                    CHECK(encoder = new BloscEncoder(compressor_.value()));
-                } else {
-                    CHECK(encoder = new RawEncoder());
+        TRACE("Allocating %llu writers for layer %d",
+              tile_cols * tile_rows * tile_planes,
+              layer);
+
+        size_t buf_size =
+          compressor_.has_value()
+            ? get_bytes_per_chunk(image_shape, tile_shape, max_bytes_per_chunk_)
+            : get_bytes_per_tile(image_shape, tile_shape);
+
+        writers_.emplace(layer, std::vector<ChunkWriter*>());
+        for (auto plane = 0; plane < tile_planes; ++plane) {
+            for (auto row = 0; row < tile_rows; ++row) {
+                for (auto col = 0; col < tile_cols; ++col) {
+                    BaseEncoder* encoder;
+                    if (compressor_.has_value()) {
+                        CHECK(encoder = new BloscEncoder(compressor_.value()));
+                    } else {
+                        CHECK(encoder = new RawEncoder());
+                    }
+
+                    encoder->allocate_buffer(buf_size);
+                    encoder->set_bytes_per_pixel(
+                      bytes_per_sample_type(image_shape.type));
+                    auto writer = new ChunkWriter(encoder,
+                                                  image_shape,
+                                                  tile_shape,
+                                                  layer,
+                                                  col,
+                                                  row,
+                                                  plane,
+                                                  max_bytes_per_chunk_);
+                    CHECK(writer);
+
+                    writer->set_dimension_separator(dimension_separator_);
+                    writer->set_base_directory(data_dir_);
+                    writers_.at(layer).push_back(writer);
                 }
-
-                encoder->allocate_buffer(buf_size);
-                encoder->set_bytes_per_pixel(
-                  bytes_per_sample_type(image_shape_.type));
-                auto writer = new ChunkWriter(encoder,
-                                              image_shape_,
-                                              tile_shape_,
-                                              col,
-                                              row,
-                                              plane,
-                                              max_bytes_per_chunk_);
-                CHECK(writer);
-
-                writer->set_dimension_separator(dimension_separator_);
-                writer->set_base_directory(data_dir_);
-                writers_.push_back(writer);
             }
         }
     }
@@ -623,8 +689,10 @@ zarr::Zarr::allocate_writers_()
 void
 zarr::Zarr::clear_writers_()
 {
-    for (auto& writer : writers_) {
-        delete writer;
+    for (auto& layer : writers_) {
+        for (auto& writer : layer.second) {
+            delete writer;
+        }
     }
     writers_.clear();
 }

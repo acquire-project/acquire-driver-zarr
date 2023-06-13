@@ -1,4 +1,5 @@
 #include "tiled.frame.hh"
+#include "zarr.hh"
 
 #include <algorithm>
 #include <cstring>
@@ -41,6 +42,8 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
                        const TileShape& tile_shape)
   : buf_{ nullptr }
   , bytes_of_image_{ 0 }
+  , frame_id_{ 0 }
+  , layer_{ 0 }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
 {
@@ -55,19 +58,20 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
 }
 
 TiledFrame::TiledFrame(uint8_t* const data,
-                       size_t bytes_of_image,
                        uint64_t frame_id,
+                       size_t layer,
                        const ImageShape& image_shape,
                        const TileShape& tile_shape)
   : buf_{ nullptr }
-  , bytes_of_image_{ bytes_of_image }
+  , bytes_of_image_{ get_bytes_per_frame(image_shape) }
   , frame_id_{ frame_id }
+  , layer_{ layer }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
 {
     CHECK(data);
-    CHECK(buf_ = new uint8_t[bytes_of_image]);
-    memcpy(buf_, data, bytes_of_image);
+    CHECK(buf_ = new uint8_t[bytes_of_image_]);
+    memcpy(buf_, data, bytes_of_image_);
 }
 
 TiledFrame::~TiledFrame()
@@ -91,6 +95,12 @@ uint64_t
 TiledFrame::frame_id() const
 {
     return frame_id_;
+}
+
+size_t
+TiledFrame::layer() const
+{
+    return layer_;
 }
 
 uint8_t*

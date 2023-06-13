@@ -11,8 +11,15 @@
 
 #include "prelude.h"
 #include "tiled.frame.hh"
+#include "chunk.writer.hh"
 
 namespace acquire::sink::zarr {
+struct Multiscale
+{
+    ImageShape image;
+    TileShape tile;
+};
+
 struct FrameScaler final
 {
   public:
@@ -21,15 +28,15 @@ struct FrameScaler final
                 const TileShape& tile_shape,
                 int16_t max_layer,
                 uint8_t downscale);
+    FrameScaler(const FrameScaler&) = delete;
     ~FrameScaler() = default;
-
-    const ImageShape& image_shape() const noexcept;
-    const TileShape& tile_shape() const noexcept;
 
     int16_t max_layer() const noexcept;
     uint8_t downscale() const noexcept;
 
-    std::mutex& mutex() noexcept;
+    [[nodiscard]] bool scale_frame(
+      const std::shared_ptr<TiledFrame>& frame,
+      std::function<void(std::shared_ptr<TiledFrame>)> callback) const;
 
   private:
     const ImageShape& image_shape_;
@@ -38,21 +45,14 @@ struct FrameScaler final
     const int16_t max_layer_;
     const uint8_t downscale_;
 
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
 };
 
-struct ScalerContext final
-{
-    FrameScaler* scaler;
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool should_stop;
-    std::function<void(TiledFrame*)> callback;
-};
-
-void
-scale_thread(ScalerContext* context);
-
+std::vector<Multiscale>
+get_tile_shapes(const ImageShape& base_image_shape,
+                const TileShape& base_tile_shape,
+                int16_t max_layer,
+                uint8_t downscale);
 } // namespace acquire::sink::zarr
 
 #endif // __cplusplus

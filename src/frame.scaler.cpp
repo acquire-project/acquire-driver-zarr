@@ -1,4 +1,5 @@
 #include "frame.scaler.hh"
+#include "zarr.hh"
 
 #include <cstring>
 #include <thread>
@@ -56,26 +57,14 @@ bytes_of_type(const enum SampleType type)
 
 namespace acquire::sink::zarr {
 FrameScaler::FrameScaler(const ImageShape& image_shape,
-               const TileShape& tile_shape,
-               int16_t max_layer,
-               uint8_t downscale)
+                         const TileShape& tile_shape,
+                         int16_t max_layer,
+                         uint8_t downscale)
   : image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
   , max_layer_{ max_layer }
   , downscale_{ downscale }
 {
-}
-
-const ImageShape&
-FrameScaler::image_shape() const noexcept
-{
-    return image_shape_;
-}
-
-const TileShape&
-FrameScaler::tile_shape() const noexcept
-{
-    return tile_shape_;
 }
 
 int16_t
@@ -90,77 +79,111 @@ FrameScaler::downscale() const noexcept
     return downscale_;
 }
 
-std::mutex&
-FrameScaler::mutex() noexcept
+bool
+FrameScaler::scale_frame(
+  const std::shared_ptr<TiledFrame>& frame,
+  std::function<void(std::shared_ptr<TiledFrame>)> callback) const
 {
-    return mutex_;
+    CHECK(frame);
+    callback(frame);
+
+    std::vector<uint8_t> im(frame->bytes_of_image());
+    memcpy(im.data(), frame->data(), frame->bytes_of_image());
+
+    std::vector<Multiscale> multiscales =
+      get_tile_shapes(image_shape_, tile_shape_, max_layer_, downscale_);
+
+    for (auto layer = 1; layer < multiscales.size(); ++layer) {
+        const ImageShape& image_shape = multiscales[layer].image;
+        const TileShape& tile_shape = multiscales[layer].tile;
+
+        bin(im.data(),
+            downscale_,
+            image_shape.dims.width,
+            image_shape.dims.height);
+
+        callback(std::make_shared<TiledFrame>(
+          im.data(), frame->frame_id(), layer, image_shape, tile_shape));
+    }
+
+    //    size_t layer = 0;
+    //    while (b) {
+    //        bin(im.data(), downscale_, w, h);
+    //        b >>= 1;
+    //        w >>= 1;
+    //        h >>= 1;
+    //
+    //        ImageShape im_shape = image_shape_;
+    //        im_shape.dims.width = w;
+    //        im_shape.dims.height = h;
+    //        im_shape.strides.width = im_shape.strides.channels * w;
+    //        im_shape.strides.height = im_shape.strides.width * h;
+    //        im_shape.strides.planes =
+    //          im_shape.strides.height * im_shape.dims.planes;
+    //
+    //        TileShape tile_shape = tile_shape_;
+    //        if (tile_shape.dims.width > w)
+    //            tile_shape.dims.width = w;
+    //
+    //        if (tile_shape.dims.height > h)
+    //            tile_shape.dims.height = h;
+    //
+    //        auto new_frame =
+    //          std::make_shared<TiledFrame>(im.data(),
+    //                                       w * h *
+    //                                       bytes_of_type(image_shape_.type),
+    //                                       frame->frame_id(),
+    //                                       ++layer,
+    //                                       im_shape,
+    //                                       tile_shape);
+    //
+    //        callback(new_frame);
+    //    }
+    return true;
 }
-//
-//void
-//scale_thread(ScalerContext* context)
-//{
-//    CHECK(context);
-//
-//    std::vector<uint8_t> im;
-//
-//    while (true) {
-//        std::unique_lock<std::mutex> context_lock(context->mutex);
-//        context->cv.wait(context_lock, [&]() {
-//            return context->should_stop || nullptr != context->scaler;
-//        });
-//
-//        if (context->should_stop)
-//            break;
-//
-//        auto* scaler = context->scaler;
-//        {
-//            std::scoped_lock scaler_lock(scaler->mutex());
-//
-//            if (auto frame = scaler->pop_frame_and_make_current()) {
-//                if (im.size() < frame->bytes_of_image()) {
-//                    im.resize(frame->bytes_of_image());
-//                }
-//
-//                memcpy(im.data(), frame->data(), frame->bytes_of_image());
-//
-//                int w = scaler->image_shape().dims.width;
-//                int h = scaler->image_shape().dims.height;
-//                int b = scaler->max_layer() == -1 ? std::max(w, h)
-//                                                  : scaler->max_layer();
-//
-//                while (b) {
-//                    bin(im.data(), scaler->downscale(), w, h);
-//                    b >>= 1;
-//                    w >>= 1;
-//                    h >>= 1;
-//
-//                    ImageShape im_shape = scaler->image_shape();
-//                    im_shape.dims.width = w;
-//                    im_shape.dims.height = h;
-//                    im_shape.strides.width = im_shape.strides.channels * w;
-//                    im_shape.strides.height = im_shape.strides.width * h;
-//                    im_shape.strides.planes =
-//                      im_shape.strides.height * im_shape.dims.planes;
-//
-//                    TileShape tile_shape = scaler->tile_shape();
-//                    if (tile_shape.dims.width > w)
-//                        tile_shape.dims.width = w;
-//
-//                    if (tile_shape.dims.height > h)
-//                        tile_shape.dims.height = h;
-//
-//                    TiledFrame* new_frame = new TiledFrame(
-//                      im.data(),
-//                      w * h * bytes_of_type(scaler->image_shape().type),
-//                      frame->frame_id(),
-//                      im_shape,
-//                      tile_shape);
-//
-//                    context->callback(new_frame);
-//                }
-//                scaler->release_current_frame();
-//            }
-//        }
-//    }
-//}
+
+std::vector<Multiscale>
+get_tile_shapes(const ImageShape& base_image_shape,
+                const TileShape& base_tile_shape,
+                int16_t max_layer,
+                uint8_t downscale)
+{
+    CHECK(downscale > 0);
+
+    std::vector<Multiscale> shapes;
+    shapes.emplace_back(base_image_shape, base_tile_shape);
+
+    int w = base_image_shape.dims.width;
+    int h = base_image_shape.dims.height;
+    int b = max_layer == -1 ? std::max(w, h) : max_layer;
+
+    while (b) {
+        b /= downscale;
+        w /= downscale;
+        h /= downscale;
+
+        if (w == 0 || h == 0) {
+            break;
+        }
+
+        ImageShape im_shape = base_image_shape;
+        im_shape.dims.width = w;
+        im_shape.dims.height = h;
+        im_shape.strides.width = im_shape.strides.channels * w;
+        im_shape.strides.height = im_shape.strides.width * h;
+        im_shape.strides.planes =
+          im_shape.strides.height * im_shape.dims.planes;
+
+        TileShape tile_shape = base_tile_shape;
+        if (tile_shape.dims.width > w)
+            tile_shape.dims.width = w;
+
+        if (tile_shape.dims.height > h)
+            tile_shape.dims.height = h;
+
+        shapes.emplace_back(im_shape, tile_shape);
+    }
+
+    return shapes;
+}
 } // namespace acquire::sink::zarr

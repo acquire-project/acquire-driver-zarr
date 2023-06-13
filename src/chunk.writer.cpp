@@ -68,6 +68,7 @@ BloscCompressor::BloscCompressor(const std::string& codec_id,
 ChunkWriter::ChunkWriter(BaseEncoder* encoder,
                          const ImageShape& image,
                          const TileShape& tile,
+                         uint32_t layer,
                          uint32_t tile_col,
                          uint32_t tile_row,
                          uint32_t tile_plane,
@@ -79,6 +80,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , current_chunk_{ 0 }
   , dimension_separator_{ '/' }
   , current_file_{ nullptr }
+  , layer_{ layer }
   , tile_col{ tile_col }
   , tile_row{ tile_row }
   , tile_plane{ tile_plane }
@@ -183,7 +185,7 @@ ChunkWriter::open_chunk_file()
     snprintf(file_path,
              sizeof(file_path) - 1,
              "%d%c%d%c%d%c%d%c%d",
-             0,
+             layer_,
              dimension_separator_,
              current_chunk_,
              dimension_separator_,

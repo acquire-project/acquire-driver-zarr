@@ -30,8 +30,8 @@ class TiledFrame
                const ImageShape&,
                const TileShape& tile_shape);
     TiledFrame(uint8_t* const data,
-               size_t bytes_of_image,
                uint64_t frame_id,
+               size_t layer,
                const ImageShape& image_shape,
                const TileShape& tile_shape);
     TiledFrame(const TiledFrame&) = delete;
@@ -40,8 +40,9 @@ class TiledFrame
     [[nodiscard]] size_t size() const;
     [[nodiscard]] size_t bytes_of_image() const;
 
-    [[nodiscard]] uint64_t frame_id() const;
-    [[nodiscard]] uint8_t* data() const;
+    uint64_t frame_id() const;
+    size_t layer() const;
+    uint8_t* data() const;
 
     [[nodiscard]] size_t copy_tile(uint8_t** tile,
                                    uint32_t tile_col,
@@ -49,9 +50,12 @@ class TiledFrame
                                    uint32_t tile_plane) const;
 
   private:
+    uint8_t* buf_;
+
     size_t bytes_of_image_;
     uint64_t frame_id_;
-    uint8_t* buf_;
+    size_t layer_;
+
     ImageShape image_shape_;
     TileShape tile_shape_;
 

@@ -25,6 +25,7 @@ struct ChunkWriter final
     ChunkWriter(BaseEncoder* encoder,
                 const ImageShape& image,
                 const TileShape& tile,
+                uint32_t layer,
                 uint32_t tile_col,
                 uint32_t tile_row,
                 uint32_t tile_plane,
@@ -51,6 +52,7 @@ struct ChunkWriter final
     size_t bytes_written_;
 
     std::string base_dir_;
+    uint32_t layer_;
     int current_chunk_;
     char dimension_separator_;
     struct file* current_file_;
