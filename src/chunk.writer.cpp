@@ -105,7 +105,7 @@ ChunkWriter::~ChunkWriter()
     delete encoder_;
 }
 
-size_t
+bool
 ChunkWriter::write_frame(const std::shared_ptr<TiledFrame>& frame)
 {
     const size_t bpt = ::bytes_per_tile(image_shape_, tile_shape_);
@@ -113,11 +113,11 @@ ChunkWriter::write_frame(const std::shared_ptr<TiledFrame>& frame)
         buffer_.resize(bpt);
 
     uint8_t* data = buffer_.data();
-    size_t nbytes = frame->copy_tile(&data, tile_col, tile_row, tile_plane);
+    size_t nbytes = frame->copy_tile(data, bpt, tile_col, tile_row, tile_plane);
 
     nbytes = write(data, data + nbytes);
 
-    return nbytes;
+    return nbytes == bpt;
 }
 
 size_t

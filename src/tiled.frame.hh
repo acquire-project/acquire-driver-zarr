@@ -32,13 +32,13 @@ class TiledFrame
     TiledFrame(const TiledFrame&) = delete;
     ~TiledFrame();
 
-    [[nodiscard]] size_t size() const;
-    [[nodiscard]] size_t bytes_of_image() const;
+    size_t bytes_of_image() const;
 
-    [[nodiscard]] uint64_t frame_id() const;
-    [[nodiscard]] uint8_t* data() const;
+    uint64_t frame_id() const;
+    uint8_t* data() const;
 
-    [[nodiscard]] size_t copy_tile(uint8_t** tile,
+    [[nodiscard]] size_t copy_tile(uint8_t* tile,
+                                   size_t bytes_of_tile,
                                    uint32_t tile_col,
                                    uint32_t tile_row,
                                    uint32_t tile_plane) const;

@@ -60,12 +60,6 @@ TiledFrame::~TiledFrame()
 }
 
 size_t
-TiledFrame::size() const
-{
-    return bytes_of_image() / bytes_of_type(image_shape_.type);
-}
-
-size_t
 TiledFrame::bytes_of_image() const
 {
     return bytes_of_image_;
@@ -84,31 +78,32 @@ TiledFrame::data() const
 }
 
 size_t
-TiledFrame::copy_tile(uint8_t** tile,
+TiledFrame::copy_tile(uint8_t* tile,
+                      size_t bytes_of_tile,
                       uint32_t tile_col,
                       uint32_t tile_row,
                       uint32_t tile_plane) const
 {
     CHECK(tile);
+    CHECK(bytes_of_tile == bytes_per_tile(image_shape_, tile_shape_));
+    memset(tile, 0, bytes_of_tile);
+
     uint8_t* region = nullptr;
 
     const size_t bytes_per_row = bytes_of_type(image_shape_.type) *
                                  image_shape_.dims.channels *
                                  tile_shape_.dims.width;
-    std::vector<uint8_t> fill(bytes_per_row, 0);
-
-    size_t nbytes_out = 0;
 
     size_t offset = 0;
-    size_t frame_col =
+    uint32_t frame_col =
       tile_col * tile_shape_.dims.width * image_shape_.dims.channels;
     for (auto p = 0; p < tile_shape_.dims.planes; ++p) {
         size_t frame_plane = tile_plane * tile_shape_.dims.planes + p;
         for (auto r = 0; r < tile_shape_.dims.height; ++r) {
-            size_t frame_row = tile_row * tile_shape_.dims.height + r;
-            size_t frame_offset = frame_col +
-                                  frame_row * image_shape_.strides.height +
-                                  frame_plane * image_shape_.strides.planes;
+            uint32_t frame_row = tile_row * tile_shape_.dims.height + r;
+            uint32_t frame_offset = frame_col +
+                                    frame_row * image_shape_.strides.height +
+                                    frame_plane * image_shape_.strides.planes;
 
             size_t nbytes_row = get_contiguous_region(
               &region, frame_col, frame_row, frame_plane, frame_offset);
@@ -116,21 +111,14 @@ TiledFrame::copy_tile(uint8_t** tile,
             // copy frame data into the tile buffer
             if (0 < nbytes_row) {
                 CHECK(nullptr != region);
-                memcpy(*tile + offset, region, nbytes_row);
+                memcpy(tile + offset, region, nbytes_row);
             }
-            offset += nbytes_row;
 
-            // fill the rest of the row with zeroes
-            if (nbytes_row < bytes_per_row) {
-                memcpy(*tile + offset, fill.data(), bytes_per_row - nbytes_row);
-            }
-            offset += bytes_per_row - nbytes_row;
-
-            nbytes_out += bytes_per_row;
+            offset += bytes_per_row;
         }
     }
 
-    return nbytes_out;
+    return offset;
 }
 
 size_t
@@ -191,7 +179,6 @@ unit_test__tiled_frame_size()
     acquire::sink::zarr::TiledFrame tf(&vf, {}, {});
 
     try {
-        CHECK(48 * 64 == tf.size());
         CHECK(2 * 48 * 64 == tf.bytes_of_image());
         return 1;
     } catch (const std::exception& e) {

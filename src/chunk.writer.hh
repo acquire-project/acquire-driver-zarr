@@ -35,7 +35,7 @@ struct ChunkWriter final
     void set_base_directory(const std::string& base_directory);
     void open_chunk_file();
     void close_current_file();
-    size_t write_frame(const std::shared_ptr<TiledFrame>& frame);
+    [[nodiscard]] bool write_frame(const std::shared_ptr<TiledFrame>& frame);
 
     std::mutex& mutex() noexcept;
 

@@ -337,11 +337,10 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 
         // push the new frame to our writers
         for (auto& writer : writers_) {
-            job_queue_.emplace(
-              frame, [&writer](std::shared_ptr<TiledFrame> frame) {
-                  std::scoped_lock writer_lock(writer->mutex());
-                  return writer->write_frame(frame) > 0;
-              });
+            job_queue_.emplace([frame, &writer]() {
+                std::scoped_lock writer_lock(writer->mutex());
+                return writer->write_frame(frame);
+            });
         }
 
         ++frame_count_;
@@ -361,17 +360,17 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
       get_tiles_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_);
 }
 
-bool
-zarr::Zarr::pop_from_job_queue(ThreadJob& job)
+std::optional<zarr::Zarr::JobT>
+zarr::Zarr::pop_from_job_queue()
 {
     std::scoped_lock lock(job_queue_mutex_);
     if (job_queue_.empty())
-        return false;
+        return {};
 
-    job = job_queue_.front();
+    auto job = job_queue_.front();
     job_queue_.pop();
 
-    return true;
+    return { job };
 }
 
 void
@@ -873,10 +872,9 @@ zarr::worker_thread(ThreadContext* ctx)
             break;
         }
 
-        ThreadJob job;
-        if (ctx->zarr->pop_from_job_queue(job)) {
-            CHECK(job.frame);
-            CHECK(job.f(job.frame));
+        if (auto job = ctx->zarr->pop_from_job_queue();
+            job.has_value()) {
+            CHECK(job.value()());
         }
     }
 

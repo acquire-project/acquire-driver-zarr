@@ -8,10 +8,12 @@
 #include "prelude.h"
 #include "chunk.writer.hh"
 
-#include <string>
-#include <optional>
+#include <condition_variable>
 #include <filesystem>
+#include <optional>
 #include <queue>
+#include <string>
+#include <thread>
 #include <tuple>
 #include <vector>
 
@@ -66,6 +68,8 @@ struct StorageInterface : public Storage
 /// https://ngff.openmicroscopy.org/0.4/
 struct Zarr final : StorageInterface
 {
+    using JobT = std::function<bool()>;
+
     Zarr();
     explicit Zarr(BloscCompressor&& compressor);
     ~Zarr() override;
@@ -81,7 +85,7 @@ struct Zarr final : StorageInterface
 
     void reserve_image_shape(const ImageShape* shape) override;
 
-    [[nodiscard]] bool pop_from_job_queue(ThreadJob& job);
+    std::optional<JobT> pop_from_job_queue();
 
   private:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
@@ -106,7 +110,7 @@ struct Zarr final : StorageInterface
     // changes during acquisition
     size_t frame_count_;
     mutable std::mutex job_queue_mutex_;
-    std::queue<ThreadJob> job_queue_;
+    std::queue<JobT> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
 
