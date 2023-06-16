@@ -339,7 +339,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         for (auto& writer : writers_) {
             job_queue_.emplace([frame, &writer]() {
                 std::scoped_lock writer_lock(writer->mutex());
-                return writer->write_frame(frame);
+                return writer->write_frame(*frame);
             });
         }
 
@@ -377,8 +377,8 @@ void
 zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
 {
     max_bytes_per_chunk_ = std::clamp(props.max_bytes_per_chunk,
-                                      (uint32_t)meta.max_bytes_per_chunk.low,
-                                      (uint32_t)meta.max_bytes_per_chunk.high);
+                                      (uint64_t)meta.max_bytes_per_chunk.low,
+                                      (uint64_t)meta.max_bytes_per_chunk.high);
 
     uint32_t tile_width = props.tile.width;
     if (tile_width == 0 ||
@@ -584,18 +584,16 @@ zarr::Zarr::allocate_writers_()
                 encoder->allocate_buffer(buf_size);
                 encoder->set_bytes_per_pixel(
                   bytes_per_sample_type(image_shape_.type));
-                auto writer = new ChunkWriter(encoder,
-                                              image_shape_,
-                                              tile_shape_,
-                                              col,
-                                              row,
-                                              plane,
-                                              max_bytes_per_chunk_);
-                CHECK(writer);
-
-                writer->set_dimension_separator(dimension_separator_);
-                writer->set_base_directory(data_dir_);
-                writers_.push_back(writer);
+                writers_.push_back(
+                  std::make_shared<ChunkWriter>(encoder,
+                                                image_shape_,
+                                                tile_shape_,
+                                                col,
+                                                row,
+                                                plane,
+                                                max_bytes_per_chunk_,
+                                                dimension_separator_,
+                                                data_dir_));
             }
         }
     }
@@ -604,9 +602,9 @@ zarr::Zarr::allocate_writers_()
 void
 zarr::Zarr::clear_writers_()
 {
-    for (auto& writer : writers_) {
-        delete writer;
-    }
+//    for (auto& writer : writers_) {
+//        delete writer;
+//    }
     writers_.clear();
 }
 
@@ -872,8 +870,7 @@ zarr::worker_thread(ThreadContext* ctx)
             break;
         }
 
-        if (auto job = ctx->zarr->pop_from_job_queue();
-            job.has_value()) {
+        if (auto job = ctx->zarr->pop_from_job_queue(); job.has_value()) {
             CHECK(job.value()());
         }
     }

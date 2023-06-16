@@ -32,7 +32,7 @@ storage_properties_set_chunking_props(struct StorageProperties* out,
                                       uint32_t tile_width,
                                       uint32_t tile_height,
                                       uint32_t tile_planes,
-                                      uint32_t max_bytes_per_chunk)
+                                      uint64_t max_bytes_per_chunk)
 ```
 
 A _tile_ is a contiguous section, or region of interest, of a _frame_.
@@ -65,7 +65,8 @@ storage_properties_set_chunking_props(&storage_props,
                                       64 * 1024 * 1024);
 ```
 
-Note that 64 * 1024 * 1024 / (640 * 360) = 291.2711111111111, so each chunk will contain 291 tiles, or about 63.94 MiB.
+Note that 64 * 1024 * 1024 / (640 * 360) = 291.2711111111111, so each chunk will contain 291 tiles, or about 63.94 MiB
+raw, before compression.
 
 ### Compression
 

@@ -101,10 +101,10 @@ struct Zarr final : StorageInterface
     std::string data_dir_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
-    size_t max_bytes_per_chunk_;
+    uint64_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
-    std::vector<ChunkWriter*> writers_;
+    std::vector<std::shared_ptr<ChunkWriter>> writers_;
     size_t tiles_per_chunk_;
 
     // changes during acquisition
