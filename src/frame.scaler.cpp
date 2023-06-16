@@ -85,25 +85,35 @@ FrameScaler::downscale() const noexcept
 bool
 FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
 {
-    zarr_->push_frame_to_writers(frame);
+    try {
+        zarr_->push_frame_to_writers(frame);
 
-    std::vector<uint8_t> im(frame->bytes_of_image());
-    memcpy(im.data(), frame->data(), frame->bytes_of_image());
+        std::vector<uint8_t> im(frame->bytes_of_image());
+        memcpy(im.data(), frame->data(), frame->bytes_of_image());
 
-    std::vector<Multiscale> multiscales =
-      get_tile_shapes(image_shape_, tile_shape_, max_layer_, downscale_);
+        std::vector<Multiscale> multiscales =
+          get_tile_shapes(image_shape_, tile_shape_, max_layer_, downscale_);
 
-    for (auto layer = 1; layer < multiscales.size(); ++layer) {
-        const ImageShape& image_shape = multiscales[layer].image;
-        const TileShape& tile_shape = multiscales[layer].tile;
+        for (auto layer = 1; layer < multiscales.size(); ++layer) {
+            const ImageShape& image_shape = multiscales[layer].image;
+            const TileShape& tile_shape = multiscales[layer].tile;
 
-        bin(im.data(),
-            downscale_,
-            image_shape.dims.width,
-            image_shape.dims.height);
+            bin(im.data(),
+                downscale_,
+                image_shape.dims.width,
+                image_shape.dims.height);
 
-        zarr_->push_frame_to_writers(std::make_shared<TiledFrame>(
-          im.data(), frame->frame_id(), layer, image_shape, tile_shape));
+            auto scale_layer = std::make_shared<TiledFrame>(
+              im.data(), frame->frame_id(), layer, image_shape, tile_shape);
+
+            zarr_->push_frame_to_writers(scale_layer);
+        }
+    } catch (std::runtime_error& e) {
+        LOG("Failed to scale frame: %s", e.what());
+        return false;
+    } catch (...) {
+        LOG("Failed to scale frame: unknown error");
+        return false;
     }
 
     return true;

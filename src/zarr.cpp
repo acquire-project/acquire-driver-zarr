@@ -991,7 +991,11 @@ zarr::worker_thread(ThreadContext* ctx)
         }
 
         if (auto job = ctx->zarr->pop_from_job_queue(); job.has_value()) {
-            CHECK(job.value()());
+            bool ret = job.value()();
+            if (!ret) {
+                LOGE("Job failed.");
+            }
+//            CHECK(job.value()());
         }
     }
 
