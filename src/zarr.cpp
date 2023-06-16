@@ -327,7 +327,6 @@ zarr::Zarr::stop() noexcept
             recover_threads_();
             write_zarray_json_();       // must precede close of chunk file
             write_group_zattrs_json_(); // write multiscales metadata
-            clear_writers_();
             is_ok = 1;
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
@@ -661,7 +660,7 @@ zarr::Zarr::write_zgroup_json_() const
 void
 zarr::Zarr::allocate_writers_()
 {
-    clear_writers_();
+    writers_.clear();
 
     std::vector<Multiscale> multiscales;
     if (scaler_) {
@@ -731,12 +730,6 @@ zarr::Zarr::allocate_writers_()
             }
         }
     }
-}
-
-void
-zarr::Zarr::clear_writers_()
-{
-    writers_.clear();
 }
 
 void
