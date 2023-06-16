@@ -56,15 +56,18 @@ bytes_of_type(const enum SampleType type)
 } // ::<anonymous> namespace
 
 namespace acquire::sink::zarr {
-FrameScaler::FrameScaler(const ImageShape& image_shape,
+FrameScaler::FrameScaler(Zarr* zarr,
+                         const ImageShape& image_shape,
                          const TileShape& tile_shape,
                          int16_t max_layer,
                          uint8_t downscale)
-  : image_shape_{ image_shape }
+  : zarr_{ zarr }
+  , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
   , max_layer_{ max_layer }
   , downscale_{ downscale }
 {
+    CHECK(zarr);
 }
 
 int16_t
@@ -80,11 +83,9 @@ FrameScaler::downscale() const noexcept
 }
 
 bool
-FrameScaler::scale_frame(
-  std::shared_ptr<TiledFrame> frame,
-  std::function<void(std::shared_ptr<TiledFrame>)> callback) const
+FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
 {
-    callback(frame);
+    zarr_->push_frame_to_writers(frame);
 
     std::vector<uint8_t> im(frame->bytes_of_image());
     memcpy(im.data(), frame->data(), frame->bytes_of_image());
@@ -101,7 +102,7 @@ FrameScaler::scale_frame(
             image_shape.dims.width,
             image_shape.dims.height);
 
-        callback(std::make_shared<TiledFrame>(
+        zarr_->push_frame_to_writers(std::make_shared<TiledFrame>(
           im.data(), frame->frame_id(), layer, image_shape, tile_shape));
     }
 

@@ -365,12 +365,8 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
             std::scoped_lock lock(job_queue_mutex_);
 
             // push the new frame to our scaler
-            job_queue_.emplace([this, frame]() {
-                return scaler_->scale_frame(
-                  frame,
-                  std::bind(
-                    &Zarr::push_frame_to_writers, this, std::placeholders::_1));
-            });
+            job_queue_.emplace(
+              [this, frame]() { return scaler_->scale_frame(frame); });
         } else {
             push_frame_to_writers(frame);
         }
@@ -399,7 +395,7 @@ zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
     CHECK(writers_.find(frame->layer()) != writers_.end());
 
     for (auto& writer : writers_.at(frame->layer())) {
-        job_queue_.emplace(frame, [&writer](std::shared_ptr<TiledFrame> frame) {
+        job_queue_.emplace([&writer, frame]() {
             std::scoped_lock writer_lock(writer->mutex());
             return writer->write_frame(*frame);
         });
@@ -480,7 +476,7 @@ zarr::Zarr::set_multiscale(const MultiscaleProps& props,
                                 (uint8_t)meta.downscale.low,
                                 (uint8_t)meta.downscale.high);
     CHECK(scaler_ = std::make_unique<FrameScaler>(
-            image_shape_, tile_shape_, max_layer, downscale));
+            this, image_shape_, tile_shape_, max_layer, downscale));
 }
 
 void

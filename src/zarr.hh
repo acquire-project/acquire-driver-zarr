@@ -36,12 +36,6 @@ struct ThreadContext
     bool should_stop;
 };
 
-struct ThreadJob
-{
-    std::shared_ptr<TiledFrame> frame;
-    std::function<bool(std::shared_ptr<TiledFrame>)> f;
-};
-
 // StorageInterface
 
 struct StorageInterface : public Storage

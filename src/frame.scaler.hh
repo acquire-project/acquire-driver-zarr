@@ -14,6 +14,8 @@
 #include "chunk.writer.hh"
 
 namespace acquire::sink::zarr {
+class Zarr;
+
 struct Multiscale
 {
     ImageShape image;
@@ -24,7 +26,8 @@ struct FrameScaler final
 {
   public:
     FrameScaler() = delete;
-    FrameScaler(const ImageShape& image_shape,
+    FrameScaler(Zarr* zarr,
+                const ImageShape& image_shape,
                 const TileShape& tile_shape,
                 int16_t max_layer,
                 uint8_t downscale);
@@ -34,11 +37,11 @@ struct FrameScaler final
     int16_t max_layer() const noexcept;
     uint8_t downscale() const noexcept;
 
-    [[nodiscard]] bool scale_frame(
-      std::shared_ptr<TiledFrame> frame,
-      std::function<void(std::shared_ptr<TiledFrame>)> callback) const;
+    [[nodiscard]] bool scale_frame(std::shared_ptr<TiledFrame> frame) const;
 
   private:
+    Zarr* zarr_; // non-owning
+
     const ImageShape& image_shape_;
     const TileShape& tile_shape_;
 

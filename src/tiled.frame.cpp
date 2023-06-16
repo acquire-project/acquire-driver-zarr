@@ -111,7 +111,7 @@ TiledFrame::copy_tile(uint8_t* tile,
                       uint32_t tile_plane) const
 {
     CHECK(tile);
-    CHECK(bytes_of_tile == bytes_per_tile(image_shape_, tile_shape_));
+    CHECK(bytes_of_tile >= bytes_per_tile(image_shape_, tile_shape_));
     memset(tile, 0, bytes_of_tile);
 
     uint8_t* region = nullptr;
