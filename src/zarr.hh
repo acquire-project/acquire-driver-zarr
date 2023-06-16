@@ -9,10 +9,12 @@
 #include "chunk.writer.hh"
 #include "frame.scaler.hh"
 
-#include <string>
-#include <optional>
+#include <condition_variable>
 #include <filesystem>
+#include <optional>
 #include <queue>
+#include <string>
+#include <thread>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -68,6 +70,8 @@ struct StorageInterface : public Storage
 /// https://ngff.openmicroscopy.org/0.4/
 struct Zarr final : StorageInterface
 {
+    using JobT = std::function<bool()>;
+
     Zarr();
     explicit Zarr(BloscCompressor&& compressor);
     ~Zarr() override;
@@ -84,7 +88,7 @@ struct Zarr final : StorageInterface
     void reserve_image_shape(const ImageShape* shape) override;
 
     void push_frame_to_writers(std::shared_ptr<TiledFrame> frame);
-    [[nodiscard]] bool pop_from_job_queue(ThreadJob& job);
+    std::optional<JobT> pop_from_job_queue();
 
   private:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
@@ -104,19 +108,19 @@ struct Zarr final : StorageInterface
     std::string data_dir_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
-    size_t max_bytes_per_chunk_;
+    uint64_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
     size_t tiles_per_chunk_;
 
     std::unique_ptr<FrameScaler> scaler_;
     /// Chunk writers for each layer/scale
-    std::map<size_t, std::vector<ChunkWriter*>> writers_;
+    std::map<size_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
 
     // changes during acquisition
     size_t frame_count_;
     mutable std::mutex job_queue_mutex_;
-    std::queue<ThreadJob> job_queue_;
+    std::queue<JobT> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
     void set_multiscale(const MultiscaleProps& props,

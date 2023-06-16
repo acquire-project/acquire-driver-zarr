@@ -32,12 +32,25 @@ storage_properties_set_chunking_props(struct StorageProperties* out,
                                       uint32_t tile_width,
                                       uint32_t tile_height,
                                       uint32_t tile_planes,
-                                      uint32_t max_bytes_per_chunk)
+                                      uint64_t max_bytes_per_chunk)
 ```
 
+| ![frames](https://github.com/aliddell/acquire-driver-zarr/assets/844464/3510d468-4751-4fa0-b2bf-0e29a5f3ea1c) |
+|:--:|
+| A collection of frames. |
+
 A _tile_ is a contiguous section, or region of interest, of a _frame_.
+
+| ![tiles](https://github.com/aliddell/acquire-driver-zarr/assets/844464/f8d16139-e0ac-44db-855f-2f5ef305c98b) |
+|:--:|
+| A collection of frames, divided into tiles. |
+
 A _chunk_ is nothing more than some number of stacked tiles from subsequent frames, with each tile in a chunk having
 the same ROI in its respective frame.
+
+|  ![chunks](https://github.com/aliddell/acquire-driver-zarr/assets/844464/653e4d82-363e-4e04-9a42-927b052fb6e7) |
+|:--:|
+| A collection of frames, divided into tiles. A single chunk has been highlighted in red. |
 
 You can specify the width and height, in pixels, of each tile, and if your frame size has more than one plane, you can
 specify the number of planes you want per tile as well.
@@ -65,7 +78,8 @@ storage_properties_set_chunking_props(&storage_props,
                                       64 * 1024 * 1024);
 ```
 
-Note that 64 * 1024 * 1024 / (640 * 360) = 291.2711111111111, so each chunk will contain 291 tiles, or about 63.94 MiB.
+Note that 64 * 1024 * 1024 / (640 * 360) = 291.2711111111111, so each chunk will contain 291 tiles, or about 63.94 MiB
+raw, before compression.
 
 ### Compression
 

@@ -19,6 +19,7 @@ else()
         write-zarr-raw-multiscale
         write-zarr-raw-with-chunking
         write-zarr-raw-with-chunking-and-rollover
+        write-zarr-raw-with-ragged-tiling
         write-zarr-with-defaults
         write-zarr-with-lz4-compression
         write-zarr-with-zstd-compression

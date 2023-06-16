@@ -366,14 +366,12 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
             std::scoped_lock lock(job_queue_mutex_);
 
             // push the new frame to our scaler
-            job_queue_.emplace(frame,
-                               [this](std::shared_ptr<TiledFrame> frame) {
-                                   return scaler_->scale_frame(
-                                     frame,
-                                     std::bind(&Zarr::push_frame_to_writers,
-                                               this,
-                                               std::placeholders::_1));
-                               });
+            job_queue_.emplace([this, frame]() {
+                return scaler_->scale_frame(
+                  frame,
+                  std::bind(
+                    &Zarr::push_frame_to_writers, this, std::placeholders::_1));
+            });
         } else {
             push_frame_to_writers(frame);
         }
@@ -404,30 +402,30 @@ zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
     for (auto& writer : writers_.at(frame->layer())) {
         job_queue_.emplace(frame, [&writer](std::shared_ptr<TiledFrame> frame) {
             std::scoped_lock writer_lock(writer->mutex());
-            return writer->write_frame(frame) > 0;
+            return writer->write_frame(*frame);
         });
     }
 }
 
-bool
-zarr::Zarr::pop_from_job_queue(ThreadJob& job)
+std::optional<zarr::Zarr::JobT>
+zarr::Zarr::pop_from_job_queue()
 {
     std::scoped_lock lock(job_queue_mutex_);
     if (job_queue_.empty())
-        return false;
+        return {};
 
-    job = job_queue_.front();
+    auto job = job_queue_.front();
     job_queue_.pop();
 
-    return true;
+    return { job };
 }
 
 void
 zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
 {
     max_bytes_per_chunk_ = std::clamp(props.max_bytes_per_chunk,
-                                      (uint32_t)meta.max_bytes_per_chunk.low,
-                                      (uint32_t)meta.max_bytes_per_chunk.high);
+                                      (uint64_t)meta.max_bytes_per_chunk.low,
+                                      (uint64_t)meta.max_bytes_per_chunk.high);
 
     uint32_t tile_width = props.tile.width;
     if (tile_width == 0 ||
@@ -513,7 +511,7 @@ zarr::Zarr::write_zarray_json_() const
         write_zarray_json_inner_(0, image_shape_, tile_shape_);
     } else {
         for (const auto& [layer, writers] : writers_) {
-            ChunkWriter* const writer = writers.front();
+            auto writer = writers.front();
             const auto& is = writer->image_shape();
             const auto& ts = writer->tile_shape();
             write_zarray_json_inner_(layer, is, ts);
@@ -704,7 +702,7 @@ zarr::Zarr::allocate_writers_()
             ? get_bytes_per_chunk(image_shape, tile_shape, max_bytes_per_chunk_)
             : get_bytes_per_tile(image_shape, tile_shape);
 
-        writers_.emplace(layer, std::vector<ChunkWriter*>());
+        writers_.emplace(layer, std::vector<std::shared_ptr<ChunkWriter>>());
         for (auto plane = 0; plane < tile_planes; ++plane) {
             for (auto row = 0; row < tile_rows; ++row) {
                 for (auto col = 0; col < tile_cols; ++col) {
@@ -717,20 +715,18 @@ zarr::Zarr::allocate_writers_()
 
                     encoder->allocate_buffer(buf_size);
                     encoder->set_bytes_per_pixel(
-                      bytes_per_sample_type(image_shape.type));
-                    auto writer = new ChunkWriter(encoder,
-                                                  image_shape,
-                                                  tile_shape,
-                                                  layer,
-                                                  col,
-                                                  row,
-                                                  plane,
-                                                  max_bytes_per_chunk_);
-                    CHECK(writer);
-
-                    writer->set_dimension_separator(dimension_separator_);
-                    writer->set_base_directory(data_dir_);
-                    writers_.at(layer).push_back(writer);
+                      bytes_per_sample_type(image_shape_.type));
+                    writers_.at(layer).push_back(
+                      std::make_shared<ChunkWriter>(encoder,
+                                                    image_shape_,
+                                                    tile_shape_,
+                                                    layer,
+                                                    col,
+                                                    row,
+                                                    plane,
+                                                    max_bytes_per_chunk_,
+                                                    dimension_separator_,
+                                                    data_dir_));
                 }
             }
         }
@@ -740,11 +736,6 @@ zarr::Zarr::allocate_writers_()
 void
 zarr::Zarr::clear_writers_()
 {
-    for (auto& layer : writers_) {
-        for (auto& writer : layer.second) {
-            delete writer;
-        }
-    }
     writers_.clear();
 }
 
@@ -1010,10 +1001,8 @@ zarr::worker_thread(ThreadContext* ctx)
             break;
         }
 
-        ThreadJob job;
-        if (ctx->zarr->pop_from_job_queue(job)) {
-            CHECK(job.frame);
-            CHECK(job.f(job.frame));
+        if (auto job = ctx->zarr->pop_from_job_queue(); job.has_value()) {
+            CHECK(job.value()());
         }
     }
 

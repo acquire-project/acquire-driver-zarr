@@ -35,7 +35,7 @@ struct FrameScaler final
     uint8_t downscale() const noexcept;
 
     [[nodiscard]] bool scale_frame(
-      const std::shared_ptr<TiledFrame>& frame,
+      std::shared_ptr<TiledFrame> frame,
       std::function<void(std::shared_ptr<TiledFrame>)> callback) const;
 
   private:

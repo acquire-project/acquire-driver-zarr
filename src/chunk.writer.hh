@@ -1,20 +1,13 @@
 #ifndef H_ACQUIRE_ZARR_CHUNK_WRITER_V0
 #define H_ACQUIRE_ZARR_CHUNK_WRITER_V0
 
-#ifdef __cplusplus
-
 #include <vector>
 
-#include <platform.h>
+#include "platform.h"
 
 #include "zarr.encoder.hh"
 #include "zarr.blosc.hh"
 #include "tiled.frame.hh"
-
-#ifdef min
-#undef min
-#undef max
-#endif
 
 namespace acquire::sink::zarr {
 
@@ -22,21 +15,30 @@ struct ChunkWriter final
 {
   public:
     ChunkWriter() = delete;
+
+    /// @param encoder Encoder to use for encoding data as it comes in.
+    /// @param image_shape Shape and strides of the frame.
+    /// @param tile_shape Dimensions of the tile.
+    /// @param layer Multiscale layer. Full resolution is 0.
+    /// @param tile_col Column index, in tile space, of this tile.
+    /// @param tile_row Row index, in tile space, of this tile.
+    /// @param tile_plane Plane index, in tile space, of this tile.
+    /// @param max_bytes_per_chunk Maximum bytes per chunk.
+    /// @param dimension_separator Separator to use between dimension names.
+    /// @param base_directory Base directory to write chunks to.
     ChunkWriter(BaseEncoder* encoder,
-                const ImageShape& image,
-                const TileShape& tile,
+                const ImageShape& image_shape,
+                const TileShape& tile_shape,
                 uint32_t layer,
                 uint32_t tile_col,
                 uint32_t tile_row,
                 uint32_t tile_plane,
-                size_t max_bytes_per_chunk);
+                uint64_t max_bytes_per_chunk,
+                char dimension_separator,
+                const std::string& base_directory);
     ~ChunkWriter();
 
-    void set_dimension_separator(char separator);
-    void set_base_directory(const std::string& base_directory);
-    void open_chunk_file();
-    void close_current_file();
-    size_t write_frame(const std::shared_ptr<TiledFrame>& frame);
+    [[nodiscard]] bool write_frame(const TiledFrame& frame);
 
     const ImageShape& image_shape() const noexcept;
     const TileShape& tile_shape() const noexcept;
@@ -68,10 +70,11 @@ struct ChunkWriter final
 
     std::vector<uint8_t> buffer_;
 
+    void open_chunk_file();
+    void close_current_file();
     size_t write(const uint8_t* beg, const uint8_t* end);
     void finalize_chunk();
     void rollover();
 };
 } // namespace acquire::sink::zarr
-#endif // __cplusplus
 #endif // H_ACQUIRE_ZARR_CHUNK_WRITER_V0

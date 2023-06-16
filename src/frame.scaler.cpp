@@ -81,10 +81,9 @@ FrameScaler::downscale() const noexcept
 
 bool
 FrameScaler::scale_frame(
-  const std::shared_ptr<TiledFrame>& frame,
+  std::shared_ptr<TiledFrame> frame,
   std::function<void(std::shared_ptr<TiledFrame>)> callback) const
 {
-    CHECK(frame);
     callback(frame);
 
     std::vector<uint8_t> im(frame->bytes_of_image());

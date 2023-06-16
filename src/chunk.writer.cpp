@@ -66,26 +66,29 @@ BloscCompressor::BloscCompressor(const std::string& codec_id,
 }
 
 ChunkWriter::ChunkWriter(BaseEncoder* encoder,
-                         const ImageShape& image,
-                         const TileShape& tile,
+                         const ImageShape& image_shape,
+                         const TileShape& tile_shape,
                          uint32_t layer,
                          uint32_t tile_col,
                          uint32_t tile_row,
                          uint32_t tile_plane,
-                         size_t max_bytes_per_chunk)
+                         uint64_t max_bytes_per_chunk,
+                         char dimension_separator,
+                         const std::string& base_directory)
   : encoder_{ encoder }
   , bytes_per_chunk_{ 0 }
   , tiles_per_chunk_{ 0 }
   , bytes_written_{ 0 }
   , current_chunk_{ 0 }
-  , dimension_separator_{ '/' }
+  , dimension_separator_{ dimension_separator }
+  , base_dir_{ base_directory }
   , current_file_{ nullptr }
   , layer_{ layer }
   , tile_col{ tile_col }
   , tile_row{ tile_row }
   , tile_plane{ tile_plane }
-  , image_shape_{ image }
-  , tile_shape_{ tile }
+  , image_shape_{ image_shape }
+  , tile_shape_{ tile_shape }
 {
     CHECK(encoder_);
     const auto bpt = (float)::bytes_per_tile(image_shape_, tile_shape_);
@@ -95,10 +98,14 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
     EXPECT(tiles_per_chunk_ > 0,
            "Given %lu bytes per chunk, %lu bytes per tile.",
            max_bytes_per_chunk,
-           ::bytes_of_type(image.type));
+           ::bytes_of_type(image_shape.type));
 
     // this is guaranteed to be positive
     bytes_per_chunk_ = tiles_per_chunk_ * (size_t)bpt;
+
+    EXPECT('.' == dimension_separator || '/' == dimension_separator,
+           "Expecting either '.' or '/' for dimension separator, got '%c'.",
+           dimension_separator);
 }
 
 ChunkWriter::~ChunkWriter()
@@ -107,19 +114,19 @@ ChunkWriter::~ChunkWriter()
     delete encoder_;
 }
 
-size_t
-ChunkWriter::write_frame(const std::shared_ptr<TiledFrame>& frame)
+bool
+ChunkWriter::write_frame(const TiledFrame& frame)
 {
     const size_t bpt = ::bytes_per_tile(image_shape_, tile_shape_);
     if (buffer_.size() < bpt)
         buffer_.resize(bpt);
 
     uint8_t* data = buffer_.data();
-    size_t nbytes = frame->copy_tile(&data, tile_col, tile_row, tile_plane);
+    size_t nbytes = frame.copy_tile(data, bpt, tile_col, tile_row, tile_plane);
 
     nbytes = write(data, data + nbytes);
 
-    return nbytes;
+    return nbytes == bpt;
 }
 
 const ImageShape&
@@ -170,24 +177,6 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
     }
 
     return bytes_out;
-}
-
-void
-ChunkWriter::set_dimension_separator(char separator)
-{
-    EXPECT('.' == separator || '/' == separator,
-           "Expecting either '.' or '/' for dimension separator, got '%c'.",
-           separator);
-    dimension_separator_ = separator;
-}
-
-void
-ChunkWriter::set_base_directory(const std::string& base_directory)
-{
-    EXPECT(fs::is_directory(base_directory),
-           R"(Base directory "%s" does not exist or is not a directory.)",
-           base_directory.c_str());
-    base_dir_ = base_directory;
 }
 
 void
