@@ -138,7 +138,6 @@ verify_layer(int layer)
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
 
-    const auto shape = zarray["shape"];
     const auto chunks = zarray["chunks"];
 
     // check chunked data
