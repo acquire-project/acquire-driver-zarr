@@ -5,7 +5,7 @@
 #include <thread>
 
 namespace {
-static void
+void
 bin(uint8_t* im_, int N, int w, int h) // FIXME (aliddell): make N meaningful
 {
     const uint8_t* end = im_ + w * h;
@@ -32,6 +32,15 @@ bin(uint8_t* im_, int N, int w, int h) // FIXME (aliddell): make N meaningful
          src_row += 2 * w, dst_row += w) {
         memcpy(dst_row, src_row, w);
     }
+}
+
+void
+pad(uint8_t* im_, int N, int w, int h) // FIXME (aliddell): make N meaningful
+{
+    if (w % N == 0 && h % N == 0)
+        return;
+
+
 }
 
 size_t
