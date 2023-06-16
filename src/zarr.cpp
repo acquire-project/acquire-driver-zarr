@@ -298,7 +298,6 @@ zarr::Zarr::stop() noexcept
                 clock_sleep_ms(nullptr, 50.0);
             }
             recover_threads_();
-            clear_writers_();
             is_ok = 1;
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
@@ -547,7 +546,7 @@ zarr::Zarr::write_zgroup_json_() const
 void
 zarr::Zarr::allocate_writers_()
 {
-    clear_writers_();
+    writers_.clear();
 
     size_t img_px_x = image_shape_.dims.channels * image_shape_.dims.width;
     CHECK(tile_shape_.dims.width > 0);
@@ -597,15 +596,6 @@ zarr::Zarr::allocate_writers_()
             }
         }
     }
-}
-
-void
-zarr::Zarr::clear_writers_()
-{
-//    for (auto& writer : writers_) {
-//        delete writer;
-//    }
-    writers_.clear();
 }
 
 void

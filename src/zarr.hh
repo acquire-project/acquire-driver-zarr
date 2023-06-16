@@ -121,7 +121,6 @@ struct Zarr final : StorageInterface
     void write_group_zattrs_json_() const;
 
     void allocate_writers_();
-    void clear_writers_();
 
     void start_threads_();
     void recover_threads_();
