@@ -67,7 +67,7 @@ const static uint32_t max_bytes_per_chunk = 16 << 20;
 const static auto expected_frames_per_chunk =
   (uint32_t)std::floor(max_bytes_per_chunk / (tile_width * tile_height));
 
-const static int16_t max_layers = 3;
+const static int16_t max_layers = -1;
 const static uint8_t downscale = 2;
 
 void
@@ -82,7 +82,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*radial.*"),
+                                SIZED("simulated.*random.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -118,7 +118,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
     // we may drop frames with lower exposure
-    props.video[0].camera.settings.exposure_time_us = 2e5;
+    props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = expected_frames_per_chunk;
 
     OK(acquire_configure(runtime, &props));
@@ -173,12 +173,19 @@ main()
     CHECK(fs::is_regular_file(group_zattrs_path));
     CHECK(fs::file_size(group_zattrs_path) > 0);
 
+    // check metadata
+    std::ifstream f(group_zattrs_path);
+    json group_zattrs = json::parse(f);
+
+    auto datasets = group_zattrs["multiscales"][0]["datasets"];
+//    ASSERT_EQ(int, "%d", max_layers, datasets.size());
+
     const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));
     CHECK(fs::file_size(zarray_path) > 0);
 
     // check metadata
-    std::ifstream f(zarray_path);
+    f = std::ifstream{ zarray_path };
     json zarray = json::parse(f);
 
     auto shape = zarray["shape"];
@@ -213,17 +220,9 @@ main()
     CHECK(fs::is_regular_file(chunk_file_path));
     ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
 
-    verify_layer(0);
-    verify_layer(1);
-    verify_layer(2);
-    verify_layer(3);
-    verify_layer(4);
-    verify_layer(5);
-    verify_layer(6);
-    verify_layer(7);
-    verify_layer(8);
-    verify_layer(9);
-    verify_layer(10);
+    for (auto i = 0; i < datasets.size(); ++i) {
+        verify_layer(i);
+    }
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);
