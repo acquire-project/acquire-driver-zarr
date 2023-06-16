@@ -610,24 +610,22 @@ zarr::Zarr::write_group_zattrs_json_() const
         };
     } else {
         for (const auto& [layer, _] : writers_) {
-            zgroup_attrs["multiscales"][layer]["datasets"] = {
+            zgroup_attrs["multiscales"][0]["datasets"].push_back({
+              { "path", std::to_string(layer) },
+              { "coordinateTransformations",
                 {
-                  { "path", std::to_string(layer) },
-                  { "coordinateTransformations",
-                    {
-                      {
-                        { "type", "scale" },
-                        { "scale",
-                          { 1,
-                            1,
-                            std::pow(scaler_->downscale(), layer) *
-                              pixel_scale_um_.y,
-                            std::pow(scaler_->downscale(), layer) *
-                              pixel_scale_um_.x } },
-                      },
-                    } },
-                },
-            };
+                  {
+                    { "type", "scale" },
+                    { "scale",
+                      { 1,
+                        1,
+                        std::pow(scaler_->downscale(), layer) *
+                          pixel_scale_um_.y,
+                        std::pow(scaler_->downscale(), layer) *
+                          pixel_scale_um_.x } },
+                  },
+                } },
+            });
         }
 
         zgroup_attrs["type"] = "local_mean";
@@ -713,8 +711,8 @@ zarr::Zarr::allocate_writers_()
                       bytes_per_sample_type(image_shape_.type));
                     writers_.at(layer).push_back(
                       std::make_shared<ChunkWriter>(encoder,
-                                                    image_shape_,
-                                                    tile_shape_,
+                                                    image_shape,
+                                                    tile_shape,
                                                     layer,
                                                     col,
                                                     row,
@@ -984,18 +982,14 @@ zarr::worker_thread(ThreadContext* ctx)
 
     while (true) {
         std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 10ms, [&] { return ctx->should_stop; });
+        ctx->cv.wait_for(lock, 5ms, [&] { return ctx->should_stop; });
 
         if (ctx->should_stop) {
             break;
         }
 
         if (auto job = ctx->zarr->pop_from_job_queue(); job.has_value()) {
-            bool ret = job.value()();
-            if (!ret) {
-                LOGE("Job failed.");
-            }
-//            CHECK(job.value()());
+            CHECK(job.value()());
         }
     }
 

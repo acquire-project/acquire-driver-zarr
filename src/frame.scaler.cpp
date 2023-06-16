@@ -108,15 +108,15 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
 
             zarr_->push_frame_to_writers(scale_layer);
         }
-    } catch (std::runtime_error& e) {
-        LOG("Failed to scale frame: %s", e.what());
-        return false;
+
+        return true;
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
     } catch (...) {
-        LOG("Failed to scale frame: unknown error");
-        return false;
+        LOGE("Exception: (unknown)");
     }
 
-    return true;
+    return false;
 }
 
 std::vector<Multiscale>

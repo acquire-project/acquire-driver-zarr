@@ -60,14 +60,14 @@ reporter(int is_error,
 const static uint32_t frame_width = 1920;
 const static uint32_t frame_height = 1080;
 
-const static uint32_t tile_width = frame_width / 2;
-const static uint32_t tile_height = frame_height / 2;
+const static uint32_t tile_width = frame_width / 6;
+const static uint32_t tile_height = frame_height / 6;
 
-const static uint32_t max_bytes_per_chunk = 32 << 20;
+const static uint32_t max_bytes_per_chunk = 16 << 20;
 const static auto expected_frames_per_chunk =
   (uint32_t)std::floor(max_bytes_per_chunk / (tile_width * tile_height));
 
-const static int16_t max_layers = -1;
+const static int16_t max_layers = 3;
 const static uint8_t downscale = 2;
 
 void
@@ -82,7 +82,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*empty.*"),
+                                SIZED("simulated.*radial.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -118,7 +118,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
     // we may drop frames with lower exposure
-    props.video[0].camera.settings.exposure_time_us = 1e4;
+    props.video[0].camera.settings.exposure_time_us = 2e5;
     props.video[0].max_frame_count = expected_frames_per_chunk;
 
     OK(acquire_configure(runtime, &props));
