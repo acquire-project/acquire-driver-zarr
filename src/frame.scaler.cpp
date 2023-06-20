@@ -39,8 +39,6 @@ pad(uint8_t* im_, int N, int w, int h) // FIXME (aliddell): make N meaningful
 {
     if (w % N == 0 && h % N == 0)
         return;
-
-
 }
 
 size_t
@@ -65,6 +63,13 @@ bytes_of_type(const enum SampleType type)
 } // ::<anonymous> namespace
 
 namespace acquire::sink::zarr {
+Multiscale::Multiscale(const ImageShape& image_shape,
+                       const TileShape& tile_shape)
+  : image{ image_shape }
+  , tile{ tile_shape }
+{
+}
+
 FrameScaler::FrameScaler(Zarr* zarr,
                          const ImageShape& image_shape,
                          const TileShape& tile_shape,
@@ -160,11 +165,11 @@ get_tile_shapes(const ImageShape& base_image_shape,
         im_shape.strides.planes = im_shape.strides.height * w;
 
         TileShape tile_shape = base_tile_shape;
-        if (tile_shape.dims.width > w)
-            tile_shape.dims.width = w;
+        if (tile_shape.width > w)
+            tile_shape.width = w;
 
-        if (tile_shape.dims.height > h)
-            tile_shape.dims.height = h;
+        if (tile_shape.height > h)
+            tile_shape.height = h;
 
         shapes.emplace_back(im_shape, tile_shape);
     }

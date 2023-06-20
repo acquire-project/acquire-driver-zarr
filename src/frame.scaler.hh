@@ -20,6 +20,8 @@ struct Multiscale
 {
     ImageShape image;
     TileShape tile;
+    Multiscale(const ImageShape& image_shape,
+               const TileShape& tile_shape);
 };
 
 struct FrameScaler final

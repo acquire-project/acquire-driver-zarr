@@ -396,7 +396,6 @@ zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
 
     for (auto& writer : writers_.at(frame->layer())) {
         job_queue_.emplace([&writer, frame]() {
-            std::scoped_lock writer_lock(writer->mutex());
             return writer->write_frame(*frame);
         });
     }
@@ -453,11 +452,9 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
     }
 
     tile_shape_ = {
-        .dims = {
-          .width = tile_width,
-          .height = tile_height,
-          .planes = tile_planes,
-        },
+        .width = tile_width,
+        .height = tile_height,
+        .planes = tile_planes,
     };
 }
 
@@ -536,8 +533,8 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
           {
             (uint64_t)frames_per_chunk,
             1,
-            ts.dims.height,
-            ts.dims.width,
+            ts.height,
+            ts.width,
           } },
         { "dtype", sample_type_to_dtype(is.type) },
         { "fill_value", 0 },
@@ -671,20 +668,20 @@ zarr::Zarr::allocate_writers_()
         auto& image_shape = multiscale.image;
         auto& tile_shape = multiscale.tile;
 
-        CHECK(tile_shape.dims.width > 0);
+        CHECK(tile_shape.width > 0);
         size_t img_px_x = image_shape.dims.channels * image_shape.dims.width;
         size_t tile_cols =
-          std::ceil((float)img_px_x / (float)tile_shape.dims.width);
+          std::ceil((float)img_px_x / (float)tile_shape.width);
 
-        CHECK(tile_shape.dims.height > 0);
-        size_t img_px_y = image_shape.dims.height;
-        size_t tile_rows =
-          std::ceil((float)img_px_y / (float)tile_shape.dims.height);
+    size_t img_px_y = image_shape_.dims.height;
+    CHECK(tile_shape_.height > 0);
+    size_t tile_rows =
+      std::ceil((float)img_px_y / (float)tile_shape_.height);
 
-        CHECK(tile_shape.dims.planes > 0);
-        size_t img_px_p = image_shape.dims.planes;
-        size_t tile_planes =
-          std::ceil((float)img_px_p / (float)tile_shape.dims.planes);
+    size_t img_px_p = image_shape_.dims.planes;
+    CHECK(tile_shape_.planes > 0);
+    size_t tile_planes =
+      std::ceil((float)img_px_p / (float)tile_shape_.planes);
 
         TRACE("Allocating %llu writers for layer %d",
               tile_cols * tile_rows * tile_planes,
@@ -928,8 +925,8 @@ zarr::get_bytes_per_tile(const ImageShape& image_shape,
                          const TileShape& tile_shape) noexcept
 {
     return zarr::bytes_per_sample_type(image_shape.type) *
-           image_shape.dims.channels * tile_shape.dims.height *
-           tile_shape.dims.width * tile_shape.dims.planes;
+           image_shape.dims.channels * tile_shape.height * tile_shape.width *
+           tile_shape.planes;
 }
 
 size_t
