@@ -44,8 +44,8 @@ bytes_of_type(const SampleType& type) noexcept
 size_t
 bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
 {
-    return bytes_of_type(image.type) * image.dims.channels * tile.dims.width *
-           tile.dims.height * tile.dims.planes;
+    return bytes_of_type(image.type) * image.dims.channels * tile.width *
+           tile.height * tile.planes;
 }
 } // ::{anonymous}
 
@@ -81,10 +81,10 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , current_chunk_{ 0 }
   , dimension_separator_{ dimension_separator }
   , base_dir_{ base_directory }
-  , current_file_{ nullptr }
-  , tile_col{ tile_col }
-  , tile_row{ tile_row }
-  , tile_plane{ tile_plane }
+  , current_file_{}
+  , tile_col_{ tile_col }
+  , tile_row_{ tile_row }
+  , tile_plane_{ tile_plane }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
 {
@@ -115,12 +115,14 @@ ChunkWriter::~ChunkWriter()
 bool
 ChunkWriter::write_frame(const TiledFrame& frame)
 {
+    std::scoped_lock lock(mutex_);
     const size_t bpt = ::bytes_per_tile(image_shape_, tile_shape_);
     if (buffer_.size() < bpt)
         buffer_.resize(bpt);
 
     uint8_t* data = buffer_.data();
-    size_t nbytes = frame.copy_tile(data, bpt, tile_col, tile_row, tile_plane);
+    size_t nbytes =
+      frame.copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
 
     nbytes = write(data, data + nbytes);
 
@@ -134,7 +136,7 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
     if (0 == bytes_in)
         return 0;
 
-    if (nullptr == current_file_)
+    if (!current_file_.has_value())
         open_chunk_file();
 
     size_t bytes_out = 0;
@@ -176,11 +178,11 @@ ChunkWriter::open_chunk_file()
              dimension_separator_,
              current_chunk_,
              dimension_separator_,
-             tile_plane,
+             tile_plane_,
              dimension_separator_,
-             tile_row,
+             tile_row_,
              dimension_separator_,
-             tile_col);
+             tile_col_);
 
     std::string path = (fs::path(base_dir_) / file_path).string();
     auto parent_path = fs::path(path).parent_path();
@@ -188,16 +190,16 @@ ChunkWriter::open_chunk_file()
     if (!fs::is_directory(parent_path))
         fs::create_directories(parent_path);
 
-    current_file_ = new file;
-    CHECK(file_create(current_file_, path.c_str(), path.size()));
+    current_file_ = file{};
+    CHECK(file_create(&current_file_.value(), path.c_str(), path.size()));
 
-    encoder_->set_file(current_file_);
+    encoder_->set_file(&current_file_.value());
 }
 
 void
 ChunkWriter::close_current_file()
 {
-    if (nullptr == current_file_)
+    if (!current_file_.has_value())
         return;
 
     const size_t tiles_written =
@@ -209,9 +211,8 @@ ChunkWriter::close_current_file()
 
     encoder_->flush();
 
-    file_close(current_file_);
-    delete current_file_;
-    current_file_ = nullptr;
+    file_close(&current_file_.value());
+    current_file_.reset();
 
     encoder_->set_file(nullptr);
 }
@@ -234,11 +235,5 @@ ChunkWriter::rollover()
     TRACE("Rolling over");
     close_current_file();
     ++current_chunk_;
-}
-
-std::mutex&
-ChunkWriter::mutex() noexcept
-{
-    return mutex_;
 }
 } // namespace acquire::sink::zarr

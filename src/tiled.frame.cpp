@@ -30,8 +30,8 @@ bytes_of_type(const SampleType& type)
 size_t
 bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
 {
-    return bytes_of_type(image.type) * image.dims.channels * tile.dims.width *
-           tile.dims.height * tile.dims.planes;
+    return bytes_of_type(image.type) * image.dims.channels * tile.width *
+           tile.height * tile.planes;
 }
 } // ::{anonymous}
 
@@ -56,25 +56,7 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
 
 TiledFrame::~TiledFrame()
 {
-    delete buf_;
-}
-
-size_t
-TiledFrame::bytes_of_image() const
-{
-    return bytes_of_image_;
-}
-
-uint64_t
-TiledFrame::frame_id() const
-{
-    return frame_id_;
-}
-
-uint8_t*
-TiledFrame::data() const
-{
-    return buf_;
+    delete[] buf_;
 }
 
 size_t
@@ -91,22 +73,18 @@ TiledFrame::copy_tile(uint8_t* tile,
     uint8_t* region = nullptr;
 
     const size_t bytes_per_row = bytes_of_type(image_shape_.type) *
-                                 image_shape_.dims.channels *
-                                 tile_shape_.dims.width;
+                                 image_shape_.dims.channels * tile_shape_.width;
 
     size_t offset = 0;
     uint32_t frame_col =
-      tile_col * tile_shape_.dims.width * image_shape_.dims.channels;
-    for (auto p = 0; p < tile_shape_.dims.planes; ++p) {
-        size_t frame_plane = tile_plane * tile_shape_.dims.planes + p;
-        for (auto r = 0; r < tile_shape_.dims.height; ++r) {
-            uint32_t frame_row = tile_row * tile_shape_.dims.height + r;
-            uint32_t frame_offset = frame_col +
-                                    frame_row * image_shape_.strides.height +
-                                    frame_plane * image_shape_.strides.planes;
+      tile_col * tile_shape_.width * image_shape_.dims.channels;
+    for (auto p = 0; p < tile_shape_.planes; ++p) {
+        size_t frame_plane = tile_plane * tile_shape_.planes + p;
+        for (auto r = 0; r < tile_shape_.height; ++r) {
+            uint32_t frame_row = tile_row * tile_shape_.height + r;
 
-            size_t nbytes_row = get_contiguous_region(
-              &region, frame_col, frame_row, frame_plane, frame_offset);
+            size_t nbytes_row =
+              get_contiguous_region(&region, frame_col, frame_row, frame_plane);
 
             // copy frame data into the tile buffer
             if (0 < nbytes_row) {
@@ -125,8 +103,7 @@ size_t
 TiledFrame::get_contiguous_region(uint8_t** region,
                                   size_t frame_col,
                                   size_t frame_row,
-                                  size_t frame_plane,
-                                  size_t frame_offset) const
+                                  size_t frame_plane) const
 {
     size_t nbytes = 0;
 
@@ -134,9 +111,12 @@ TiledFrame::get_contiguous_region(uint8_t** region,
         frame_plane >= image_shape_.dims.planes) {
         *region = nullptr;
     } else {
+        size_t frame_offset = frame_col +
+                              frame_row * image_shape_.strides.height +
+                              frame_plane * image_shape_.strides.planes;
         // widths are in pixels
         size_t img_width = image_shape_.dims.width;
-        size_t tile_width = tile_shape_.dims.width;
+        size_t tile_width = tile_shape_.width;
         size_t region_width =
           std::min(frame_col + tile_width, img_width) - frame_col;
         nbytes = region_width * bytes_of_type(image_shape_.type);
@@ -146,46 +126,3 @@ TiledFrame::get_contiguous_region(uint8_t** region,
     return nbytes;
 }
 } // acquire::sink::zarr
-
-#ifndef NO_UNIT_TESTS
-int
-unit_test__tiled_frame_size()
-{
-    VideoFrame vf
-    {
-        .bytes_of_frame = 2 * 64 * 48 + sizeof(vf),
-        .shape = {
-            .dims = {
-              .channels = 1,
-              .width = 64,
-              .height = 48,
-              .planes = 1,
-            },
-            .strides = {
-              .channels = 1,
-              .width = 1,
-              .height = 48,
-              .planes = 64 * 48
-            },
-            .type = SampleType_u16,
-        },
-          .frame_id = 0,
-          .hardware_frame_id = 0,
-          .timestamps = {
-            .hardware = 0,
-            .acq_thread = 0,
-        },
-    };
-    acquire::sink::zarr::TiledFrame tf(&vf, {}, {});
-
-    try {
-        CHECK(2 * 48 * 64 == tf.bytes_of_image());
-        return 1;
-    } catch (const std::exception& e) {
-        LOGE("Received std::exception: %s", e.what());
-    } catch (...) {
-        LOGE("Received exception (unknown)");
-    }
-    return 0;
-}
-#endif

@@ -1,6 +1,7 @@
 #ifndef H_ACQUIRE_ZARR_CHUNK_WRITER_V0
 #define H_ACQUIRE_ZARR_CHUNK_WRITER_V0
 
+#include <optional>
 #include <vector>
 
 #include "platform.h"
@@ -38,14 +39,12 @@ struct ChunkWriter final
 
     [[nodiscard]] bool write_frame(const TiledFrame& frame);
 
-    std::mutex& mutex() noexcept;
-
-    const uint32_t tile_col;
-    const uint32_t tile_row;
-    const uint32_t tile_plane;
-
   private:
-    BaseEncoder* const encoder_{};
+    BaseEncoder* const encoder_;
+
+    const uint32_t tile_col_;
+    const uint32_t tile_row_;
+    const uint32_t tile_plane_;
 
     size_t bytes_per_chunk_;
     size_t tiles_per_chunk_;
@@ -54,7 +53,7 @@ struct ChunkWriter final
     std::string base_dir_;
     int current_chunk_;
     char dimension_separator_;
-    struct file* current_file_;
+    std::optional<struct file> current_file_;
 
     std::optional<BloscCompressor> compressor_;
 
