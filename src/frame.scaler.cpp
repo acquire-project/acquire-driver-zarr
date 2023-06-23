@@ -14,8 +14,9 @@ pad(uint8_t* im_, size_t bytes_of_image, int w, int h)
         return;
 
     int w_pad = w + (w % N), h_pad = h + (h % N);
+    LOG("padding: %d => %d, %d => %d", w, w_pad, h, h_pad);
     size_t bytes_pad = w_pad * h_pad;
-    CHECK(bytes_pad <= bytes_of_image); // TODO: needs a guarantee
+    CHECK(bytes_pad <= bytes_of_image);
 
     auto buf = new uint8_t[bytes_pad];
     memset(buf, 0, bytes_pad);
@@ -31,31 +32,44 @@ pad(uint8_t* im_, size_t bytes_of_image, int w, int h)
 }
 
 void
-bin(uint8_t* im_, size_t bytes_of_image, int w, int h)
+bin(uint8_t* const im_, size_t bytes_of_image, int w, int h)
 {
-    const uint8_t* end = im_ + w * h;
+    const int N = 2;
+    const auto factor = 1.f / (float)N;
+    int w_pad = w + (w % N), h_pad = h + (h % N);
+
+    const uint8_t* end = im_ + w_pad * h_pad;
 
     // horizontal
-    for (uint8_t* row = im_; row < end; row += w) {
-        const uint8_t* row_end = im_ + w;
-        for (uint8_t* p = row; p < row_end; p += 2) {
-            p[0] = (uint8_t)(0.5f * p[0] + 0.5f * p[1]);
+    for (uint8_t* row = im_; row < end; row += w_pad) {
+        const uint8_t* row_end = row + w_pad;
+        for (uint8_t* p = row; p < row_end; p += N) {
+            // p[0] = (uint8_t)(0.5f * (float)p[0] + 0.5f * (float)p[1]);
+            float sum = 0.f;
+            for (int i = 0; i < N; ++i) {
+                sum += factor * (float)p[i];
+            }
+            p[0] = (uint8_t)sum;
         }
-        for (uint8_t *p = row, *s = row; s < row_end; ++p, s += 2) {
+        for (uint8_t *p = row, *s = row; s < row_end; ++p, s += N) {
             *p = *s;
         }
     }
 
     // vertical
-    for (uint8_t* row = im_ + w; row < end; row += 2 * w) {
-        const uint8_t* row_end = im_ + 2 * w;
+    for (uint8_t* row = im_ + (N - 1) * w_pad; row < end; row += N * w_pad) {
+        const uint8_t* row_end = row + N * w_pad;
         for (uint8_t* p = row; p < row_end; ++p) {
-            p[-w] = (uint8_t)(0.5f * p[-w] + 0.5f * p[0]);
+            // p[-w_pad] = (uint8_t)(0.5f * p[-w_pad] + 0.5f * p[0]);
+            float sum = 0.f;
+            for (int i = 0; i < N; ++i) {
+                sum += factor * (float)p[-(w_pad * i)];
+            }
         }
     }
     for (uint8_t *src_row = im_, *dst_row = im_; src_row < end;
-         src_row += 2 * w, dst_row += w) {
-        memcpy(dst_row, src_row, w);
+         src_row += N * w_pad, dst_row += w_pad) {
+        memcpy(dst_row, src_row, w_pad);
     }
 }
 
@@ -79,9 +93,24 @@ bytes_of_type(const enum SampleType type)
     return table[type];
 }
 
-size_t next_pow2(size_t n)
+size_t
+next_pow2(size_t n)
 {
     return n == 0 ? 0 : (size_t)std::pow(2, std::ceil(std::log2((double)n)));
+}
+
+size_t
+get_padded_buffer_size_bytes(const ImageShape& shape)
+{
+    auto width = shape.dims.width;
+    auto height = shape.dims.width;
+    auto planes = shape.dims.planes;
+
+    width += (width % 2);
+    height += (height % 2);
+    //    planes += (planes % 2);
+
+    return width * height * planes * bytes_of_type(shape.type);
 }
 } // ::<anonymous> namespace
 
@@ -128,16 +157,20 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
         std::vector<Multiscale> multiscales =
           get_tile_shapes(image_shape_, tile_shape_, max_layer_, downscale_);
 
-        const auto width = multiscales[0].image.dims.width;
-        const auto height = multiscales[0].image.dims.width;
+        size_t bytes_padded =
+          get_padded_buffer_size_bytes(multiscales[0].image);
 
-        std::vector<uint8_t> im(frame->bytes_of_image());
+        std::vector<uint8_t> im(bytes_padded);
         memcpy(im.data(), frame->data(), frame->bytes_of_image());
 
         for (auto layer = 1; layer < multiscales.size(); ++layer) {
             const ImageShape& image_shape = multiscales[layer].image;
             const TileShape& tile_shape = multiscales[layer].tile;
 
+            pad(im.data(),
+                im.size(),
+                image_shape.dims.width,
+                image_shape.dims.height);
             bin(im.data(),
                 im.size(),
                 image_shape.dims.width,
