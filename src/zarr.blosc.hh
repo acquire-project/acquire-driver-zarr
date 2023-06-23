@@ -9,22 +9,22 @@
 
 namespace acquire::sink::zarr {
 
-struct BloscCompressor
+struct CompressionParams
 {
     static constexpr char id_[] = "blosc";
     std::string codec_id_;
     int clevel_;
     int shuffle_;
 
-    BloscCompressor();
-    BloscCompressor(const std::string& codec_id, int clevel, int shuffle);
+    CompressionParams();
+    CompressionParams(const std::string& codec_id, int clevel, int shuffle);
 };
 
 void
-to_json(nlohmann::json&, const BloscCompressor&);
+to_json(nlohmann::json&, const CompressionParams&);
 
 void
-from_json(const nlohmann::json&, BloscCompressor&);
+from_json(const nlohmann::json&, CompressionParams&);
 
 enum class BloscCodecId
 {
@@ -53,13 +53,13 @@ compression_codec_as_string<BloscCodecId::Lz4>()
 struct BloscEncoder final : public BaseEncoder
 {
   public:
-    explicit BloscEncoder(const BloscCompressor& compressor);
+    explicit BloscEncoder(const CompressionParams& compressor);
     ~BloscEncoder() noexcept override;
 
   private:
     size_t flush_impl() override;
 
-    BloscCompressor compressor_;
+    CompressionParams compressor_;
 };
 } // namespace acquire::sink::zarr
 

@@ -61,7 +61,7 @@ struct ChunkWriter final
     char dimension_separator_;
     std::optional<struct file> current_file_;
 
-    std::optional<BloscCompressor> compressor_;
+    std::optional<CompressionParams> compressor_;
 
     std::mutex mutex_;
     ImageShape image_shape_;

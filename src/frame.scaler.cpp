@@ -161,7 +161,7 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
           get_padded_buffer_size_bytes(multiscales[0].image);
 
         std::vector<uint8_t> im(bytes_padded);
-        memcpy(im.data(), frame->data(), frame->bytes_of_image());
+        memcpy(im.data(), frame->data().data(), frame->bytes_of_image());
 
         for (auto layer = 1; layer < multiscales.size(); ++layer) {
             const ImageShape& image_shape = multiscales[layer].image;

@@ -32,13 +32,13 @@ class TiledFrame
                const ImageShape& image_shape,
                const TileShape& tile_shape);
     TiledFrame(const TiledFrame&) = delete;
-    ~TiledFrame();
+    ~TiledFrame() = default;
 
     size_t bytes_of_image() const;
 
     uint64_t frame_id() const;
     size_t layer() const;
-    uint8_t* data() const;
+    const std::vector<uint8_t>& data() const;
 
     /// @brief Copy the tile indexed by @p tile_col, @p tile_row, and
     ///        @p tile_plane into the buffer at @p tile.
@@ -56,12 +56,10 @@ class TiledFrame
                                    uint32_t tile_plane) const;
 
   private:
-    uint8_t* buf_;
-
     size_t bytes_of_image_;
     uint64_t frame_id_;
     size_t layer_;
-
+    std::vector<uint8_t> buf_;
     ImageShape image_shape_;
     TileShape tile_shape_;
 

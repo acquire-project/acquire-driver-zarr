@@ -204,7 +204,7 @@ zarr::Zarr::Zarr()
     start_threads_();
 }
 
-zarr::Zarr::Zarr(BloscCompressor&& compressor)
+zarr::Zarr::Zarr(CompressionParams&& compression_params)
   : dimension_separator_{ '/' }
   , frame_count_{ 0 }
   , pixel_scale_um_{ 1, 1 }
@@ -215,7 +215,7 @@ zarr::Zarr::Zarr(BloscCompressor&& compressor)
   , scaler_{ nullptr }
   , thread_pool_(std::thread::hardware_concurrency())
 {
-    compressor_ = std::move(compressor);
+    compression_params_ = std::move(compression_params);
     start_threads_();
 }
 
@@ -543,8 +543,8 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
         { "dimension_separator", std::string(1, dimension_separator_) },
     };
 
-    if (compressor_.has_value())
-        zarray_attrs["compressor"] = compressor_.value();
+    if (compression_params_.has_value())
+        zarray_attrs["compressor"] = compression_params_.value();
     else
         zarray_attrs["compressor"] = nullptr;
 
@@ -688,7 +688,7 @@ zarr::Zarr::allocate_writers_()
               layer);
 
         size_t buf_size =
-          compressor_.has_value()
+          compression_params_.has_value()
             ? get_bytes_per_chunk(image_shape, tile_shape, max_bytes_per_chunk_)
             : get_bytes_per_tile(image_shape, tile_shape);
 
@@ -697,8 +697,8 @@ zarr::Zarr::allocate_writers_()
             for (auto row = 0; row < tile_rows; ++row) {
                 for (auto col = 0; col < tile_cols; ++col) {
                     BaseEncoder* encoder;
-                    if (compressor_.has_value()) {
-                        CHECK(encoder = new BloscEncoder(compressor_.value()));
+                    if (compression_params_.has_value()) {
+                        CHECK(encoder = new BloscEncoder(compression_params_.value()));
                     } else {
                         CHECK(encoder = new RawEncoder());
                     }

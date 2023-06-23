@@ -50,15 +50,15 @@ bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
 } // ::{anonymous}
 
 namespace acquire::sink::zarr {
-BloscCompressor::BloscCompressor()
+CompressionParams::CompressionParams()
   : clevel_{ 1 }
   , shuffle_{ 1 }
 {
 }
 
-BloscCompressor::BloscCompressor(const std::string& codec_id,
-                                 int clevel,
-                                 int shuffle)
+CompressionParams::CompressionParams(const std::string& codec_id,
+                                     int clevel,
+                                     int shuffle)
   : codec_id_{ codec_id }
   , clevel_{ clevel }
   , shuffle_{ shuffle }
@@ -158,6 +158,7 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
 
     // we should never see this, but if the number of bytes brings us past
     // the chunk boundary, we need to rollover
+    CHECK(bytes_per_chunk_ > 0);
     const size_t bytes_of_this_chunk = bytes_written_ % bytes_per_chunk_;
     if (bytes_in + bytes_of_this_chunk > bytes_per_chunk_) {
         const size_t bytes_remaining = bytes_per_chunk_ - bytes_of_this_chunk;
@@ -216,8 +217,9 @@ ChunkWriter::close_current_file()
     if (!current_file_.has_value())
         return;
 
-    const size_t tiles_written =
-      bytes_written_ / bytes_per_tile(image_shape_, tile_shape_);
+    const size_t bpt = bytes_per_tile(image_shape_, tile_shape_);
+    CHECK(bpt > 0);
+    const size_t tiles_written = bytes_written_ / bpt;
 
     if (tiles_written > tiles_per_chunk_ &&
         tiles_written % tiles_per_chunk_ > 0)
@@ -234,6 +236,7 @@ ChunkWriter::close_current_file()
 void
 ChunkWriter::finalize_chunk()
 {
+    CHECK(bytes_per_chunk_ > 0);
     size_t bytes_remaining =
       bytes_per_chunk_ - (bytes_written_ % bytes_per_chunk_);
     std::vector<uint8_t> zeros(bytes_remaining);
