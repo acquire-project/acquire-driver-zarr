@@ -39,8 +39,7 @@ else()
         )
 
         add_test(NAME test-${tgt} COMMAND ${tgt})
-        set_tests_properties(test-${tgt} PROPERTIES LABELS anyplatform)
-        set_tests_properties(test-${tgt} PROPERTIES LABELS zarr)
+        set_tests_properties(test-${tgt} PROPERTIES LABELS "anyplatform;zarr")
     endforeach()
 
     #
