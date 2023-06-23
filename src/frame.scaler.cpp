@@ -5,8 +5,33 @@
 #include <thread>
 
 namespace {
+
 void
-bin(uint8_t* im_, int N, int w, int h) // FIXME (aliddell): make N meaningful
+pad(uint8_t* im_, size_t bytes_of_image, int w, int h)
+{
+    const int N = 2;
+    if (w % N == 0 && h % N == 0)
+        return;
+
+    int w_pad = w + (w % N), h_pad = h + (h % N);
+    size_t bytes_pad = w_pad * h_pad;
+    CHECK(bytes_pad <= bytes_of_image); // TODO: needs a guarantee
+
+    auto buf = new uint8_t[bytes_pad];
+    memset(buf, 0, bytes_pad);
+
+    size_t offset = 0;
+    for (auto i = 0; i < h; ++i) {
+        memcpy(buf + offset, im_ + i * w, w);
+        offset += w_pad;
+    }
+
+    memcpy(im_, buf, bytes_pad);
+    delete[] buf;
+}
+
+void
+bin(uint8_t* im_, size_t bytes_of_image, int w, int h)
 {
     const uint8_t* end = im_ + w * h;
 
@@ -34,13 +59,6 @@ bin(uint8_t* im_, int N, int w, int h) // FIXME (aliddell): make N meaningful
     }
 }
 
-void
-pad(uint8_t* im_, int N, int w, int h) // FIXME (aliddell): make N meaningful
-{
-    if (w % N == 0 && h % N == 0)
-        return;
-}
-
 size_t
 bytes_of_type(const enum SampleType type)
 {
@@ -59,6 +77,11 @@ bytes_of_type(const enum SampleType type)
     XXX(SampleType_u14, 2);
 #undef XXX
     return table[type];
+}
+
+size_t next_pow2(size_t n)
+{
+    return n == 0 ? 0 : (size_t)std::pow(2, std::ceil(std::log2((double)n)));
 }
 } // ::<anonymous> namespace
 
@@ -102,18 +125,21 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
     try {
         zarr_->push_frame_to_writers(frame);
 
-        std::vector<uint8_t> im(frame->bytes_of_image());
-        memcpy(im.data(), frame->data(), frame->bytes_of_image());
-
         std::vector<Multiscale> multiscales =
           get_tile_shapes(image_shape_, tile_shape_, max_layer_, downscale_);
+
+        const auto width = multiscales[0].image.dims.width;
+        const auto height = multiscales[0].image.dims.width;
+
+        std::vector<uint8_t> im(frame->bytes_of_image());
+        memcpy(im.data(), frame->data(), frame->bytes_of_image());
 
         for (auto layer = 1; layer < multiscales.size(); ++layer) {
             const ImageShape& image_shape = multiscales[layer].image;
             const TileShape& tile_shape = multiscales[layer].tile;
 
             bin(im.data(),
-                downscale_,
+                im.size(),
                 image_shape.dims.width,
                 image_shape.dims.height);
 
