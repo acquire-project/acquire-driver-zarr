@@ -37,7 +37,7 @@ struct ThreadContext
 struct ThreadJob
 {
     std::shared_ptr<TiledFrame> frame;
-    std::function<bool(std::shared_ptr<TiledFrame>)> f;
+    std::function<bool(std::shared_ptr<TiledFrame>)> process_frame;
 };
 
 // StorageInterface
