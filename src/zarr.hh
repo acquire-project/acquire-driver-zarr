@@ -34,12 +34,6 @@ struct ThreadContext
     bool should_stop;
 };
 
-struct ThreadJob
-{
-    std::shared_ptr<TiledFrame> frame;
-    std::function<bool(std::shared_ptr<TiledFrame>)> process_frame;
-};
-
 // StorageInterface
 
 struct StorageInterface : public Storage
@@ -71,7 +65,7 @@ struct Zarr final : StorageInterface
     using JobT = std::function<bool()>;
 
     Zarr();
-    explicit Zarr(BloscCompressor&& compressor);
+    explicit Zarr(CompressionParams&& compression_params);
     ~Zarr() override;
 
     void set(const StorageProperties* props) override;
@@ -94,7 +88,7 @@ struct Zarr final : StorageInterface
 
     // static - set on construction
     char dimension_separator_;
-    std::optional<BloscCompressor> compressor_;
+    std::optional<CompressionParams> compression_params_;
     std::vector<ThreadContext> thread_pool_;
 
     // changes on set()

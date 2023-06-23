@@ -39,24 +39,20 @@ namespace acquire::sink::zarr {
 TiledFrame::TiledFrame(const VideoFrame* frame,
                        const ImageShape& image_shape,
                        const TileShape& tile_shape)
-  : buf_{ nullptr }
-  , bytes_of_image_{ 0 }
+  : bytes_of_image_{ 0 }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
 {
     CHECK(frame);
-    bytes_of_image_ = frame->bytes_of_frame - sizeof(*frame);
-
     CHECK(frame->data);
-    CHECK(buf_ = new uint8_t[bytes_of_image_]);
-    memcpy(buf_, frame->data, bytes_of_image_);
+
+    bytes_of_image_ = frame->bytes_of_frame - sizeof(*frame);
+    CHECK(bytes_of_image_ > 0);
+
+    buf_.resize(bytes_of_image_);
+    memcpy(buf_.data(), frame->data, bytes_of_image_);
 
     frame_id_ = frame->frame_id;
-}
-
-TiledFrame::~TiledFrame()
-{
-    delete[] buf_;
 }
 
 size_t
@@ -107,6 +103,8 @@ TiledFrame::get_contiguous_region(uint8_t** region,
 {
     size_t nbytes = 0;
 
+    auto* data = const_cast<uint8_t*>(buf_.data());
+
     if (frame_row >= image_shape_.dims.height ||
         frame_plane >= image_shape_.dims.planes) {
         *region = nullptr;
@@ -120,7 +118,7 @@ TiledFrame::get_contiguous_region(uint8_t** region,
         size_t region_width =
           std::min(frame_col + tile_width, img_width) - frame_col;
         nbytes = region_width * bytes_of_type(image_shape_.type);
-        *region = buf_ + frame_offset;
+        *region = data + frame_offset;
     }
 
     return nbytes;

@@ -15,9 +15,9 @@ struct Storage*
 compressed_zarr_init()
 {
     try {
-        zarr::BloscCompressor compressor(
+        zarr::CompressionParams params(
           zarr::compression_codec_as_string<CodecId>(), 1, 1);
-        return new zarr::Zarr(std::move(compressor));
+        return new zarr::Zarr(std::move(params));
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
     } catch (...) {
@@ -32,7 +32,7 @@ compressed_zarr_init()
 //
 
 void
-zarr::to_json(json& j, const zarr::BloscCompressor& bc)
+zarr::to_json(json& j, const zarr::CompressionParams& bc)
 {
     j = json{ { "id", std::string(bc.id_) },
               { "cname", bc.codec_id_ },
@@ -41,14 +41,14 @@ zarr::to_json(json& j, const zarr::BloscCompressor& bc)
 }
 
 void
-zarr::from_json(const json& j, zarr::BloscCompressor& bc)
+zarr::from_json(const json& j, zarr::CompressionParams& bc)
 {
     j.at("cname").get_to(bc.codec_id_);
     j.at("clevel").get_to(bc.clevel_);
     j.at("shuffle").get_to(bc.shuffle_);
 }
 
-zarr::BloscEncoder::BloscEncoder(const BloscCompressor& compressor)
+zarr::BloscEncoder::BloscEncoder(const CompressionParams& compressor)
   : compressor_{ compressor }
 {
 }
