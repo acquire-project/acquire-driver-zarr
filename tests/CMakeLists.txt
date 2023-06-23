@@ -14,10 +14,13 @@ else()
     #
     set(tests
         list-devices
-        write-zarr-with-compression-and-rollover
+        write-zarr-compressed-with-chunking
+        write-zarr-compressed-with-chunking-and-rollover
+        write-zarr-raw-with-chunking
+        write-zarr-raw-with-chunking-and-rollover
+        write-zarr-raw-with-ragged-tiling
         write-zarr-with-defaults
         write-zarr-with-lz4-compression
-        write-zarr-with-rollover
         write-zarr-with-zstd-compression
     )
 
@@ -36,6 +39,7 @@ else()
         )
 
         add_test(NAME test-${tgt} COMMAND ${tgt})
+        set_tests_properties(test-${tgt} PROPERTIES LABELS "anyplatform;zarr")
     endforeach()
 
     #

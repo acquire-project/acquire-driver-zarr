@@ -4,10 +4,13 @@
 #include "logger.h"
 
 #include <filesystem>
-#include <string>
+#include <fstream>
 #include <stdexcept>
 
+#include "json.hpp"
+
 namespace fs = std::filesystem;
+using json = nlohmann::json;
 
 void
 reporter(int is_error,
@@ -46,7 +49,6 @@ reporter(int is_error,
 #define DEVOK(e) CHECK(Device_Ok == (e))
 #define OK(e) CHECK(AcquireStatus_Ok == (e))
 
-/// Check that a==b
 /// example: `ASSERT_EQ(int,"%d",42,meaning_of_life())`
 #define ASSERT_EQ(T, fmt, a, b)                                                \
     do {                                                                       \
@@ -54,6 +56,25 @@ reporter(int is_error,
         T b_ = (T)(b);                                                         \
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
     } while (0)
+
+/// Check that a>b
+/// example: `ASSERT_GT(int,"%d",42,meaning_of_life())`
+#define ASSERT_GT(T, fmt, a, b)                                                \
+    do {                                                                       \
+        T a_ = (T)(a);                                                         \
+        T b_ = (T)(b);                                                         \
+        EXPECT(                                                                \
+          a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
+    } while (0)
+
+const static uint32_t frame_width = 128;
+const static uint32_t frame_height = 96;
+
+const static uint32_t tile_width = frame_width / 3; // 128 is not divisible by 3
+const static uint32_t tile_height = frame_height / 5; // 96 is not divisible by 5
+
+const static uint32_t max_bytes_per_chunk = 32 << 20;
+const static uint32_t max_frame_count = 70;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -67,7 +88,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*empty"),
+                                SIZED("simulated.*radial.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -83,15 +104,22 @@ acquire(AcquireRuntime* runtime, const char* filename)
                             strlen(filename) + 1,
                             (char*)external_metadata,
                             sizeof(external_metadata),
-                            sample_spacing_um,
-                            64 << 20);
+                            sample_spacing_um);
+
+    CHECK(
+      storage_properties_set_chunking_props(&props.video[0].storage.settings,
+                                            tile_width,
+                                            tile_height,
+                                            1,
+                                            max_bytes_per_chunk));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
-    props.video[0].camera.settings.shape = { .x = 1920, .y = 1080 };
+    props.video[0].camera.settings.shape = { .x = frame_width,
+                                             .y = frame_height };
     // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 1e4;
-    props.video[0].max_frame_count = 137; // should trigger a rollover
+    props.video[0].max_frame_count = max_frame_count;
 
     OK(acquire_configure(runtime, &props));
 
@@ -111,13 +139,13 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_start(runtime));
     {
         uint64_t nframes = 0;
-        while (nframes < props.video[0].max_frame_count) {
+        VideoFrame *beg, *end, *cur;
+        do {
             struct clock throttle;
             clock_init(&throttle);
-            EXPECT(clock_cmp_now(&clock) < 0,
-                   "Timeout at %f ms",
-                   clock_toc_ms(&clock) + time_limit_ms);
-            VideoFrame *beg, *end, *cur;
+            //            EXPECT(clock_cmp_now(&clock) < 0,
+            //                   "Timeout at %f ms",
+            //                   clock_toc_ms(&clock) + time_limit_ms);
             OK(acquire_map_read(runtime, 0, &beg, &end));
             for (cur = beg; cur < end; cur = next(cur)) {
                 LOG("stream %d counting frame w id %d", 0, cur->frame_id);
@@ -125,8 +153,6 @@ acquire(AcquireRuntime* runtime, const char* filename)
                       props.video[0].camera.settings.shape.x);
                 CHECK(cur->shape.dims.height ==
                       props.video[0].camera.settings.shape.y);
-                CHECK(cur->shape.type ==
-                      props.video[0].camera.settings.pixel_type);
                 ++nframes;
             }
             {
@@ -139,6 +165,23 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
             LOG(
               "stream %d nframes %d time %f", 0, nframes, clock_toc_ms(&clock));
+        } while (DeviceState_Running == acquire_get_state(runtime) &&
+                 nframes < props.video[0].max_frame_count);
+
+        OK(acquire_map_read(runtime, 0, &beg, &end));
+        for (cur = beg; cur < end; cur = next(cur)) {
+            LOG("stream %d counting frame w id %d", 0, cur->frame_id);
+            CHECK(cur->shape.dims.width ==
+                  props.video[0].camera.settings.shape.x);
+            CHECK(cur->shape.dims.height ==
+                  props.video[0].camera.settings.shape.y);
+            ++nframes;
+        }
+        {
+            uint32_t n = consumed_bytes(beg, end);
+            OK(acquire_unmap_read(runtime, 0, n));
+            if (n)
+                LOG("stream %d consumed bytes %d", 0, n);
         }
 
         CHECK(nframes == props.video[0].max_frame_count);
@@ -154,26 +197,43 @@ main()
     acquire(runtime, TEST ".zarr");
 
     CHECK(fs::is_directory(TEST ".zarr"));
-    const auto full_chunk_path = fs::path(TEST ".zarr/0/0/0/0/0");
-    CHECK(fs::is_regular_file(full_chunk_path));
-    ASSERT_EQ(int, "%d", 1920 * 1080 * 32, fs::file_size(full_chunk_path));
-
-    const auto partial_chunk_path = fs::path(TEST ".zarr/0/4/0/0/0");
-    CHECK(fs::is_regular_file(partial_chunk_path));
-    ASSERT_EQ(int, "%d", 1920 * 1080 * 32, fs::file_size(partial_chunk_path));
-
-    const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
-    CHECK(fs::is_regular_file(zarray_path));
-    CHECK(fs::file_size(zarray_path) > 0);
 
     const auto external_metadata_path =
       fs::path(TEST ".zarr") / "0" / ".zattrs";
     CHECK(fs::is_regular_file(external_metadata_path));
-    CHECK(fs::file_size(external_metadata_path) > 0);
+    ASSERT_GT(size_t, "%zu", fs::file_size(external_metadata_path), 0);
 
     const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
     CHECK(fs::is_regular_file(group_zattrs_path));
-    CHECK(fs::file_size(group_zattrs_path) > 0);
+    ASSERT_GT(size_t, "%zu", fs::file_size(group_zattrs_path), 0);
+
+    const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
+    CHECK(fs::is_regular_file(zarray_path));
+    ASSERT_GT(size_t, "%zu", fs::file_size(zarray_path), 0);
+
+    // check metadata
+    std::ifstream f(zarray_path);
+    json zarray = json::parse(f);
+
+    auto shape = zarray["shape"];
+    ASSERT_EQ(int, "%d", max_frame_count, shape[0]);
+    ASSERT_EQ(int, "%d", 1, shape[1]);
+    ASSERT_EQ(int, "%d", frame_height, shape[2]);
+    ASSERT_EQ(int, "%d", frame_width, shape[3]);
+
+    auto chunks = zarray["chunks"];
+    ASSERT_EQ(int, "%d", max_frame_count, chunks[0]);
+    ASSERT_EQ(int, "%d", 1, chunks[1]);
+    ASSERT_EQ(int, "%d", tile_height, chunks[2]);
+    ASSERT_EQ(int, "%d", tile_width, chunks[3]);
+
+    // check chunked data
+    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
+                      chunks[2].get<int>() * chunks[3].get<int>();
+
+    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);

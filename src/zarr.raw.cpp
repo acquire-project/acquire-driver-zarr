@@ -1,41 +1,24 @@
 #include "zarr.raw.hh"
-#include "logger.h"
 
-#include <algorithm>
-
-namespace zarr = acquire::sink::zarr;
-
-zarr::RawFile::RawFile(const std::string& filename)
-  : last_offset_(0)
-  , file_{ 0 }
+namespace acquire::sink::zarr {
+RawEncoder::RawEncoder()
+  : file_offset_{ 0 }
 {
-    CHECK(file_create(&file_, filename.c_str(), filename.length()));
 }
 
-zarr::RawFile::~RawFile()
+void
+  RawEncoder::set_file(struct file* file_handle)
 {
-    file_close(&file_);
+    BaseEncoder::set_file(file_handle);
+    file_offset_ = 0;
 }
 
 size_t
-zarr::RawFile::write(const uint8_t* beg, const uint8_t* end)
+RawEncoder::flush_impl()
 {
-    if (end > beg) {
-        CHECK(file_write(&file_, last_offset_, beg, end));
-        last_offset_ += (end - beg);
-    }
-    return (end - beg);
-}
+    CHECK(file_write(file_, file_offset_, buf_.data(), buf_.data() + cursor_));
+    file_offset_ += cursor_;
 
-size_t
-zarr::RawFile::flush()
-{
-    last_offset_ = 0;
-    return 0;
+    return cursor_;
 }
-
-std::string
-acquire::sink::zarr::RawFile::to_json() const
-{
-    return "null";
-}
+} // namespace acquire::sink::zarr

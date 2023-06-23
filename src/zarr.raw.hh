@@ -1,37 +1,25 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_RAW_V0
-#define H_ACQUIRE_STORAGE_ZARR_RAW_V0
+#ifndef ACQUIRE_STORAGE_ZARR_RAW_HH
+#define ACQUIRE_STORAGE_ZARR_RAW_HH
 
 #ifdef __cplusplus
 
-#include "zarr.codec.hh"
-#include <vector>
-#include <string>
-#include <platform.h>
+#include "zarr.encoder.hh"
 
 namespace acquire::sink::zarr {
 
-/// A wrapper around `struct file` that closes on destruct.
-/// Implements Writer
-struct RawFile final
+struct RawEncoder final : public BaseEncoder
 {
-    explicit RawFile(const std::string& filename);
-    ~RawFile();
+  public:
+    RawEncoder();
 
-    size_t write(const uint8_t* beg, const uint8_t* end);
-    size_t flush();
-    std::string to_json() const;
-
-    inline void set_bytes_per_pixel(size_t bpp) const {}
-
-    inline const struct file& inner() const { return file_; }
+    void set_file(struct file* file_handle) override;
 
   private:
-    RawFile() = delete;
-    size_t last_offset_;
-    struct file file_;
+    size_t file_offset_;
+
+    size_t flush_impl() override;
 };
+} // namespace acquire::sink::zarr
 
-} // end namespace acquire::storage:zarr
-
-#endif //__cplusplus
-#endif // H_ACQUIRE_STORAGE_ZARR_RAW_V0
+#endif // __cplusplus
+#endif // ACQUIRE_STORAGE_ZARR_RAW_HH
