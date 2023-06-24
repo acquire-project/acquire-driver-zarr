@@ -518,7 +518,9 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
+    // FIXME (aliddell): this depends on the layer and needs to be computed
     const auto frames_per_chunk = std::min(frame_count_, tiles_per_chunk_);
+    LOGE("There's a bug here! ^");
 
     json zarray_attrs = {
         { "zarr_format", 2 },

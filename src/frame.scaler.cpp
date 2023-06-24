@@ -5,80 +5,10 @@
 #include <thread>
 
 namespace {
-
-void
-pad(uint8_t* im_, size_t bytes_of_image, int w, int h)
-{
-    const int N = 2;
-    if (w % N == 0 && h % N == 0)
-        return;
-
-    int w_pad = w + (w % N), h_pad = h + (h % N);
-    LOG("padding: %d => %d, %d => %d", w, w_pad, h, h_pad);
-    size_t bytes_pad = w_pad * h_pad;
-    CHECK(bytes_pad <= bytes_of_image);
-
-    auto buf = new uint8_t[bytes_pad];
-    memset(buf, 0, bytes_pad);
-
-    size_t offset = 0;
-    for (auto i = 0; i < h; ++i) {
-        memcpy(buf + offset, im_ + i * w, w);
-        offset += w_pad;
-    }
-
-    memcpy(im_, buf, bytes_pad);
-    delete[] buf;
-}
-
-void
-bin(uint8_t* const im_, size_t bytes_of_image, int w, int h)
-{
-    const int N = 2;
-    const auto factor = 1.f / (float)N;
-    int w_pad = w + (w % N), h_pad = h + (h % N);
-
-    const uint8_t* end = im_ + w_pad * h_pad;
-
-    // horizontal
-    for (uint8_t* row = im_; row < end; row += w_pad) {
-        const uint8_t* row_end = row + w_pad;
-        for (uint8_t* p = row; p < row_end; p += N) {
-            // p[0] = (uint8_t)(0.5f * (float)p[0] + 0.5f * (float)p[1]);
-            float sum = 0.f;
-            for (int i = 0; i < N; ++i) {
-                sum += factor * (float)p[i];
-            }
-            p[0] = (uint8_t)sum;
-        }
-        for (uint8_t *p = row, *s = row; s < row_end; ++p, s += N) {
-            *p = *s;
-        }
-    }
-
-    // vertical
-    for (uint8_t* row = im_ + (N - 1) * w_pad; row < end; row += N * w_pad) {
-        const uint8_t* row_end = row + N * w_pad;
-        for (uint8_t* p = row; p < row_end; ++p) {
-            // p[-w_pad] = (uint8_t)(0.5f * p[-w_pad] + 0.5f * p[0]);
-            float sum = 0.f;
-            for (int i = 0; i < N; ++i) {
-                sum += factor * (float)p[-(w_pad * i)];
-            }
-        }
-    }
-    for (uint8_t *src_row = im_, *dst_row = im_; src_row < end;
-         src_row += N * w_pad, dst_row += w_pad) {
-        memcpy(dst_row, src_row, w_pad);
-    }
-}
-
 size_t
-bytes_of_type(const enum SampleType type)
+bytes_of_type(const SampleType& type)
 {
-    if (type >= SampleTypeCount)
-        return 0;
-
+    CHECK(type < SampleTypeCount);
     static size_t table[SampleTypeCount]; // = { 1, 2, 1, 2, 4, 2, 2, 2 };
 #define XXX(s, b) table[(s)] = (b)
     XXX(SampleType_u8, 1);
@@ -93,6 +23,75 @@ bytes_of_type(const enum SampleType type)
     return table[type];
 }
 
+void
+pad(uint8_t* image, size_t bytes_of_image, size_t width, size_t height)
+{
+    const int N = 2;
+    if (width % N == 0 && height % N == 0)
+        return;
+
+    size_t w_pad = width + (width % N), h_pad = height + (height % N);
+    LOG("padding: %d => %d, %d => %d", width, w_pad, height, h_pad);
+    size_t nbytes_pad = w_pad * h_pad;
+    CHECK(nbytes_pad <= bytes_of_image);
+
+    // TODO (aliddell): avoid the additional alloc here
+    std::vector<uint8_t> buf(nbytes_pad, 0);
+
+    for (auto i = 0; i < height; ++i) {
+        memcpy(buf.data() + (i * w_pad), image + i * width, width);
+    }
+
+    //    std::vector<uint8_t> image_buf(width * height);
+    //    memcpy(image_buf.data(), image, width * height);
+
+    memcpy(image, buf.data(), buf.size());
+}
+
+void
+average2d(uint8_t* image,
+          size_t bytes_of_image,
+          const ImageShape& shape,
+          uint8_t downscale)
+{
+    const auto width = shape.dims.width + (shape.dims.width % 2);
+    const auto height = shape.dims.height + (shape.dims.height % 2);
+
+    if (width < 2 || height < 2)
+        return; // Not enough pixels to form a 2x2 block
+
+    const auto half_width = width / 2;
+    const auto bytes = bytes_of_type(shape.type);
+
+    CHECK(bytes_of_image >= width * height * bytes);
+    for (auto i = 0; i < height; i += 2) {
+        for (auto j = 0; j < width; j += 2) {
+            auto k = i * width + j;
+            //            auto a_ = k, b_ = k + 1, c_ = k + width, d_ = k +
+            //            width + 1; auto a = (float)image[a_], b =
+            //            (float)image[b_],
+            //                 c = (float)image[c_], d = (float)image[d_];
+            image[k] =
+              (uint8_t)(0.25f * (float)image[k] + 0.25f * (float)image[k + 1] +
+                        0.25f * (float)image[k + width] +
+                        0.25f * (float)image[k + width + 1]);
+            //            image[k] = (uint8_t)(0.25f * a + 0.25f * b + 0.25f * c
+            //            + 0.25f * d);
+        }
+
+        for (auto j = 1; j < half_width; ++j) {
+            auto m = i * width + j, n = i * width + 2 * j;
+            image[m] = image[n];
+        }
+    }
+
+    size_t offset = half_width;
+    for (auto i = 2; i < height; i += 2) {
+        memcpy(image + offset, image + i * width, half_width);
+        offset += half_width;
+    }
+}
+
 size_t
 next_pow2(size_t n)
 {
@@ -100,15 +99,11 @@ next_pow2(size_t n)
 }
 
 size_t
-get_padded_buffer_size_bytes(const ImageShape& shape)
+get_padded_buffer_size_bytes(const ImageShape& shape, size_t downscale)
 {
-    auto width = shape.dims.width;
-    auto height = shape.dims.width;
+    const auto width = shape.dims.width + (shape.dims.width % downscale);
+    const auto height = shape.dims.height + (shape.dims.height % downscale);
     auto planes = shape.dims.planes;
-
-    width += (width % 2);
-    height += (height % 2);
-    //    planes += (planes % 2);
 
     return width * height * planes * bytes_of_type(shape.type);
 }
@@ -158,24 +153,22 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
           get_tile_shapes(image_shape_, tile_shape_, max_layer_, downscale_);
 
         size_t bytes_padded =
-          get_padded_buffer_size_bytes(multiscales[0].image);
+          get_padded_buffer_size_bytes(multiscales[0].image, downscale_);
 
         std::vector<uint8_t> im(bytes_padded);
-        memcpy(im.data(), frame->data().data(), frame->bytes_of_image());
+        memcpy(im.data(), frame->data(), frame->bytes_of_image());
 
         for (auto layer = 1; layer < multiscales.size(); ++layer) {
-            const ImageShape& image_shape = multiscales[layer].image;
-            const TileShape& tile_shape = multiscales[layer].tile;
+            ImageShape& image_shape = multiscales[layer - 1].image;
 
             pad(im.data(),
                 im.size(),
                 image_shape.dims.width,
                 image_shape.dims.height);
-            bin(im.data(),
-                im.size(),
-                image_shape.dims.width,
-                image_shape.dims.height);
+            average2d(im.data(), im.size(), image_shape, downscale_);
 
+            image_shape = multiscales[layer].image;
+            const auto& tile_shape = multiscales[layer].tile;
             auto scale_layer = std::make_shared<TiledFrame>(
               im.data(), frame->frame_id(), layer, image_shape, tile_shape);
 
@@ -198,7 +191,7 @@ get_tile_shapes(const ImageShape& base_image_shape,
                 int16_t max_layer,
                 uint8_t downscale)
 {
-    CHECK(downscale > 0);
+    CHECK(downscale > 1);
 
     std::vector<Multiscale> shapes;
     shapes.emplace_back(base_image_shape, base_tile_shape);
@@ -209,8 +202,8 @@ get_tile_shapes(const ImageShape& base_image_shape,
 
     while (b) {
         b /= downscale;
-        w /= downscale;
-        h /= downscale;
+        w = (w + (w % downscale)) / downscale;
+        h = (h + (h % downscale)) / downscale;
 
         if (w == 0 || h == 0) {
             break;
@@ -220,8 +213,8 @@ get_tile_shapes(const ImageShape& base_image_shape,
         im_shape.dims.width = w;
         im_shape.dims.height = h;
         im_shape.strides.width = im_shape.strides.channels;
-        im_shape.strides.height = im_shape.strides.width * h;
-        im_shape.strides.planes = im_shape.strides.height * w;
+        im_shape.strides.height = im_shape.strides.width * w;
+        im_shape.strides.planes = im_shape.strides.height * h;
 
         TileShape tile_shape = base_tile_shape;
         if (tile_shape.width > w)

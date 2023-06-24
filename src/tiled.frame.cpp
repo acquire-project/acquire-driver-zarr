@@ -92,10 +92,10 @@ TiledFrame::layer() const
     return layer_;
 }
 
-const std::vector<uint8_t>&
+const uint8_t*
 TiledFrame::data() const
 {
-    return buf_;
+    return buf_.data();
 }
 
 size_t
