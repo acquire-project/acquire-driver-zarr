@@ -968,7 +968,7 @@ zarr::worker_thread(ThreadContext* ctx)
 {
     using namespace std::chrono_literals;
 
-    LOG("Worker thread starting.");
+    TRACE("Worker thread starting.");
     CHECK(ctx);
 
     while (true) {
