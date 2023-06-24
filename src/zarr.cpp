@@ -195,7 +195,6 @@ zarr::Zarr::Zarr()
   , frame_count_{ 0 }
   , pixel_scale_um_{ 1, 1 }
   , max_bytes_per_chunk_{ 0 }
-  , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
   , thread_pool_(std::thread::hardware_concurrency())
@@ -208,7 +207,6 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
   , frame_count_{ 0 }
   , pixel_scale_um_{ 1, 1 }
   , max_bytes_per_chunk_{ 0 }
-  , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
   , thread_pool_(std::thread::hardware_concurrency())
@@ -381,9 +379,6 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     CHECK(shape);
     image_shape_ = *shape;
     allocate_writers_();
-
-    tiles_per_chunk_ =
-      get_tiles_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_);
 }
 
 void
@@ -515,9 +510,8 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
-    // FIXME (aliddell): this depends on the layer and needs to be computed
-    const auto frames_per_chunk = std::min(frame_count_, tiles_per_chunk_);
-    LOGE("There's a bug here! ^");
+    const auto frames_per_chunk = (uint64_t)std::min(
+      frame_count_, get_tiles_per_chunk(is, ts, max_bytes_per_chunk_));
 
     json zarray_attrs = {
         { "zarr_format", 2 },
@@ -530,7 +524,7 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
           } },
         { "chunks",
           {
-            (uint64_t)frames_per_chunk,
+            frames_per_chunk,
             1,
             ts.height,
             ts.width,
@@ -928,14 +922,15 @@ zarr::get_bytes_per_tile(const ImageShape& image_shape,
            tile_shape.planes;
 }
 
-size_t
+uint64_t
 zarr::get_tiles_per_chunk(const ImageShape& image_shape,
                           const TileShape& tile_shape,
-                          size_t max_bytes_per_chunk) noexcept
+                          uint64_t max_bytes_per_chunk) noexcept
 {
-    return (size_t)std::floor(
-      (float)max_bytes_per_chunk /
-      (float)get_bytes_per_tile(image_shape, tile_shape));
+    uint64_t bpt = get_bytes_per_tile(image_shape, tile_shape);
+    if (0 == bpt)
+        return 0;
+    return (uint64_t)std::floor((double)max_bytes_per_chunk / (double)bpt);
 }
 
 size_t
