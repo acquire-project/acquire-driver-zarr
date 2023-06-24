@@ -198,7 +198,6 @@ zarr::Zarr::Zarr()
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
-  , scaler_{ nullptr }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     start_threads_();
@@ -212,7 +211,6 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
   , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
-  , scaler_{ nullptr }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     compression_params_ = std::move(compression_params);
@@ -395,9 +393,8 @@ zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
     CHECK(writers_.find(frame->layer()) != writers_.end());
 
     for (auto& writer : writers_.at(frame->layer())) {
-        job_queue_.emplace([&writer, frame]() {
-            return writer->write_frame(*frame);
-        });
+        job_queue_.emplace(
+          [&writer, frame]() { return writer->write_frame(*frame); });
     }
 }
 
@@ -472,8 +469,8 @@ zarr::Zarr::set_multiscale(const MultiscaleProps& props,
     auto downscale = std::clamp(props.downscale,
                                 (uint8_t)meta.downscale.low,
                                 (uint8_t)meta.downscale.high);
-    CHECK(scaler_ = std::make_unique<FrameScaler>(
-            this, image_shape_, tile_shape_, max_layer, downscale));
+
+    scaler_.emplace(this, image_shape_, tile_shape_, max_layer, downscale);
 }
 
 void
@@ -594,7 +591,7 @@ zarr::Zarr::write_group_zattrs_json_() const
           { "unit", "micrometer" },
         },
     };
-    if (writers_.empty() || nullptr == scaler_) {
+    if (writers_.empty() || !scaler_.has_value()) {
         zgroup_attrs["multiscales"][0]["datasets"] = {
             {
               { "path", "0" },
@@ -672,18 +669,17 @@ zarr::Zarr::allocate_writers_()
 
         CHECK(tile_shape.width > 0);
         size_t img_px_x = image_shape.dims.channels * image_shape.dims.width;
-        size_t tile_cols =
-          std::ceil((float)img_px_x / (float)tile_shape.width);
+        size_t tile_cols = std::ceil((float)img_px_x / (float)tile_shape.width);
 
-    size_t img_px_y = image_shape_.dims.height;
-    CHECK(tile_shape_.height > 0);
-    size_t tile_rows =
-      std::ceil((float)img_px_y / (float)tile_shape_.height);
+        size_t img_px_y = image_shape_.dims.height;
+        CHECK(tile_shape_.height > 0);
+        size_t tile_rows =
+          std::ceil((float)img_px_y / (float)tile_shape_.height);
 
-    size_t img_px_p = image_shape_.dims.planes;
-    CHECK(tile_shape_.planes > 0);
-    size_t tile_planes =
-      std::ceil((float)img_px_p / (float)tile_shape_.planes);
+        size_t img_px_p = image_shape_.dims.planes;
+        CHECK(tile_shape_.planes > 0);
+        size_t tile_planes =
+          std::ceil((float)img_px_p / (float)tile_shape_.planes);
 
         TRACE("Allocating %llu writers for layer %d",
               tile_cols * tile_rows * tile_planes,
@@ -700,7 +696,8 @@ zarr::Zarr::allocate_writers_()
                 for (auto col = 0; col < tile_cols; ++col) {
                     BaseEncoder* encoder;
                     if (compression_params_.has_value()) {
-                        CHECK(encoder = new BloscEncoder(compression_params_.value()));
+                        CHECK(encoder =
+                                new BloscEncoder(compression_params_.value()));
                     } else {
                         CHECK(encoder = new RawEncoder());
                     }
