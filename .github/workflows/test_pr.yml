@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        platform: ["windows-latest", "ubuntu-latest", "macos-latest"]
     permissions:
       actions: write
 
@@ -51,4 +51,4 @@ jobs:
 
       - name: Test
         working-directory: ${{github.workspace}}/build
-        run: ctest -C ${{env.BUILD_TYPE}} -L zarr --output-on-failure
+        run: ctest -C ${{env.BUILD_TYPE}} -L acquire-driver-zarr --output-on-failure
