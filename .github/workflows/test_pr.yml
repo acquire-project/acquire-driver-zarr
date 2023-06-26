@@ -51,4 +51,4 @@ jobs:
 
       - name: Test
         working-directory: ${{github.workspace}}/build
-        run: ctest -C ${{env.BUILD_TYPE}} -L anyplatform --output-on-failure
+        run: ctest -C ${{env.BUILD_TYPE}} -L zarr --output-on-failure
