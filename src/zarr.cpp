@@ -314,6 +314,7 @@ zarr::Zarr::stop() noexcept
             write_zarray_json_();       // must precede close of chunk file
             write_group_zattrs_json_(); // write multiscales metadata
             is_ok = 1;
+            frame_count_ = 0;
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
         } catch (...) {
@@ -329,6 +330,20 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 {
     if (0 == nbytes)
         return nbytes;
+
+    // validate start conditions
+    if (0 == frame_count_) {
+        CHECK(image_shape_.dims.channels > 0);
+        CHECK(image_shape_.dims.width > 0);
+        CHECK(image_shape_.dims.height > 0);
+        CHECK(image_shape_.dims.planes > 0);
+        CHECK(tile_shape_.width > 0);
+        CHECK(tile_shape_.width <= image_shape_.dims.width);
+        CHECK(tile_shape_.height > 0);
+        CHECK(tile_shape_.height <= image_shape_.dims.height);
+        CHECK(tile_shape_.planes > 0);
+        CHECK(tile_shape_.planes <= image_shape_.dims.planes);
+    }
 
     using namespace acquire::sink::zarr;
 
@@ -404,8 +419,8 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
                                       (uint64_t)meta.max_bytes_per_chunk.high);
 
     uint32_t tile_width = props.tile.width;
-    if (tile_width == 0 ||
-        (image_shape_.dims.width && tile_width > image_shape_.dims.width)) {
+    if (image_shape_.dims.width > 0 &&
+        (tile_width == 0 || tile_width > image_shape_.dims.width)) {
         LOGE("%s. Setting width to %u.",
              tile_width == 0 ? "Tile width not specified"
                              : "Specified roi width is too large",
@@ -414,8 +429,8 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
     }
 
     uint32_t tile_height = props.tile.height;
-    if (tile_height == 0 ||
-        (image_shape_.dims.height && tile_height > image_shape_.dims.height)) {
+    if (image_shape_.dims.height > 0 &&
+        (tile_height == 0 || tile_height > image_shape_.dims.height)) {
         LOGE("%s. Setting height to %u.",
              tile_height == 0 ? "Tile height not specified"
                               : "Specified roi height is too large",
@@ -424,8 +439,8 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
     }
 
     uint32_t tile_planes = props.tile.planes;
-    if (tile_planes == 0 ||
-        (image_shape_.dims.planes && tile_planes > image_shape_.dims.planes)) {
+    if (image_shape_.dims.planes > 0 &&
+        (tile_planes == 0 || tile_planes > image_shape_.dims.planes)) {
         LOGE("%s. Setting planes to %u.",
              tile_planes == 0 ? "Tile planes not specified"
                               : "Specified roi planes is too large",
