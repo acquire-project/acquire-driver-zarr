@@ -107,11 +107,8 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                             1,
                                             max_bytes_per_chunk));
 
-    CHECK(
-      storage_properties_set_multiscale_props(&props.video[0].storage.settings,
-                                              SIZED("pyramid_box"),
-                                              max_layers,
-                                              downscale));
+    CHECK(storage_properties_set_multiscale_props(
+      &props.video[0].storage.settings, max_layers));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -207,21 +204,21 @@ main()
     CHECK(fs::is_regular_file(chunk_file_path));
     ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
 
-//    chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/1");
-//    CHECK(fs::is_regular_file(chunk_file_path));
-//    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-//
-//    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/0");
-//    CHECK(fs::is_regular_file(chunk_file_path));
-//    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-//
-//    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/1");
-//    CHECK(fs::is_regular_file(chunk_file_path));
-//    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-//
-//    for (auto i = 0; i < datasets.size(); ++i) {
-//        verify_layer(i);
-//    }
+    //    chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/1");
+    //    CHECK(fs::is_regular_file(chunk_file_path));
+    //    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    //
+    //    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/0");
+    //    CHECK(fs::is_regular_file(chunk_file_path));
+    //    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    //
+    //    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/1");
+    //    CHECK(fs::is_regular_file(chunk_file_path));
+    //    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    //
+    //    for (auto i = 0; i < datasets.size(); ++i) {
+    //        verify_layer(i);
+    //    }
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);

@@ -275,22 +275,12 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
         },
         .multiscale = {
           .supported = 1,
-          .strategy = {
-            .writable = 1,
-            .type = PropertyType_String,
-          },
           .max_layer = {
             .writable = 1,
             .low = -1,
             .high = 255,
             .type = PropertyType_FixedPrecision,
           },
-          .downscale = {
-            .writable = 1,
-            .low = 0,
-            .high = 255,
-            .type = PropertyType_FixedPrecision,
-          }
         }
     };
 }
@@ -454,18 +444,15 @@ void
 zarr::Zarr::set_multiscale(const MultiscaleProps& props,
                            const MultiscaleMeta& meta)
 {
-    if (0 == props.max_layer || 0 == props.downscale) {
+    if (0 == props.max_layer) {
         return;
     }
 
     auto max_layer = std::clamp(props.max_layer,
                                 (int16_t)meta.max_layer.low,
                                 (int16_t)meta.max_layer.high);
-    auto downscale = std::clamp(props.downscale,
-                                (uint8_t)meta.downscale.low,
-                                (uint8_t)meta.downscale.high);
 
-    scaler_.emplace(this, image_shape_, tile_shape_, max_layer, downscale);
+    scaler_.emplace(this, image_shape_, tile_shape_, max_layer);
 }
 
 void
@@ -609,10 +596,8 @@ zarr::Zarr::write_group_zattrs_json_() const
                     { "scale",
                       { 1,
                         1,
-                        std::pow(scaler_->downscale(), layer) *
-                          pixel_scale_um_.y,
-                        std::pow(scaler_->downscale(), layer) *
-                          pixel_scale_um_.x } },
+                        std::pow(2, layer) * pixel_scale_um_.y,
+                        std::pow(2, layer) * pixel_scale_um_.x } },
                   },
                 } },
             });
@@ -648,10 +633,8 @@ zarr::Zarr::allocate_writers_()
 
     std::vector<Multiscale> multiscales;
     if (scaler_) {
-        multiscales = get_tile_shapes(image_shape_,
-                                      tile_shape_,
-                                      scaler_->max_layer(),
-                                      scaler_->downscale());
+        multiscales =
+          get_tile_shapes(image_shape_, tile_shape_, scaler_->max_layer());
     } else {
         multiscales.emplace_back(image_shape_, tile_shape_);
     }

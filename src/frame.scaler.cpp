@@ -51,8 +51,7 @@ pad(uint8_t* image, size_t bytes_of_image, size_t width, size_t height)
 void
 average2d(uint8_t* image,
           size_t bytes_of_image,
-          const ImageShape& shape,
-          uint8_t downscale)
+          const ImageShape& shape)
 {
     const auto width = shape.dims.width + (shape.dims.width % 2);
     const auto height = shape.dims.height + (shape.dims.height % 2);
@@ -99,8 +98,9 @@ next_pow2(size_t n)
 }
 
 size_t
-get_padded_buffer_size_bytes(const ImageShape& shape, size_t downscale)
+get_padded_buffer_size_bytes(const ImageShape& shape)
 {
+    const uint8_t downscale = 2;
     const auto width = shape.dims.width + (shape.dims.width % downscale);
     const auto height = shape.dims.height + (shape.dims.height % downscale);
     auto planes = shape.dims.planes;
@@ -120,13 +120,11 @@ Multiscale::Multiscale(const ImageShape& image_shape,
 FrameScaler::FrameScaler(Zarr* zarr,
                          const ImageShape& image_shape,
                          const TileShape& tile_shape,
-                         int16_t max_layer,
-                         uint8_t downscale)
+                         int16_t max_layer)
   : zarr_{ zarr }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
   , max_layer_{ max_layer }
-  , downscale_{ downscale }
 {
     CHECK(zarr);
 }
@@ -137,12 +135,6 @@ FrameScaler::max_layer() const noexcept
     return max_layer_;
 }
 
-uint8_t
-FrameScaler::downscale() const noexcept
-{
-    return downscale_;
-}
-
 bool
 FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
 {
@@ -150,10 +142,10 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
         zarr_->push_frame_to_writers(frame);
 
         std::vector<Multiscale> multiscales =
-          get_tile_shapes(image_shape_, tile_shape_, max_layer_, downscale_);
+          get_tile_shapes(image_shape_, tile_shape_, max_layer_);
 
         size_t bytes_padded =
-          get_padded_buffer_size_bytes(multiscales[0].image, downscale_);
+          get_padded_buffer_size_bytes(multiscales[0].image);
 
         std::vector<uint8_t> im(bytes_padded);
         memcpy(im.data(), frame->data(), frame->bytes_of_image());
@@ -165,7 +157,7 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
                 im.size(),
                 image_shape.dims.width,
                 image_shape.dims.height);
-            average2d(im.data(), im.size(), image_shape, downscale_);
+            average2d(im.data(), im.size(), image_shape);
 
             image_shape = multiscales[layer].image;
             const auto& tile_shape = multiscales[layer].tile;
@@ -188,10 +180,9 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
 std::vector<Multiscale>
 get_tile_shapes(const ImageShape& base_image_shape,
                 const TileShape& base_tile_shape,
-                int16_t max_layer,
-                uint8_t downscale)
+                int16_t max_layer)
 {
-    CHECK(downscale > 1);
+    const uint8_t downscale = 2;
 
     std::vector<Multiscale> shapes;
     shapes.emplace_back(base_image_shape, base_tile_shape);
