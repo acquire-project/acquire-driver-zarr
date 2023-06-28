@@ -60,15 +60,13 @@ reporter(int is_error,
 const static uint32_t frame_width = 1920;
 const static uint32_t frame_height = 1080;
 
-const static uint32_t tile_width = frame_width / 1;
-const static uint32_t tile_height = frame_height / 1;
+const static uint32_t tile_width = frame_width / 3;
+const static uint32_t tile_height = frame_height / 3;
 
 const static uint32_t max_bytes_per_chunk = 16 << 20;
-const static auto expected_frames_per_chunk = 8;
-const static auto max_frames = 10;
+const static auto max_frames = 73;
 
-const static int16_t max_layers = 2;
-const static uint8_t downscale = 2;
+const static int16_t max_layers = -1;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -114,7 +112,6 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
-    // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = max_frames;
 
@@ -123,9 +120,26 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_stop(runtime));
 }
 
-void
-verify_layer(int layer)
+struct LayerTestCase
 {
+    int layer;
+    int frame_width;
+    int frame_height;
+    int tile_width;
+    int tile_height;
+    int frames_per_chunk;
+};
+
+void
+verify_layer(const LayerTestCase& test_case)
+{
+    const auto layer = test_case.layer;
+    const auto layer_tile_width = test_case.tile_width;
+    const auto layer_frame_width = test_case.frame_width;
+    const auto layer_tile_height = test_case.tile_height;
+    const auto layer_frame_height = test_case.frame_height;
+    const auto frames_per_chunk = test_case.frames_per_chunk;
+
     const auto zarray_path =
       fs::path(TEST ".zarr") / std::to_string(layer) / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));
@@ -135,21 +149,54 @@ verify_layer(int layer)
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
 
+    const auto shape = zarray["shape"];
+    ASSERT_EQ(int, "%d", max_frames, shape[0]);
+    ASSERT_EQ(int, "%d", 1, shape[1]);
+    ASSERT_EQ(int, "%d", layer_frame_height, shape[2]);
+    ASSERT_EQ(int, "%d", layer_frame_width, shape[3]);
+
     const auto chunks = zarray["chunks"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0].get<int>());
+    ASSERT_EQ(int, "%d", 1, chunks[1].get<int>());
+    ASSERT_EQ(int, "%d", layer_tile_height, chunks[2].get<int>());
+    ASSERT_EQ(int, "%d", layer_tile_width, chunks[3].get<int>());
 
     // check chunked data
     auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
                       chunks[2].get<int>() * chunks[3].get<int>();
 
-    auto chunk_file_path =
-      fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" / "0" / "0";
-    CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    const auto tiles_in_x =
+      (uint32_t)std::ceil((float)layer_frame_width / (float)layer_tile_width);
+    const auto tiles_in_y =
+      (uint32_t)std::ceil((float)layer_frame_height / (float)layer_tile_height);
 
-    // check that there isn't a second (empty) chunk along the time dimension
-    auto second_time_chunk_path =
-      fs::path(TEST ".zarr") / std::to_string(layer) / "1";
-    CHECK(!fs::exists(second_time_chunk_path));
+    for (auto i = 0; i < tiles_in_y; ++i) {
+        for (auto j = 0; j < tiles_in_x; ++j) {
+            const auto chunk_file_path = fs::path(TEST ".zarr/") /
+                                         std::to_string(layer) / "0" / "0" /
+                                         std::to_string(i) / std::to_string(j);
+            CHECK(fs::is_regular_file(chunk_file_path));
+            ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+        }
+    }
+
+    // check there's not a second chunk in t
+    auto missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "1";
+    CHECK(!fs::is_regular_file(missing_path));
+
+    // check there's not a second chunk in z
+    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "1";
+    CHECK(!fs::is_regular_file(missing_path));
+
+    // check there's no add'l chunks in y
+    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" /
+                   std::to_string(tiles_in_y);
+    CHECK(!fs::is_regular_file(missing_path));
+
+    // check there's no add'l chunks in y
+    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" /
+                   "0" / std::to_string(tiles_in_x);
+    CHECK(!fs::is_regular_file(missing_path));
 }
 
 int
@@ -174,51 +221,16 @@ main()
     json group_zattrs = json::parse(f);
 
     auto datasets = group_zattrs["multiscales"][0]["datasets"];
-    //    ASSERT_EQ(int, "%d", max_layers, datasets.size());
+    ASSERT_EQ(int, "%d", 3, datasets.size());
 
-    const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
-    CHECK(fs::is_regular_file(zarray_path));
-    CHECK(fs::file_size(zarray_path) > 0);
+    // verify each layer
+    verify_layer({ 0, 1920, 1080, 640, 360, 72 });
+    verify_layer({ 1, 960, 540, 640, 360, 72 });
+    // rollover doesn't happen here since tile size is less than the specified tile size
+    verify_layer({ 2, 480, 270, 480, 270, 73 });
 
-    // check metadata
-    f = std::ifstream{ zarray_path };
-    json zarray = json::parse(f);
-
-    auto shape = zarray["shape"];
-    ASSERT_EQ(int, "%d", max_frames, shape[0]);
-    ASSERT_EQ(int, "%d", 1, shape[1]);
-    ASSERT_EQ(int, "%d", frame_height, shape[2]);
-    ASSERT_EQ(int, "%d", frame_width, shape[3]);
-
-    auto chunks = zarray["chunks"];
-    ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunks[0]);
-    ASSERT_EQ(int, "%d", 1, chunks[1]);
-    ASSERT_EQ(int, "%d", tile_height, chunks[2]);
-    ASSERT_EQ(int, "%d", tile_width, chunks[3]);
-
-    // check chunked data
-    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
-                      chunks[2].get<int>() * chunks[3].get<int>();
-
-    auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
-    CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-
-    //    chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/1");
-    //    CHECK(fs::is_regular_file(chunk_file_path));
-    //    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-    //
-    //    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/0");
-    //    CHECK(fs::is_regular_file(chunk_file_path));
-    //    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-    //
-    //    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/1");
-    //    CHECK(fs::is_regular_file(chunk_file_path));
-    //    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-    //
-    //    for (auto i = 0; i < datasets.size(); ++i) {
-    //        verify_layer(i);
-    //    }
+    auto missing_path = fs::path(TEST ".zarr/3");
+    CHECK(!fs::exists(missing_path));
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);
