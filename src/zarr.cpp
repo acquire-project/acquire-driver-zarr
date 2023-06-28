@@ -620,9 +620,14 @@ zarr::Zarr::write_group_zattrs_json_() const
 
         zgroup_attrs["type"] = "local_mean";
         zgroup_attrs["metadata"] = {
-            { "description", "" },  { "method", "binning" },
-            { "version", "0.1.2" }, { "args", "" },
-            { "kwargs", "" },
+            { "description",
+              "The fields in the metadata describe how to reproduce this "
+              "multiscaling in scikit-image. The method and its parameters are "
+              "given here." },
+            { "method", "skimage.transform.downscale_local_mean" },
+            { "version", "0.21.0" },
+            { "args", "[2]" },
+            { "kwargs", { "cval", 0 } },
         };
     }
 
