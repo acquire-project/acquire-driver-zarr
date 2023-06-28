@@ -14,8 +14,10 @@ else()
     #
     set(tests
         list-devices
+        get-meta
         write-zarr-compressed-with-chunking
         write-zarr-compressed-with-chunking-and-rollover
+        write-zarr-raw-multiscale
         write-zarr-raw-with-chunking
         write-zarr-raw-with-chunking-and-rollover
         write-zarr-raw-with-ragged-tiling

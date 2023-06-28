@@ -11,6 +11,8 @@ add_library(${tgt} MODULE
         tiled.frame.cpp
         chunk.writer.hh
         chunk.writer.cpp
+        frame.scaler.hh
+        frame.scaler.cpp
         zarr.hh
         zarr.cpp
         zarr.encoder.hh

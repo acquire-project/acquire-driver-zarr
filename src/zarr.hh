@@ -7,6 +7,7 @@
 
 #include "prelude.h"
 #include "chunk.writer.hh"
+#include "frame.scaler.hh"
 
 #include <condition_variable>
 #include <filesystem>
@@ -15,6 +16,7 @@
 #include <string>
 #include <thread>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 #ifndef __cplusplus
@@ -79,12 +81,17 @@ struct Zarr final : StorageInterface
 
     void reserve_image_shape(const ImageShape* shape) override;
 
+    void push_frame_to_writers(std::shared_ptr<TiledFrame> frame);
     std::optional<JobT> pop_from_job_queue();
 
   private:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
+
+    using MultiscaleProps = StorageProperties::storage_properties_multiscale_s;
+    using MultiscaleMeta =
+      StoragePropertyMetadata::storage_property_metadata_multiscale_s;
 
     // static - set on construction
     char dimension_separator_;
@@ -98,18 +105,25 @@ struct Zarr final : StorageInterface
     uint64_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
-    std::vector<std::shared_ptr<ChunkWriter>> writers_;
-    size_t tiles_per_chunk_;
+
+    std::optional<FrameScaler> scaler_;
+    /// Chunk writers for each layer/scale
+    std::map<size_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
 
     // changes during acquisition
-    size_t frame_count_;
+    uint64_t frame_count_;
     mutable std::mutex job_queue_mutex_;
     std::queue<JobT> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
+    void set_multiscale(const MultiscaleProps& props,
+                        const MultiscaleMeta& meta);
 
     void create_data_directory_() const;
     void write_zarray_json_() const;
+    void write_zarray_json_inner_(size_t layer,
+                                  const ImageShape& is,
+                                  const TileShape& ts) const;
     void write_external_metadata_json_() const;
     void write_zgroup_json_() const;
     void write_group_zattrs_json_() const;
@@ -153,10 +167,10 @@ size_t
 get_bytes_per_tile(const ImageShape& image_shape,
                    const TileShape& tile_shape) noexcept;
 
-size_t
+uint64_t
 get_tiles_per_chunk(const ImageShape& image_shape,
                     const TileShape& tile_shape,
-                    size_t max_bytes_per_chunk) noexcept;
+                    uint64_t max_bytes_per_chunk) noexcept;
 
 size_t
 get_bytes_per_chunk(const ImageShape& image_shape,

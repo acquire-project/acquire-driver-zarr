@@ -1,4 +1,5 @@
 #include "tiled.frame.hh"
+#include "zarr.hh"
 
 #include <algorithm>
 #include <cstring>
@@ -40,6 +41,8 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
                        const ImageShape& image_shape,
                        const TileShape& tile_shape)
   : bytes_of_image_{ 0 }
+  , frame_id_{ 0 }
+  , layer_{ 0 }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
 {
@@ -55,6 +58,46 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
     frame_id_ = frame->frame_id;
 }
 
+TiledFrame::TiledFrame(uint8_t* const data,
+                       uint64_t frame_id,
+                       size_t layer,
+                       const ImageShape& image_shape,
+                       const TileShape& tile_shape)
+  : bytes_of_image_{ get_bytes_per_frame(image_shape) }
+  , frame_id_{ frame_id }
+  , layer_{ layer }
+  , image_shape_{ image_shape }
+  , tile_shape_{ tile_shape }
+{
+    CHECK(data);
+    buf_.resize(bytes_of_image_);
+    memcpy(buf_.data(), data, bytes_of_image_);
+}
+
+size_t
+TiledFrame::bytes_of_image() const
+{
+    return bytes_of_image_;
+}
+
+uint64_t
+TiledFrame::frame_id() const
+{
+    return frame_id_;
+}
+
+size_t
+TiledFrame::layer() const
+{
+    return layer_;
+}
+
+const uint8_t*
+TiledFrame::data() const
+{
+    return buf_.data();
+}
+
 size_t
 TiledFrame::copy_tile(uint8_t* tile,
                       size_t bytes_of_tile,
@@ -63,7 +106,7 @@ TiledFrame::copy_tile(uint8_t* tile,
                       uint32_t tile_plane) const
 {
     CHECK(tile);
-    CHECK(bytes_of_tile == bytes_per_tile(image_shape_, tile_shape_));
+    CHECK(bytes_of_tile >= bytes_per_tile(image_shape_, tile_shape_));
     memset(tile, 0, bytes_of_tile);
 
     uint8_t* region = nullptr;

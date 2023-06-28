@@ -195,7 +195,6 @@ zarr::Zarr::Zarr()
   , frame_count_{ 0 }
   , pixel_scale_um_{ 1, 1 }
   , max_bytes_per_chunk_{ 0 }
-  , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
   , thread_pool_(std::thread::hardware_concurrency())
@@ -208,7 +207,6 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
   , frame_count_{ 0 }
   , pixel_scale_um_{ 1, 1 }
   , max_bytes_per_chunk_{ 0 }
-  , tiles_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
   , thread_pool_(std::thread::hardware_concurrency())
@@ -219,8 +217,9 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
 
 zarr::Zarr::~Zarr()
 {
-    if (!stop())
+    if (!stop()) {
         LOGE("Failed to stop on destruct!");
+    }
     recover_threads_();
 }
 
@@ -244,6 +243,9 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // chunking
     set_chunking(props->chunking, meta.chunking);
+
+    // multiscale
+    set_multiscale(props->multiscale, meta.multiscale);
 }
 
 void
@@ -262,13 +264,25 @@ void
 zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
 {
     CHECK(meta);
-    *meta = { .chunking = {
-                .supported = 1,
-                .max_bytes_per_chunk = { .writable = 1,
-                                         .low = (float)(16 << 20),
-                                         .high = (float)(1 << 30),
-                                         .type = PropertyType_FixedPrecision },
-              } };
+    *meta = {
+        .chunking = {
+          .supported = 1,
+          .max_bytes_per_chunk = {
+            .writable = 1,
+            .low = (float)(16 << 20),
+            .high = (float)(1 << 30),
+            .type = PropertyType_FixedPrecision },
+        },
+        .multiscale = {
+          .supported = 1,
+          .max_layer = {
+            .writable = 1,
+            .low = -1,
+            .high = 255,
+            .type = PropertyType_FixedPrecision,
+          },
+        }
+    };
 }
 
 void
@@ -292,13 +306,15 @@ zarr::Zarr::stop() noexcept
         is_ok = 0;
 
         try {
-            write_zarray_json_(); // must precede close of chunk file
             while (!job_queue_.empty()) {
                 TRACE("Cycling: %llu jobs remaining", job_queue_.size());
                 clock_sleep_ms(nullptr, 50.0);
             }
             recover_threads_();
+            write_zarray_json_();       // must precede close of chunk file
+            write_group_zattrs_json_(); // write multiscales metadata
             is_ok = 1;
+            frame_count_ = 0;
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
         } catch (...) {
@@ -315,6 +331,20 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     if (0 == nbytes)
         return nbytes;
 
+    // validate start conditions
+    if (0 == frame_count_) {
+        CHECK(image_shape_.dims.channels > 0);
+        CHECK(image_shape_.dims.width > 0);
+        CHECK(image_shape_.dims.height > 0);
+        CHECK(image_shape_.dims.planes > 0);
+        CHECK(tile_shape_.width > 0);
+        CHECK(tile_shape_.width <= image_shape_.dims.width);
+        CHECK(tile_shape_.height > 0);
+        CHECK(tile_shape_.height <= image_shape_.dims.height);
+        CHECK(tile_shape_.planes > 0);
+        CHECK(tile_shape_.planes <= image_shape_.dims.planes);
+    }
+
     using namespace acquire::sink::zarr;
 
     const VideoFrame* cur = nullptr;
@@ -328,16 +358,18 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         // handle incoming image shape
         validate_image_shapes_equal(image_shape_, cur->shape);
 
-        std::scoped_lock lock(job_queue_mutex_);
-
         // create a new frame
         auto frame =
           std::make_shared<TiledFrame>(cur, image_shape_, tile_shape_);
 
-        // push the new frame to our writers
-        for (auto& writer : writers_) {
+        if (scaler_) {
+            std::scoped_lock lock(job_queue_mutex_);
+
+            // push the new frame to our scaler
             job_queue_.emplace(
-              [frame, &writer]() { return writer->write_frame(*frame); });
+              [this, frame]() { return scaler_->scale_frame(frame); });
+        } else {
+            push_frame_to_writers(frame);
         }
 
         ++frame_count_;
@@ -352,9 +384,18 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     CHECK(shape);
     image_shape_ = *shape;
     allocate_writers_();
+}
 
-    tiles_per_chunk_ =
-      get_tiles_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_);
+void
+zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
+{
+    std::scoped_lock lock(job_queue_mutex_);
+    CHECK(writers_.find(frame->layer()) != writers_.end());
+
+    for (auto& writer : writers_.at(frame->layer())) {
+        job_queue_.emplace(
+          [&writer, frame]() { return writer->write_frame(*frame); });
+    }
 }
 
 std::optional<zarr::Zarr::JobT>
@@ -378,8 +419,8 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
                                       (uint64_t)meta.max_bytes_per_chunk.high);
 
     uint32_t tile_width = props.tile.width;
-    if (tile_width == 0 ||
-        (image_shape_.dims.width && tile_width > image_shape_.dims.width)) {
+    if (image_shape_.dims.width > 0 &&
+        (tile_width == 0 || tile_width > image_shape_.dims.width)) {
         LOGE("%s. Setting width to %u.",
              tile_width == 0 ? "Tile width not specified"
                              : "Specified roi width is too large",
@@ -388,8 +429,8 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
     }
 
     uint32_t tile_height = props.tile.height;
-    if (tile_height == 0 ||
-        (image_shape_.dims.height && tile_height > image_shape_.dims.height)) {
+    if (image_shape_.dims.height > 0 &&
+        (tile_height == 0 || tile_height > image_shape_.dims.height)) {
         LOGE("%s. Setting height to %u.",
              tile_height == 0 ? "Tile height not specified"
                               : "Specified roi height is too large",
@@ -398,8 +439,8 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
     }
 
     uint32_t tile_planes = props.tile.planes;
-    if (tile_planes == 0 ||
-        (image_shape_.dims.planes && tile_planes > image_shape_.dims.planes)) {
+    if (image_shape_.dims.planes > 0 &&
+        (tile_planes == 0 || tile_planes > image_shape_.dims.planes)) {
         LOGE("%s. Setting planes to %u.",
              tile_planes == 0 ? "Tile planes not specified"
                               : "Specified roi planes is too large",
@@ -412,6 +453,21 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
         .height = tile_height,
         .planes = tile_planes,
     };
+}
+
+void
+zarr::Zarr::set_multiscale(const MultiscaleProps& props,
+                           const MultiscaleMeta& meta)
+{
+    if (0 == props.max_layer) {
+        return;
+    }
+
+    auto max_layer = std::clamp(props.max_layer,
+                                (int16_t)meta.max_layer.low,
+                                (int16_t)meta.max_layer.high);
+
+    scaler_.emplace(this, image_shape_, tile_shape_, max_layer);
 }
 
 void
@@ -435,28 +491,47 @@ void
 zarr::Zarr::write_zarray_json_() const
 {
     namespace fs = std::filesystem;
-    using namespace acquire::sink::zarr;
     using json = nlohmann::json;
 
-    const auto frames_per_chunk = std::min(frame_count_, tiles_per_chunk_);
+    if (writers_.empty()) {
+        write_zarray_json_inner_(0, image_shape_, tile_shape_);
+    } else {
+        for (const auto& [layer, writers] : writers_) {
+            auto writer = writers.front();
+            const auto& is = writer->image_shape();
+            const auto& ts = writer->tile_shape();
+            write_zarray_json_inner_(layer, is, ts);
+        }
+    }
+}
+
+void
+zarr::Zarr::write_zarray_json_inner_(size_t layer,
+                                     const ImageShape& is,
+                                     const TileShape& ts) const
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+    const auto frames_per_chunk = (uint64_t)std::min(
+      frame_count_, get_tiles_per_chunk(is, ts, max_bytes_per_chunk_));
 
     json zarray_attrs = {
         { "zarr_format", 2 },
         { "shape",
           {
             (uint64_t)frame_count_,
-            image_shape_.dims.channels,
-            image_shape_.dims.height,
-            image_shape_.dims.width,
+            is.dims.channels,
+            is.dims.height,
+            is.dims.width,
           } },
         { "chunks",
           {
-            (uint64_t)frames_per_chunk,
+            frames_per_chunk,
             1,
-            tile_shape_.height,
-            tile_shape_.width,
+            ts.height,
+            ts.width,
           } },
-        { "dtype", sample_type_to_dtype(image_shape_.type) },
+        { "dtype", sample_type_to_dtype(is.type) },
         { "fill_value", 0 },
         { "order", "C" },
         { "filters", nullptr },
@@ -468,7 +543,8 @@ zarr::Zarr::write_zarray_json_() const
     else
         zarray_attrs["compressor"] = nullptr;
 
-    std::string zarray_path = (fs::path(data_dir_) / "0" / ".zarray").string();
+    std::string zarray_path =
+      (fs::path(data_dir_) / std::to_string(layer) / ".zarray").string();
     write_string(zarray_path, zarray_attrs.dump());
 }
 
@@ -511,18 +587,44 @@ zarr::Zarr::write_group_zattrs_json_() const
           { "unit", "micrometer" },
         },
     };
-    zgroup_attrs["multiscales"][0]["datasets"] = {
-        {
-          { "path", "0" },
-          { "coordinateTransformations",
+    if (writers_.empty() || !scaler_.has_value()) {
+        zgroup_attrs["multiscales"][0]["datasets"] = {
             {
-              {
-                { "type", "scale" },
-                { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
-              },
-            } },
-        },
-    };
+              { "path", "0" },
+              { "coordinateTransformations",
+                {
+                  {
+                    { "type", "scale" },
+                    { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
+                  },
+                } },
+            },
+        };
+    } else {
+        for (const auto& [layer, _] : writers_) {
+            zgroup_attrs["multiscales"][0]["datasets"].push_back({
+              { "path", std::to_string(layer) },
+              { "coordinateTransformations",
+                {
+                  {
+                    { "type", "scale" },
+                    { "scale",
+                      { 1,
+                        1,
+                        std::pow(2, layer) * pixel_scale_um_.y,
+                        std::pow(2, layer) * pixel_scale_um_.x } },
+                  },
+                } },
+            });
+        }
+
+        zgroup_attrs["type"] = "local_mean";
+        zgroup_attrs["metadata"] = {
+            { "description", "" },  { "method", "binning" },
+            { "version", "0.1.2" }, { "args", "" },
+            { "kwargs", "" },
+        };
+    }
 
     std::string zattrs_path = (fs::path(data_dir_) / ".zattrs").string();
     write_string(zattrs_path, zgroup_attrs.dump(4));
@@ -544,48 +646,69 @@ zarr::Zarr::allocate_writers_()
 {
     writers_.clear();
 
-    size_t img_px_x = image_shape_.dims.channels * image_shape_.dims.width;
-    CHECK(tile_shape_.width > 0);
-    size_t tile_cols = std::ceil((float)img_px_x / (float)tile_shape_.width);
+    std::vector<Multiscale> multiscales;
+    if (scaler_) {
+        multiscales =
+          get_tile_shapes(image_shape_, tile_shape_, scaler_->max_layer());
+    } else {
+        multiscales.emplace_back(image_shape_, tile_shape_);
+    }
 
-    size_t img_px_y = image_shape_.dims.height;
-    CHECK(tile_shape_.height > 0);
-    size_t tile_rows = std::ceil((float)img_px_y / (float)tile_shape_.height);
+    for (auto layer = 0; layer < multiscales.size(); ++layer) {
+        auto multiscale = multiscales.at(layer);
+        auto& image_shape = multiscale.image;
+        auto& tile_shape = multiscale.tile;
 
-    size_t img_px_p = image_shape_.dims.planes;
-    CHECK(tile_shape_.planes > 0);
-    size_t tile_planes = std::ceil((float)img_px_p / (float)tile_shape_.planes);
+        CHECK(tile_shape.width > 0);
+        size_t img_px_x = image_shape.dims.channels * image_shape.dims.width;
+        size_t tile_cols = std::ceil((float)img_px_x / (float)tile_shape.width);
 
-    TRACE("Allocating %llu writers", tile_cols * tile_rows * tile_planes);
+        size_t img_px_y = image_shape_.dims.height;
+        CHECK(tile_shape_.height > 0);
+        size_t tile_rows =
+          std::ceil((float)img_px_y / (float)tile_shape_.height);
 
-    size_t buf_size =
-      compression_params_.has_value()
-        ? get_bytes_per_chunk(image_shape_, tile_shape_, max_bytes_per_chunk_)
-        : get_bytes_per_tile(image_shape_, tile_shape_);
+        size_t img_px_p = image_shape_.dims.planes;
+        CHECK(tile_shape_.planes > 0);
+        size_t tile_planes =
+          std::ceil((float)img_px_p / (float)tile_shape_.planes);
 
-    for (auto plane = 0; plane < tile_planes; ++plane) {
-        for (auto row = 0; row < tile_rows; ++row) {
-            for (auto col = 0; col < tile_cols; ++col) {
-                BaseEncoder* encoder;
-                if (compression_params_.has_value()) {
-                    CHECK(encoder = new BloscEncoder(compression_params_.value()));
-                } else {
-                    CHECK(encoder = new RawEncoder());
+        TRACE("Allocating %llu writers for layer %d",
+              tile_cols * tile_rows * tile_planes,
+              layer);
+
+        size_t buf_size =
+          compression_params_.has_value()
+            ? get_bytes_per_chunk(image_shape, tile_shape, max_bytes_per_chunk_)
+            : get_bytes_per_tile(image_shape, tile_shape);
+
+        writers_.emplace(layer, std::vector<std::shared_ptr<ChunkWriter>>());
+        for (auto plane = 0; plane < tile_planes; ++plane) {
+            for (auto row = 0; row < tile_rows; ++row) {
+                for (auto col = 0; col < tile_cols; ++col) {
+                    BaseEncoder* encoder;
+                    if (compression_params_.has_value()) {
+                        CHECK(encoder =
+                                new BloscEncoder(compression_params_.value()));
+                    } else {
+                        CHECK(encoder = new RawEncoder());
+                    }
+
+                    encoder->allocate_buffer(buf_size);
+                    encoder->set_bytes_per_pixel(
+                      bytes_per_sample_type(image_shape_.type));
+                    writers_.at(layer).push_back(
+                      std::make_shared<ChunkWriter>(encoder,
+                                                    image_shape,
+                                                    tile_shape,
+                                                    layer,
+                                                    col,
+                                                    row,
+                                                    plane,
+                                                    max_bytes_per_chunk_,
+                                                    dimension_separator_,
+                                                    data_dir_));
                 }
-
-                encoder->allocate_buffer(buf_size);
-                encoder->set_bytes_per_pixel(
-                  bytes_per_sample_type(image_shape_.type));
-                writers_.push_back(
-                  std::make_shared<ChunkWriter>(encoder,
-                                                image_shape_,
-                                                tile_shape_,
-                                                col,
-                                                row,
-                                                plane,
-                                                max_bytes_per_chunk_,
-                                                dimension_separator_,
-                                                data_dir_));
             }
         }
     }
@@ -797,14 +920,15 @@ zarr::get_bytes_per_tile(const ImageShape& image_shape,
            tile_shape.planes;
 }
 
-size_t
+uint64_t
 zarr::get_tiles_per_chunk(const ImageShape& image_shape,
                           const TileShape& tile_shape,
-                          size_t max_bytes_per_chunk) noexcept
+                          uint64_t max_bytes_per_chunk) noexcept
 {
-    return (size_t)std::floor(
-      (float)max_bytes_per_chunk /
-      (float)get_bytes_per_tile(image_shape, tile_shape));
+    uint64_t bpt = get_bytes_per_tile(image_shape, tile_shape);
+    if (0 == bpt)
+        return 0;
+    return (uint64_t)std::floor((double)max_bytes_per_chunk / (double)bpt);
 }
 
 size_t
@@ -842,12 +966,12 @@ zarr::worker_thread(ThreadContext* ctx)
 {
     using namespace std::chrono_literals;
 
-    LOG("Worker thread starting.");
+    TRACE("Worker thread starting.");
     CHECK(ctx);
 
     while (true) {
         std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 10ms, [&] { return ctx->should_stop; });
+        ctx->cv.wait_for(lock, 5ms, [&] { return ctx->should_stop; });
 
         if (ctx->should_stop) {
             break;
