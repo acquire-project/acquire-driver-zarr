@@ -15,6 +15,7 @@ else()
     set(tests
         list-devices
         get-meta
+        write-zarr-compressed-multiscale
         write-zarr-compressed-with-chunking
         write-zarr-compressed-with-chunking-and-rollover
         write-zarr-raw-multiscale

@@ -1,0 +1,248 @@
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
+
+#include "device/hal/device.manager.h"
+#include "acquire.h"
+#include "logger.h"
+
+#include "json.hpp"
+
+namespace fs = std::filesystem;
+using json = nlohmann::json;
+
+void
+reporter(int is_error,
+         const char* file,
+         int line,
+         const char* function,
+         const char* msg)
+{
+    fprintf(is_error ? stderr : stdout,
+            "%s%s(%d) - %s: %s\n",
+            is_error ? "ERROR " : "",
+            file,
+            line,
+            function,
+            msg);
+}
+
+/// Helper for passing size static strings as function args.
+/// For a function: `f(char*,size_t)` use `f(SIZED("hello"))`.
+/// Expands to `f("hello",5)`.
+#define SIZED(str) str, sizeof(str) - 1
+
+#define L (aq_logger)
+#define LOG(...) L(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+#define ERR(...) L(1, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
+#define EXPECT(e, ...)                                                         \
+    do {                                                                       \
+        if (!(e)) {                                                            \
+            char buf[1 << 8] = { 0 };                                          \
+            ERR(__VA_ARGS__);                                                  \
+            snprintf(buf, sizeof(buf) - 1, __VA_ARGS__);                       \
+            throw std::runtime_error(buf);                                     \
+        }                                                                      \
+    } while (0)
+#define CHECK(e) EXPECT(e, "Expression evaluated as false: %s", #e)
+#define DEVOK(e) CHECK(Device_Ok == (e))
+#define OK(e) CHECK(AcquireStatus_Ok == (e))
+
+/// Check that a==b
+/// example: `ASSERT_EQ(int,"%d",42,meaning_of_life())`
+#define ASSERT_EQ(T, fmt, a, b)                                                \
+    do {                                                                       \
+        T a_ = (T)(a);                                                         \
+        T b_ = (T)(b);                                                         \
+        EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
+    } while (0)
+
+/// Check that a>b
+/// example: `ASSERT_GT(int,"%d",43,meaning_of_life())`
+#define ASSERT_GT(T, fmt, a, b)                                                \
+    do {                                                                       \
+        T a_ = (T)(a);                                                         \
+        T b_ = (T)(b);                                                         \
+        EXPECT(                                                                \
+          a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
+    } while (0)
+
+const static uint32_t frame_width = 1920;
+const static uint32_t frame_height = 1080;
+
+const static uint32_t tile_width = frame_width / 3;
+const static uint32_t tile_height = frame_height / 3;
+
+const static uint32_t max_bytes_per_chunk = 16 << 20;
+const static auto max_frames = 73;
+
+const static int16_t max_layers = -1;
+
+void
+acquire(AcquireRuntime* runtime, const char* filename)
+{
+    auto dm = acquire_device_manager(runtime);
+    CHECK(runtime);
+    CHECK(dm);
+
+    AcquireProperties props = {};
+    OK(acquire_get_configuration(runtime, &props));
+
+    DEVOK(device_manager_select(dm,
+                                DeviceKind_Camera,
+                                SIZED("simulated.*empty.*"),
+                                &props.video[0].camera.identifier));
+    DEVOK(device_manager_select(dm,
+                                DeviceKind_Storage,
+                                SIZED("ZarrBlosc1ZstdByteShuffle"),
+                                &props.video[0].storage.identifier));
+
+    const char external_metadata[] = R"({"hello":"world"})";
+    const struct PixelScale sample_spacing_um = { 1, 1 };
+
+    CHECK(storage_properties_init(&props.video[0].storage.settings,
+                                  0,
+                                  (char*)filename,
+                                  strlen(filename) + 1,
+                                  (char*)external_metadata,
+                                  sizeof(external_metadata),
+                                  sample_spacing_um));
+
+    CHECK(
+      storage_properties_set_chunking_props(&props.video[0].storage.settings,
+                                            tile_width,
+                                            tile_height,
+                                            1,
+                                            max_bytes_per_chunk));
+
+    CHECK(storage_properties_set_multiscale_props(
+      &props.video[0].storage.settings, max_layers));
+
+    props.video[0].camera.settings.binning = 1;
+    props.video[0].camera.settings.pixel_type = SampleType_u8;
+    props.video[0].camera.settings.shape = { .x = frame_width,
+                                             .y = frame_height };
+    props.video[0].max_frame_count = max_frames;
+
+    OK(acquire_configure(runtime, &props));
+    OK(acquire_start(runtime));
+    OK(acquire_stop(runtime));
+}
+
+struct LayerTestCase
+{
+    int layer;
+    int frame_width;
+    int frame_height;
+    int tile_width;
+    int tile_height;
+    int frames_per_chunk;
+};
+
+void
+verify_layer(const LayerTestCase& test_case)
+{
+    const auto layer = test_case.layer;
+    const auto layer_tile_width = test_case.tile_width;
+    const auto layer_frame_width = test_case.frame_width;
+    const auto layer_tile_height = test_case.tile_height;
+    const auto layer_frame_height = test_case.frame_height;
+    const auto frames_per_chunk = test_case.frames_per_chunk;
+
+    const auto zarray_path =
+      fs::path(TEST ".zarr") / std::to_string(layer) / ".zarray";
+    CHECK(fs::is_regular_file(zarray_path));
+    CHECK(fs::file_size(zarray_path) > 0);
+
+    // check metadata
+    std::ifstream f(zarray_path);
+    json zarray = json::parse(f);
+
+    const auto shape = zarray["shape"];
+    ASSERT_EQ(int, "%d", max_frames, shape[0]);
+    ASSERT_EQ(int, "%d", 1, shape[1]);
+    ASSERT_EQ(int, "%d", layer_frame_height, shape[2]);
+    ASSERT_EQ(int, "%d", layer_frame_width, shape[3]);
+
+    const auto chunks = zarray["chunks"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0].get<int>());
+    ASSERT_EQ(int, "%d", 1, chunks[1].get<int>());
+    ASSERT_EQ(int, "%d", layer_tile_height, chunks[2].get<int>());
+    ASSERT_EQ(int, "%d", layer_tile_width, chunks[3].get<int>());
+
+    // check chunked data
+    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
+                      chunks[2].get<int>() * chunks[3].get<int>();
+
+    const auto tiles_in_x =
+      (uint32_t)std::ceil((float)layer_frame_width / (float)layer_tile_width);
+    const auto tiles_in_y =
+      (uint32_t)std::ceil((float)layer_frame_height / (float)layer_tile_height);
+
+    for (auto i = 0; i < tiles_in_y; ++i) {
+        for (auto j = 0; j < tiles_in_x; ++j) {
+            const auto chunk_file_path = fs::path(TEST ".zarr/") /
+                                         std::to_string(layer) / "0" / "0" /
+                                         std::to_string(i) / std::to_string(j);
+            CHECK(fs::is_regular_file(chunk_file_path));
+            ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
+            ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+        }
+    }
+
+    // check there's not a second chunk in t
+    auto missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "1";
+    CHECK(!fs::is_regular_file(missing_path));
+
+    // check there's not a second chunk in z
+    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "1";
+    CHECK(!fs::is_regular_file(missing_path));
+
+    // check there's no add'l chunks in y
+    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" /
+                   std::to_string(tiles_in_y);
+    CHECK(!fs::is_regular_file(missing_path));
+
+    // check there's no add'l chunks in y
+    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" /
+                   "0" / std::to_string(tiles_in_x);
+    CHECK(!fs::is_regular_file(missing_path));
+}
+
+int
+main()
+{
+    auto runtime = acquire_init(reporter);
+    acquire(runtime, TEST ".zarr");
+
+    CHECK(fs::is_directory(TEST ".zarr"));
+
+    const auto external_metadata_path =
+      fs::path(TEST ".zarr") / "0" / ".zattrs";
+    CHECK(fs::is_regular_file(external_metadata_path));
+    CHECK(fs::file_size(external_metadata_path) > 0);
+
+    const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
+    CHECK(fs::is_regular_file(group_zattrs_path));
+    CHECK(fs::file_size(group_zattrs_path) > 0);
+
+    // check metadata
+    std::ifstream f(group_zattrs_path);
+    json group_zattrs = json::parse(f);
+
+    auto datasets = group_zattrs["multiscales"][0]["datasets"];
+    ASSERT_EQ(int, "%d", 3, datasets.size());
+
+    // verify each layer
+    verify_layer({ 0, 1920, 1080, 640, 360, 72 });
+    verify_layer({ 1, 960, 540, 640, 360, 72 });
+    // rollover doesn't happen here since tile size is less than the specified tile size
+    verify_layer({ 2, 480, 270, 480, 270, 73 });
+
+    auto missing_path = fs::path(TEST ".zarr/3");
+    CHECK(!fs::exists(missing_path));
+
+    LOG("Done (OK)");
+    acquire_shutdown(runtime);
+    return 0;
+}
