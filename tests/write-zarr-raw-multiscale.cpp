@@ -1,3 +1,8 @@
+/// @brief Test that an acquisition to Zarr with multiscale enabled writes
+/// multiple layers to the Zarr group, that the layers are the correct size,
+/// that they are chunked accordingly, and that the metadata is written
+/// correctly.
+
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -55,6 +60,20 @@ reporter(int is_error,
         T a_ = (T)(a);                                                         \
         T b_ = (T)(b);                                                         \
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
+    } while (0)
+
+/// Check that strings a == b
+/// example: `ASSERT_STREQ("foo",container_of_foo)`
+#define ASSERT_STREQ(a, b)                                                     \
+    do {                                                                       \
+        std::string a_ = (a);                                                  \
+        std::string b_ = (b);                                                  \
+        EXPECT(a_ == b_,                                                       \
+               "Expected '%s'=='%s' but '%s'!= '%s'",                          \
+               #a,                                                             \
+               #b,                                                             \
+               a_.c_str(),                                                     \
+               b_.c_str());                                                    \
     } while (0)
 
 const static uint32_t frame_width = 1920;
@@ -220,13 +239,30 @@ main()
     std::ifstream f(group_zattrs_path);
     json group_zattrs = json::parse(f);
 
-    auto datasets = group_zattrs["multiscales"][0]["datasets"];
+    const auto multiscales = group_zattrs["multiscales"][0];
+    const auto& datasets = multiscales["datasets"];
     ASSERT_EQ(int, "%d", 3, datasets.size());
+    for (auto i = 0; i < 3; ++i) {
+        const auto& dataset = datasets.at(i);
+        ASSERT_STREQ(std::to_string(i), dataset["path"]);
+
+        const auto& coord_trans = dataset["coordinateTransformations"][0];
+        ASSERT_STREQ("scale", coord_trans["type"]);
+
+        const auto& scale = coord_trans["scale"];
+        ASSERT_EQ(float, "%f", 1.f, scale[0].get<float>());
+        ASSERT_EQ(float, "%f", 1.f, scale[1].get<float>());
+        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[2].get<float>());
+        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[3].get<float>());
+    }
+
+    ASSERT_STREQ(multiscales["type"], "local_mean");
 
     // verify each layer
     verify_layer({ 0, 1920, 1080, 640, 360, 72 });
     verify_layer({ 1, 960, 540, 640, 360, 72 });
-    // rollover doesn't happen here since tile size is less than the specified tile size
+    // rollover doesn't happen here since tile size is less than the requested
+    // tile size
     verify_layer({ 2, 480, 270, 480, 270, 73 });
 
     auto missing_path = fs::path(TEST ".zarr/3");

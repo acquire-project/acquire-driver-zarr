@@ -587,6 +587,8 @@ zarr::Zarr::write_group_zattrs_json_() const
           { "unit", "micrometer" },
         },
     };
+
+    // spatial multiscale metadata
     if (writers_.empty() || !scaler_.has_value()) {
         zgroup_attrs["multiscales"][0]["datasets"] = {
             {
@@ -618,8 +620,9 @@ zarr::Zarr::write_group_zattrs_json_() const
             });
         }
 
-        zgroup_attrs["type"] = "local_mean";
-        zgroup_attrs["metadata"] = {
+        // downsampling metadata
+        zgroup_attrs["multiscales"][0]["type"] = "local_mean";
+        zgroup_attrs["multiscales"][0]["metadata"] = {
             { "description",
               "The fields in the metadata describe how to reproduce this "
               "multiscaling in scikit-image. The method and its parameters are "
