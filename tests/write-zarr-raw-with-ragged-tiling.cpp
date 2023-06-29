@@ -58,7 +58,7 @@ reporter(int is_error,
     } while (0)
 
 /// Check that a>b
-/// example: `ASSERT_GT(int,"%d",42,meaning_of_life())`
+/// example: `ASSERT_GT(int,"%d",43,meaning_of_life())`
 #define ASSERT_GT(T, fmt, a, b)                                                \
     do {                                                                       \
         T a_ = (T)(a);                                                         \
