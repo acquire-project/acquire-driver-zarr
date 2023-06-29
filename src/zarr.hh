@@ -111,7 +111,7 @@ struct Zarr final : StorageInterface
     std::map<size_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
 
     // changes during acquisition
-    uint64_t frame_count_;
+    uint32_t frame_count_;
     mutable std::mutex job_queue_mutex_;
     std::queue<JobT> job_queue_;
 
@@ -167,7 +167,7 @@ size_t
 get_bytes_per_tile(const ImageShape& image_shape,
                    const TileShape& tile_shape) noexcept;
 
-uint64_t
+uint32_t
 get_tiles_per_chunk(const ImageShape& image_shape,
                     const TileShape& tile_shape,
                     uint64_t max_bytes_per_chunk) noexcept;

@@ -928,15 +928,15 @@ zarr::get_bytes_per_tile(const ImageShape& image_shape,
            tile_shape.planes;
 }
 
-uint64_t
+uint32_t
 zarr::get_tiles_per_chunk(const ImageShape& image_shape,
                           const TileShape& tile_shape,
                           uint64_t max_bytes_per_chunk) noexcept
 {
-    uint64_t bpt = get_bytes_per_tile(image_shape, tile_shape);
+    auto bpt = (float)get_bytes_per_tile(image_shape, tile_shape);
     if (0 == bpt)
         return 0;
-    return (uint64_t)std::floor((double)max_bytes_per_chunk / (double)bpt);
+    return (uint32_t)std::floor((float)max_bytes_per_chunk / bpt);
 }
 
 size_t
