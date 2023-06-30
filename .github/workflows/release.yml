@@ -4,13 +4,13 @@ on:
   push:
     tags:
       - "v*.*.*"
+      - "nightly"
 
 jobs:
   build:
     strategy:
       matrix:
         platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
-
     runs-on: ${{ matrix.platform }}
 
     permissions:
@@ -34,6 +34,10 @@ jobs:
           cmake --build ${{github.workspace}}/build --config Release
           cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C Release -G ZIP
 
+      - name: Test  # don't release if tests are failing
+        working-directory: ${{github.workspace}}/build
+        run: ctest -C ${{env.BUILD_TYPE}} -L anyplatform --output-on-failure
+
       - uses: actions/upload-artifact@v3
         with:
           name: ${{matrix.platform}} binaries
@@ -54,9 +58,22 @@ jobs:
         with:
           path: ${{ github.workspace }}/artifacts
 
-      - uses: marvinpinto/action-automatic-releases@latest
+      - name: Tagged release
+        if: ${{ github.ref_name != 'nightly' }}
+        uses: marvinpinto/action-automatic-releases@latest
         with:
           repo_token: ${{ github.token }}
           prerelease: false
+          files: |
+            ${{steps.download.outputs.download-path}}/*/*.zip
+
+      - name: Nightly release
+        if: ${{ github.ref_name == 'nightly' }}
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: ${{ secrets.PAT }}
+          automatic_release_tag: "nightly"
+          prerelease: true
+          title: "Nightly Release"
           files: |
             ${{steps.download.outputs.download-path}}/*/*.zip
