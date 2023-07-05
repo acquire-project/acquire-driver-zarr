@@ -271,7 +271,7 @@ test_padding_inner()
 
     // even width, odd height, should have a row of zeros at the end of the
     // buffer
-    std::fill(buf.begin(), buf.end(), 255);
+    std::fill(buf.begin(), buf.end(), (T)255);
     memcpy(buf.data(), pad_one.data(), 12 * sizeof(T));
     pad<T>(buf.data(), 16 * sizeof(T), 4, 3);
     for (auto i = 0; i < pad_one.size(); ++i) {
@@ -282,7 +282,7 @@ test_padding_inner()
     }
 
     // odd width, even height, should have zeros at the end of every row
-    std::fill(buf.begin(), buf.end(), 255);
+    std::fill(buf.begin(), buf.end(), (T)255);
     memcpy(buf.data(), pad_one.data(), 12 * sizeof(T));
     pad<T>(buf.data(), 16 * sizeof(T), 3, 4);
 
@@ -298,7 +298,7 @@ test_padding_inner()
 
     // odd width, odd height, should have zeros at the end of every row and a
     // row of zeros at the end of the buffer
-    std::fill(buf.begin(), buf.end(), 255);
+    std::fill(buf.begin(), buf.end(), (T)255);
     memcpy(buf.data(), pad_both.data(), 9 * sizeof(T));
     pad<T>(buf.data(), 16 * sizeof(T), 3, 3);
     idx = 0;

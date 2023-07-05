@@ -122,7 +122,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                             1,
                                             max_bytes_per_chunk));
 
-    CHECK(storage_properties_set_multiscale_mode(
+    CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));
 
     props.video[0].camera.settings.binning = 1;
