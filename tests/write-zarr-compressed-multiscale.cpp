@@ -95,8 +95,6 @@ const static uint32_t tile_height = frame_height / 3;
 const static uint32_t max_bytes_per_chunk = 16 << 20;
 const static auto max_frames = 74;
 
-const static int16_t max_layers = -1;
-
 void
 acquire(AcquireRuntime* runtime, const char* filename)
 {
@@ -134,8 +132,8 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                             1,
                                             max_bytes_per_chunk));
 
-    CHECK(storage_properties_set_multiscale_props(
-      &props.video[0].storage.settings, max_layers));
+    CHECK(storage_properties_set_multiscale_mode(
+      &props.video[0].storage.settings, 1));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -271,7 +269,8 @@ main()
     // verify each layer
     verify_layer({ 0, 1920, 1080, 640, 360, 72 });
     verify_layer({ 1, 960, 540, 640, 360, 72 });
-    // rollover doesn't happen here since tile size is less than the specified tile size
+    // rollover doesn't happen here since tile size is less than the specified
+    // tile size
     verify_layer({ 2, 480, 270, 480, 270, 74 });
 
     auto missing_path = fs::path(TEST ".zarr/3");

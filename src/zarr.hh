@@ -89,10 +89,6 @@ struct Zarr final : StorageInterface
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
 
-    using MultiscaleProps = StorageProperties::storage_properties_multiscale_s;
-    using MultiscaleMeta =
-      StoragePropertyMetadata::storage_property_metadata_multiscale_s;
-
     // static - set on construction
     char dimension_separator_;
     std::optional<CompressionParams> compression_params_;
@@ -116,8 +112,7 @@ struct Zarr final : StorageInterface
     std::queue<JobT> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
-    void set_multiscale(const MultiscaleProps& props,
-                        const MultiscaleMeta& meta);
+    void set_multiscale(uint8_t enable);
 
     void create_data_directory_() const;
     void write_zarray_json_() const;

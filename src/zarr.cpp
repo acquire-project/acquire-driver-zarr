@@ -245,7 +245,7 @@ zarr::Zarr::set(const StorageProperties* props)
     set_chunking(props->chunking, meta.chunking);
 
     // multiscale
-    set_multiscale(props->multiscale, meta.multiscale);
+    set_multiscale(props->enable_multiscale);
 }
 
 void
@@ -275,12 +275,6 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
         },
         .multiscale = {
           .supported = 1,
-          .max_layer = {
-            .writable = 1,
-            .low = -1,
-            .high = 255,
-            .type = PropertyType_FixedPrecision,
-          },
         }
     };
 }
@@ -456,18 +450,11 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
 }
 
 void
-zarr::Zarr::set_multiscale(const MultiscaleProps& props,
-                           const MultiscaleMeta& meta)
+zarr::Zarr::set_multiscale(uint8_t enable)
 {
-    if (0 == props.max_layer) {
-        return;
+    if (enable) {
+        scaler_.emplace(this, image_shape_, tile_shape_);
     }
-
-    auto max_layer = std::clamp(props.max_layer,
-                                (int16_t)meta.max_layer.low,
-                                (int16_t)meta.max_layer.high);
-
-    scaler_.emplace(this, image_shape_, tile_shape_, max_layer);
 }
 
 void
@@ -656,8 +643,7 @@ zarr::Zarr::allocate_writers_()
 
     std::vector<Multiscale> multiscales;
     if (scaler_) {
-        multiscales =
-          get_tile_shapes(image_shape_, tile_shape_, scaler_->max_layer());
+        multiscales = get_tile_shapes(image_shape_, tile_shape_);
     } else {
         multiscales.emplace_back(image_shape_, tile_shape_);
     }

@@ -85,8 +85,6 @@ const static uint32_t tile_height = frame_height / 3;
 const static uint32_t max_bytes_per_chunk = 16 << 20;
 const static auto max_frames = 73;
 
-const static int16_t max_layers = -1;
-
 void
 acquire(AcquireRuntime* runtime, const char* filename)
 {
@@ -99,7 +97,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*radial.*"),
+                                SIZED("simulated.*random.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -124,8 +122,8 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                             1,
                                             max_bytes_per_chunk));
 
-    CHECK(storage_properties_set_multiscale_props(
-      &props.video[0].storage.settings, max_layers));
+    CHECK(storage_properties_set_multiscale_mode(
+      &props.video[0].storage.settings, 1));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;

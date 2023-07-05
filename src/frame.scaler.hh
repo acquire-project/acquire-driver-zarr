@@ -30,12 +30,9 @@ struct FrameScaler final
     FrameScaler() = delete;
     FrameScaler(Zarr* zarr,
                 const ImageShape& image_shape,
-                const TileShape& tile_shape,
-                int16_t max_layer);
+                const TileShape& tile_shape);
     FrameScaler(const FrameScaler&) = delete;
     ~FrameScaler() = default;
-
-    int16_t max_layer() const noexcept;
 
     [[nodiscard]] bool scale_frame(std::shared_ptr<TiledFrame> frame) const;
 
@@ -45,15 +42,12 @@ struct FrameScaler final
     const ImageShape& image_shape_;
     const TileShape& tile_shape_;
 
-    const int16_t max_layer_;
-
     mutable std::mutex mutex_;
 };
 
 std::vector<Multiscale>
 get_tile_shapes(const ImageShape& base_image_shape,
-                const TileShape& base_tile_shape,
-                int16_t max_layer);
+                const TileShape& base_tile_shape);
 } // namespace acquire::sink::zarr
 
 #endif // __cplusplus

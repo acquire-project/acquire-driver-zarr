@@ -70,10 +70,10 @@ average2d(void* im_, size_t bytes_of_image, const ImageShape& shape)
         for (auto j = 0; j < width; j += downscale) {
             auto k = i * width + j;
             // if downscale were larger than 2, we'd have more summands
-            image[k] = (T)(factor * (float)image[k] +
-                           factor * (float)image[k + 1] +
-                           factor * (float)image[k + width] +
-                           factor * (float)image[k + width + 1]);
+            image[k] =
+              (T)(factor * (float)image[k] + factor * (float)image[k + 1] +
+                  factor * (float)image[k + width] +
+                  factor * (float)image[k + width + 1]);
         }
 
         for (auto j = 1; j < half_width; ++j) {
@@ -111,20 +111,12 @@ Multiscale::Multiscale(const ImageShape& image_shape,
 
 FrameScaler::FrameScaler(Zarr* zarr,
                          const ImageShape& image_shape,
-                         const TileShape& tile_shape,
-                         int16_t max_layer)
+                         const TileShape& tile_shape)
   : zarr_{ zarr }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
-  , max_layer_{ max_layer }
 {
     CHECK(zarr);
-}
-
-int16_t
-FrameScaler::max_layer() const noexcept
-{
-    return max_layer_;
 }
 
 bool
@@ -134,7 +126,7 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
         zarr_->push_frame_to_writers(frame);
 
         std::vector<Multiscale> multiscales =
-          get_tile_shapes(image_shape_, tile_shape_, max_layer_);
+          get_tile_shapes(image_shape_, tile_shape_);
 
         size_t bytes_padded =
           get_padded_buffer_size_bytes(multiscales[0].image);
@@ -207,26 +199,19 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
 
 std::vector<Multiscale>
 get_tile_shapes(const ImageShape& base_image_shape,
-                const TileShape& base_tile_shape,
-                int16_t max_layer)
+                const TileShape& base_tile_shape)
 {
-    CHECK(max_layer >= -1);
-
     std::vector<Multiscale> shapes;
     shapes.emplace_back(base_image_shape, base_tile_shape);
-    if (max_layer == 0) {
-        return shapes;
-    }
 
     const int downscale = 2;
 
     uint32_t w = base_image_shape.dims.width;
     uint32_t h = base_image_shape.dims.height;
-    uint32_t b = max_layer == -1 ? std::max(w, h) : max_layer;
+    uint32_t b = std::max(w, h);
 
     for (; b > 0; b /= downscale) {
-        if (max_layer == -1 && w <= base_tile_shape.width &&
-            h <= base_tile_shape.height) {
+        if (w <= base_tile_shape.width && h <= base_tile_shape.height) {
             break;
         }
         w = (w + (w % downscale)) / downscale;
@@ -317,7 +302,7 @@ test_padding_inner()
     memcpy(buf.data(), pad_both.data(), 9 * sizeof(T));
     pad<T>(buf.data(), 16 * sizeof(T), 3, 3);
     idx = 0;
-    for (auto i = 0; i < 4; ++i) {
+    for (auto i = 0; i < 3; ++i) {
         for (auto j = 0; j < 3; ++j) {
             const auto k = i * 4 + j;
             CHECK(pad_both[idx++] == buf[k]);
@@ -332,44 +317,33 @@ test_padding_inner()
     LOG("OK (done)");
 }
 
-extern "C"
-{
-
-    acquire_export int unit_test__padding()
-    {
-        try {
-            test_padding_inner<uint8_t>();
-            test_padding_inner<int8_t>();
-            test_padding_inner<uint16_t>();
-            test_padding_inner<int16_t>();
-            test_padding_inner<float>();
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-            return 0;
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-            return 0;
-        }
-
-        return 1;
-    }
-}
-
 template<typename T>
 void
 test_average2d_inner(const SampleType& stype)
 {
     std::vector<T> buf({
-        1,  2,  3,  4,  // 1st row
-        5,  6,  7,  8,  // 2nd row
-        9,  10, 11, 12, // 3rd row
-        13, 14, 15, 16, // 4th row
+      1,
+      2,
+      3,
+      4, // 1st row
+      5,
+      6,
+      7,
+      8, // 2nd row
+      9,
+      10,
+      11,
+      12, // 3rd row
+      13,
+      14,
+      15,
+      16, // 4th row
     });
     std::vector<T> averaged({
-        (T)3.5,  // avg 1, 2, 5, 6
-        (T)5.5,  // avg 3, 4, 7, 8
-        (T)11.5, // avg 9, 10, 13, 14
-        (T)13.5, // avg 11, 12, 15, 16
+      (T)3.5,  // avg 1, 2, 5, 6
+      (T)5.5,  // avg 3, 4, 7, 8
+      (T)11.5, // avg 9, 10, 13, 14
+      (T)13.5, // avg 11, 12, 15, 16
     });
 
     ImageShape shape{
@@ -397,6 +371,25 @@ test_average2d_inner(const SampleType& stype)
 
 extern "C"
 {
+    acquire_export int unit_test__padding()
+    {
+        try {
+            test_padding_inner<uint8_t>();
+            test_padding_inner<int8_t>();
+            test_padding_inner<uint16_t>();
+            test_padding_inner<int16_t>();
+            test_padding_inner<float>();
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+            return 0;
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+            return 0;
+        }
+
+        return 1;
+    }
+
     acquire_export int unit_test__average2d()
     {
         try {

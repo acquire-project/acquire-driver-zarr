@@ -100,19 +100,6 @@ main()
                           (int)metadata.chunking.max_bytes_per_chunk.high);
 
                 CHECK(metadata.multiscale.supported);
-                ASSERT_EQ(int, "%d", PropertyType_FixedPrecision,
-                          (int)metadata.multiscale.max_layer.type);
-                // multiscale
-                ASSERT_EQ(int,
-                          "%d",
-                          -1,
-                          (int)metadata.multiscale.max_layer.low);
-                // multiscale
-                ASSERT_EQ(int,
-                          "%d",
-                          255,
-                          (int)metadata.multiscale.max_layer.high);
-
 
                 CHECK(Device_Ok == driver_close_device(device));
             }
