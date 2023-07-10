@@ -35,7 +35,7 @@ pad(void* im_, size_t bytes_of_image, size_t width, size_t height)
     size_t w_pad = width + (width % downscale),
            h_pad = height + (height % downscale);
     TRACE("padding: %d => %d, %d => %d", width, w_pad, height, h_pad);
-    size_t nbytes_pad = w_pad * h_pad;
+    size_t nbytes_pad = w_pad * h_pad * sizeof(T);
     CHECK(nbytes_pad <= bytes_of_image);
 
     if (height != h_pad) {
