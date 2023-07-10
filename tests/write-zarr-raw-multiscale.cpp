@@ -76,14 +76,14 @@ reporter(int is_error,
                b_.c_str());                                                    \
     } while (0)
 
-const static uint32_t frame_width = 1920;
-const static uint32_t frame_height = 1080;
+const static uint32_t frame_width = 240;
+const static uint32_t frame_height = 135;
 
 const static uint32_t tile_width = frame_width / 3;
 const static uint32_t tile_height = frame_height / 3;
 
 const static uint32_t max_bytes_per_chunk = 16 << 20;
-const static auto max_frames = 73;
+const static auto max_frames = 100;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -97,7 +97,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*random.*"),
+                                SIZED("simulated.*radial.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -129,6 +129,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
+    props.video[0].camera.settings.exposure_time_us = 1e4;
     props.video[0].max_frame_count = max_frames;
 
     OK(acquire_configure(runtime, &props));
@@ -256,11 +257,9 @@ main()
     ASSERT_STREQ(multiscales["type"], "local_mean");
 
     // verify each layer
-    verify_layer({ 0, 1920, 1080, 640, 360, 72 });
-    verify_layer({ 1, 960, 540, 640, 360, 72 });
-    // rollover doesn't happen here since tile size is less than the requested
-    // tile size
-    verify_layer({ 2, 480, 270, 480, 270, 73 });
+    verify_layer({ 0, 240, 135, 80, 45, 100 });
+    verify_layer({ 1, 120, 68, 80, 45, 100 }); // padding here
+    verify_layer({ 2, 60, 34, 60, 34, 100 });
 
     auto missing_path = fs::path(TEST ".zarr/3");
     CHECK(!fs::exists(missing_path));
