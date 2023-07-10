@@ -102,7 +102,9 @@ struct Zarr final : StorageInterface
     ImageShape image_shape_;
     TileShape tile_shape_;
 
-    std::optional<FrameScaler> scaler_;
+    /// Frame scaler.
+    std::optional<FrameScaler> frame_scaler_;
+
     /// Chunk writers for each layer/scale
     std::map<size_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
 

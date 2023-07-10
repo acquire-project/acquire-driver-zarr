@@ -356,12 +356,12 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         auto frame =
           std::make_shared<TiledFrame>(cur, image_shape_, tile_shape_);
 
-        if (scaler_) {
+        if (frame_scaler_) {
             std::scoped_lock lock(job_queue_mutex_);
 
             // push the new frame to our scaler
             job_queue_.emplace(
-              [this, frame]() { return scaler_->scale_frame(frame); });
+              [this, frame]() { return frame_scaler_->scale_frame(frame); });
         } else {
             push_frame_to_writers(frame);
         }
@@ -453,7 +453,7 @@ void
 zarr::Zarr::set_multiscale(uint8_t enable)
 {
     if (enable) {
-        scaler_.emplace(this, image_shape_, tile_shape_);
+        frame_scaler_.emplace(this, image_shape_, tile_shape_);
     }
 }
 
@@ -576,7 +576,7 @@ zarr::Zarr::write_group_zattrs_json_() const
     };
 
     // spatial multiscale metadata
-    if (writers_.empty() || !scaler_.has_value()) {
+    if (writers_.empty() || !frame_scaler_.has_value()) {
         zgroup_attrs["multiscales"][0]["datasets"] = {
             {
               { "path", "0" },
@@ -642,7 +642,7 @@ zarr::Zarr::allocate_writers_()
     writers_.clear();
 
     std::vector<Multiscale> multiscales;
-    if (scaler_) {
+    if (frame_scaler_) {
         multiscales = get_tile_shapes(image_shape_, tile_shape_);
     } else {
         multiscales.emplace_back(image_shape_, tile_shape_);
