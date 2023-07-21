@@ -44,6 +44,8 @@ struct ChunkWriter final
     const ImageShape& image_shape() const noexcept;
     const TileShape& tile_shape() const noexcept;
 
+    uint32_t frames_written() const;
+
   private:
     BaseEncoder* const encoder_;
 
@@ -51,9 +53,9 @@ struct ChunkWriter final
     const uint32_t tile_row_;
     const uint32_t tile_plane_;
 
-    size_t bytes_per_chunk_;
-    size_t tiles_per_chunk_;
-    size_t bytes_written_;
+    uint64_t bytes_per_chunk_;
+    uint32_t tiles_per_chunk_;
+    uint64_t bytes_written_;
 
     std::string base_dir_;
     uint32_t layer_;

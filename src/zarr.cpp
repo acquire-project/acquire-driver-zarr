@@ -244,8 +244,8 @@ zarr::Zarr::set(const StorageProperties* props)
     // chunking
     set_chunking(props->chunking, meta.chunking);
 
-    // multiscale
-    set_multiscale(props->enable_multiscale);
+    // hang on to this until we have the image shape
+    enable_multiscale_ = (bool)props->enable_multiscale;
 }
 
 void
@@ -361,7 +361,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 
             // push the new frame to our scaler
             job_queue_.emplace(
-              [this, frame]() { return frame_scaler_->scale_frame(frame); });
+              [this, frame]() { return frame_scaler_->push_frame(frame); });
         } else {
             push_frame_to_writers(frame);
         }
@@ -377,6 +377,11 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 {
     CHECK(shape);
     image_shape_ = *shape;
+
+    if (enable_multiscale_) {
+        frame_scaler_.emplace(this, image_shape_, tile_shape_);
+    }
+
     allocate_writers_();
 }
 
@@ -384,7 +389,12 @@ void
 zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
 {
     std::scoped_lock lock(job_queue_mutex_);
-    CHECK(writers_.find(frame->layer()) != writers_.end());
+    auto writer_found = writers_.find(frame->layer()) != writers_.end();
+    if (!writer_found) {
+        LOGE("No writer found for layer %zu", frame->layer());
+        return;
+    }
+    //    CHECK(writers_.find(frame->layer()) != writers_.end());
 
     for (auto& writer : writers_.at(frame->layer())) {
         job_queue_.emplace(
@@ -450,14 +460,6 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
 }
 
 void
-zarr::Zarr::set_multiscale(uint8_t enable)
-{
-    if (enable) {
-        frame_scaler_.emplace(this, image_shape_, tile_shape_);
-    }
-}
-
-void
 zarr::Zarr::create_data_directory_() const
 {
     namespace fs = std::filesystem;
@@ -499,14 +501,20 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
-    const auto frames_per_chunk = (uint64_t)std::min(
-      frame_count_, get_tiles_per_chunk(is, ts, max_bytes_per_chunk_));
+
+    if (!writers_.contains(layer)) {
+        return;
+    }
+
+    const uint64_t frame_count = writers_.at(layer).front()->frames_written();
+    const auto frames_per_chunk = std::min(
+      frame_count, (uint64_t)get_tiles_per_chunk(is, ts, max_bytes_per_chunk_));
 
     json zarray_attrs = {
         { "zarr_format", 2 },
         { "shape",
           {
-            (uint64_t)frame_count_,
+            frame_count,
             is.dims.channels,
             is.dims.height,
             is.dims.width,
@@ -650,8 +658,8 @@ zarr::Zarr::allocate_writers_()
 
     for (auto layer = 0; layer < multiscales.size(); ++layer) {
         auto multiscale = multiscales.at(layer);
-        auto& image_shape = multiscale.image;
-        auto& tile_shape = multiscale.tile;
+        auto& image_shape = multiscale.image_shape;
+        auto& tile_shape = multiscale.tile_shape;
 
         CHECK(tile_shape.width > 0);
         size_t img_px_x = image_shape.dims.channels * image_shape.dims.width;

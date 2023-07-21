@@ -5,6 +5,8 @@
 #include <thread>
 
 namespace {
+namespace zarr = acquire::sink::zarr;
+
 size_t
 bytes_of_type(const SampleType& type)
 {
@@ -25,14 +27,14 @@ bytes_of_type(const SampleType& type)
 
 template<typename T>
 void
-pad(void* im_,
-    size_t bytes_of_image,
-    uint32_t width,
-    uint32_t height,
-    uint32_t planes)
+pad(void* im_, size_t bytes_of_image, const ImageShape& image_shape)
 {
     auto* image = (T*)im_;
     const int downscale = 2;
+
+    const auto width = image_shape.dims.width;
+    const auto height = image_shape.dims.height;
+    const auto planes = image_shape.dims.planes;
 
     const auto w_pad = width + (width % downscale),
                h_pad = height + (height % downscale);
@@ -120,6 +122,27 @@ average_frame(void* image_, size_t bytes_of_image, const ImageShape& shape)
     }
 }
 
+template<typename T>
+void
+average_tiled_frames(
+  void* buf_,
+  size_t bytes_of_buf,
+  const std::vector<std::shared_ptr<zarr::TiledFrame>>& frames)
+{
+    CHECK(bytes_of_buf >= frames.front()->bytes_of_image());
+
+    auto* buf = (T*)buf_;
+    size_t n_elements = frames.front()->bytes_of_image() / sizeof(T);
+    float factor = 1.f / frames.size();
+
+    for (auto& frame : frames) {
+        auto* image = (T*)frame->data();
+        for (size_t i = 0; i < n_elements; ++i) {
+            buf[i] += factor * image[i];
+        }
+    }
+}
+
 size_t
 get_padded_buffer_size_bytes(const ImageShape& shape)
 {
@@ -135,8 +158,8 @@ get_padded_buffer_size_bytes(const ImageShape& shape)
 namespace acquire::sink::zarr {
 Multiscale::Multiscale(const ImageShape& image_shape,
                        const TileShape& tile_shape)
-  : image{ image_shape }
-  , tile{ tile_shape }
+  : image_shape{ image_shape }
+  , tile_shape{ tile_shape }
 {
 }
 
@@ -144,85 +167,21 @@ FrameScaler::FrameScaler(Zarr* zarr,
                          const ImageShape& image_shape,
                          const TileShape& tile_shape)
   : zarr_{ zarr }
-  , image_shape_{ image_shape }
-  , tile_shape_{ tile_shape }
 {
     CHECK(zarr_);
+    multiscales_ = get_tile_shapes(image_shape, tile_shape);
+    for (int16_t i = 1; i < multiscales_.size(); ++i) {
+        accumulators_.insert({ i, {} });
+    }
 }
 
 bool
-FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
+FrameScaler::push_frame(std::shared_ptr<TiledFrame> frame)
 {
+    std::unique_lock lock(mutex_);
     try {
         zarr_->push_frame_to_writers(frame);
-
-        std::vector<Multiscale> multiscales =
-          get_tile_shapes(image_shape_, tile_shape_);
-
-        size_t bytes_padded =
-          get_padded_buffer_size_bytes(multiscales[0].image);
-
-        std::vector<uint8_t> im(bytes_padded);
-        memcpy(im.data(), frame->data(), frame->bytes_of_image());
-
-        for (auto layer = 1; layer < multiscales.size(); ++layer) {
-            ImageShape& image_shape = multiscales[layer - 1].image;
-
-            switch (image_shape_.type) {
-                case SampleType_u10:
-                case SampleType_u12:
-                case SampleType_u14:
-                case SampleType_u16:
-                    pad<uint16_t>(im.data(),
-                                  im.size(),
-                                  image_shape.dims.width,
-                                  image_shape.dims.height,
-                                  image_shape.dims.planes);
-                    average_frame<uint16_t>(im.data(), im.size(), image_shape);
-                    break;
-                case SampleType_i8:
-                    pad<int8_t>(im.data(),
-                                im.size(),
-                                image_shape.dims.width,
-                                image_shape.dims.height,
-                                image_shape.dims.planes);
-                    average_frame<int8_t>(im.data(), im.size(), image_shape);
-                    break;
-                case SampleType_i16:
-                    pad<int16_t>(im.data(),
-                                 im.size(),
-                                 image_shape.dims.width,
-                                 image_shape.dims.height,
-                                 image_shape.dims.planes);
-                    average_frame<int16_t>(im.data(), im.size(), image_shape);
-                    break;
-                case SampleType_f32:
-                    pad<float>(im.data(),
-                               im.size(),
-                               image_shape.dims.width,
-                               image_shape.dims.height,
-                               image_shape.dims.planes);
-                    average_frame<float>(im.data(), im.size(), image_shape);
-                    break;
-                case SampleType_u8:
-                default:
-                    pad<uint8_t>(im.data(),
-                                 im.size(),
-                                 image_shape.dims.width,
-                                 image_shape.dims.height,
-                                 image_shape.dims.planes);
-                    average_frame<uint8_t>(im.data(), im.size(), image_shape);
-                    break;
-            }
-
-            image_shape = multiscales[layer].image;
-            const auto& tile_shape = multiscales[layer].tile;
-            auto scale_layer = std::make_shared<TiledFrame>(
-              im.data(), frame->frame_id(), layer, image_shape, tile_shape);
-
-            zarr_->push_frame_to_writers(scale_layer);
-        }
-
+        downsample_and_accumulate(frame, 1);
         return true;
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -231,6 +190,101 @@ FrameScaler::scale_frame(std::shared_ptr<TiledFrame> frame) const
     }
 
     return false;
+}
+
+void
+FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
+                                       int16_t layer)
+{
+    std::vector<std::shared_ptr<TiledFrame>>& accumulator =
+      accumulators_.at(layer);
+
+    const ImageShape& image_shape = multiscales_.at(layer - 1).image_shape;
+    const auto bytes_padded = get_padded_buffer_size_bytes(image_shape);
+
+    std::vector<uint8_t> im(bytes_padded);
+    memcpy(im.data(), frame->data(), frame->bytes_of_image());
+
+    switch (image_shape.type) {
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            pad<uint16_t>(im.data(), im.size(), image_shape);
+            average_frame<uint16_t>(im.data(), im.size(), image_shape);
+            break;
+        case SampleType_i8:
+            pad<int8_t>(im.data(), im.size(), image_shape);
+            average_frame<int8_t>(im.data(), im.size(), image_shape);
+            break;
+        case SampleType_i16:
+            pad<int16_t>(im.data(), im.size(), image_shape);
+            average_frame<int16_t>(im.data(), im.size(), image_shape);
+            break;
+        case SampleType_f32:
+            pad<float>(im.data(), im.size(), image_shape);
+            average_frame<float>(im.data(), im.size(), image_shape);
+            break;
+        case SampleType_u8:
+        default:
+            pad<uint8_t>(im.data(), im.size(), image_shape);
+            average_frame<uint8_t>(im.data(), im.size(), image_shape);
+            break;
+    }
+
+    frame = std::make_shared<TiledFrame>(im.data(),
+                                         frame->frame_id(),
+                                         layer,
+                                         multiscales_.at(layer).image_shape,
+                                         multiscales_.at(layer).tile_shape);
+
+    accumulator.push_back(frame);
+    if (accumulator.size() == 2) {
+        frame = average_two_frames(layer);
+        zarr_->push_frame_to_writers(frame);
+        if (layer < multiscales_.size() - 1) {
+            downsample_and_accumulate(frame, layer + 1);
+        }
+        accumulator.clear();
+    }
+}
+
+std::shared_ptr<TiledFrame>
+FrameScaler::average_two_frames(int16_t layer)
+{
+    std::vector<std::shared_ptr<TiledFrame>>& frames = accumulators_.at(layer);
+    size_t nbytes_frame = frames.front()->bytes_of_image();
+    std::vector<uint8_t> buf(nbytes_frame);
+
+    const auto& base_image_shape = multiscales_.at(0).image_shape;
+    switch (base_image_shape.type) {
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            average_tiled_frames<uint16_t>(buf.data(), nbytes_frame, frames);
+            break;
+        case SampleType_i8:
+            average_tiled_frames<int8_t>(buf.data(), nbytes_frame, frames);
+            break;
+        case SampleType_i16:
+            average_tiled_frames<int16_t>(buf.data(), nbytes_frame, frames);
+            break;
+        case SampleType_f32:
+            average_tiled_frames<float>(buf.data(), nbytes_frame, frames);
+            break;
+        case SampleType_u8:
+        default:
+            average_tiled_frames<uint8_t>(buf.data(), nbytes_frame, frames);
+            break;
+    }
+
+    return std::make_shared<zarr::TiledFrame>(
+      (uint8_t*)buf.data(),
+      frames.front()->frame_id(),
+      layer,
+      multiscales_.at(layer).image_shape,
+      multiscales_.at(layer).tile_shape);
 }
 
 std::vector<Multiscale>
@@ -244,12 +298,8 @@ get_tile_shapes(const ImageShape& base_image_shape,
 
     uint32_t w = base_image_shape.dims.width;
     uint32_t h = base_image_shape.dims.height;
-    uint32_t b = std::max(w, h);
 
-    for (; b > 0; b /= downscale) {
-        if (w <= base_tile_shape.width && h <= base_tile_shape.height) {
-            break;
-        }
+    while (w > base_tile_shape.width || h > base_tile_shape.height) {
         w = (w + (w % downscale)) / downscale;
         h = (h + (h % downscale)) / downscale;
 
@@ -299,55 +349,67 @@ test_padding_inner()
     std::vector<T> buf(16);
 
     // both dims even, should do nothing
-    memcpy(buf.data(), pad_none.data(), 16 * sizeof(T));
-    pad<T>(buf.data(), 16 * sizeof(T), 4, 4, 1);
-    for (auto i = 0; i < buf.size(); ++i) {
-        CHECK(pad_none.at(i) == buf.at(i));
+    {
+        ImageShape shape{ .dims = { .width = 4, .height = 4, .planes = 1 } };
+        memcpy(buf.data(), pad_none.data(), 16 * sizeof(T));
+        pad<T>(buf.data(), 16 * sizeof(T), shape);
+        for (auto i = 0; i < buf.size(); ++i) {
+            CHECK(pad_none.at(i) == buf.at(i));
+        }
     }
 
     // even width, odd height, should have a row of zeros at the end of the
     // buffer
-    std::fill(buf.begin(), buf.end(), (T)255);
-    memcpy(buf.data(), pad_one.data(), 12 * sizeof(T));
-    pad<T>(buf.data(), 16 * sizeof(T), 4, 3, 1);
-    for (auto i = 0; i < pad_one.size(); ++i) {
-        CHECK(pad_one.at(i) == buf.at(i));
-    }
-    for (auto i = pad_one.size(); i < buf.size(); ++i) {
-        CHECK(0 == buf.at(i));
+    {
+        ImageShape shape{ .dims = { .width = 4, .height = 3, .planes = 1 } };
+        std::fill(buf.begin(), buf.end(), (T)255);
+        memcpy(buf.data(), pad_one.data(), 12 * sizeof(T));
+        pad<T>(buf.data(), 16 * sizeof(T), shape);
+        for (auto i = 0; i < pad_one.size(); ++i) {
+            CHECK(pad_one.at(i) == buf.at(i));
+        }
+        for (auto i = pad_one.size(); i < buf.size(); ++i) {
+            CHECK(0 == buf.at(i));
+        }
     }
 
     // odd width, even height, should have zeros at the end of every row
-    std::fill(buf.begin(), buf.end(), (T)255);
-    memcpy(buf.data(), pad_one.data(), 12 * sizeof(T));
-    pad<T>(buf.data(), 16 * sizeof(T), 3, 4, 1);
+    {
+        ImageShape shape{ .dims = { .width = 3, .height = 4, .planes = 1 } };
+        std::fill(buf.begin(), buf.end(), (T)255);
+        memcpy(buf.data(), pad_one.data(), 12 * sizeof(T));
+        pad<T>(buf.data(), 16 * sizeof(T), shape);
 
-    size_t idx = 0;
-    for (auto i = 0; i < 4; ++i) {
-        for (auto j = 0; j < 3; ++j) {
-            const auto k = i * 4 + j;
-            CHECK(pad_one[idx++] == buf[k]);
+        size_t idx = 0;
+        for (auto i = 0; i < 4; ++i) {
+            for (auto j = 0; j < 3; ++j) {
+                const auto k = i * 4 + j;
+                CHECK(pad_one[idx++] == buf[k]);
+            }
+            const auto k = i * 4 + 3;
+            CHECK(0 == buf[k]);
         }
-        const auto k = i * 4 + 3;
-        CHECK(0 == buf[k]);
     }
 
     // odd width, odd height, should have zeros at the end of every row and a
     // row of zeros at the end of the buffer
-    std::fill(buf.begin(), buf.end(), (T)255);
-    memcpy(buf.data(), pad_both.data(), 9 * sizeof(T));
-    pad<T>(buf.data(), 16 * sizeof(T), 3, 3, 1);
-    idx = 0;
-    for (auto i = 0; i < 3; ++i) {
-        for (auto j = 0; j < 3; ++j) {
-            const auto k = i * 4 + j;
-            CHECK(pad_both[idx++] == buf[k]);
+    {
+        ImageShape shape{ .dims = { .width = 3, .height = 3, .planes = 1 } };
+        std::fill(buf.begin(), buf.end(), (T)255);
+        memcpy(buf.data(), pad_both.data(), 9 * sizeof(T));
+        pad<T>(buf.data(), 16 * sizeof(T), shape);
+        size_t idx = 0;
+        for (auto i = 0; i < 3; ++i) {
+            for (auto j = 0; j < 3; ++j) {
+                const auto k = i * 4 + j;
+                CHECK(pad_both[idx++] == buf[k]);
+            }
+            const auto k = i * 4 + 3;
+            CHECK(0 == buf[k]);
         }
-        const auto k = i * 4 + 3;
-        CHECK(0 == buf[k]);
-    }
-    for (auto i = 12; i < buf.size(); ++i) {
-        CHECK(0 == buf.at(i));
+        for (auto i = 12; i < buf.size(); ++i) {
+            CHECK(0 == buf.at(i));
+        }
     }
 
     LOG("OK (done)");

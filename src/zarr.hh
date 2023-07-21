@@ -101,8 +101,9 @@ struct Zarr final : StorageInterface
     uint64_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
+    bool enable_multiscale_;
 
-    /// Frame scaler.
+    /// Downsampling of incoming frames.
     std::optional<FrameScaler> frame_scaler_;
 
     /// Chunk writers for each layer/scale
@@ -114,7 +115,6 @@ struct Zarr final : StorageInterface
     std::queue<JobT> job_queue_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
-    void set_multiscale(uint8_t enable);
 
     void create_data_directory_() const;
     void write_zarray_json_() const;

@@ -143,6 +143,15 @@ ChunkWriter::tile_shape() const noexcept
     return tile_shape_;
 }
 
+uint32_t
+ChunkWriter::frames_written() const
+{
+    const uint32_t bpt = bytes_per_tile(image_shape_, tile_shape_);
+    CHECK(bpt > 0);
+    const auto b = bytes_written_ / bpt;
+    return b;
+}
+
 size_t
 ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
 {

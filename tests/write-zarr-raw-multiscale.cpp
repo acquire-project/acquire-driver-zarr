@@ -144,6 +144,7 @@ struct LayerTestCase
     int frame_height;
     int tile_width;
     int tile_height;
+    int frames_per_layer;
     int frames_per_chunk;
 };
 
@@ -155,6 +156,7 @@ verify_layer(const LayerTestCase& test_case)
     const auto layer_frame_width = test_case.frame_width;
     const auto layer_tile_height = test_case.tile_height;
     const auto layer_frame_height = test_case.frame_height;
+    const auto frames_per_layer = test_case.frames_per_layer;
     const auto frames_per_chunk = test_case.frames_per_chunk;
 
     const auto zarray_path =
@@ -167,7 +169,7 @@ verify_layer(const LayerTestCase& test_case)
     json zarray = json::parse(f);
 
     const auto shape = zarray["shape"];
-    ASSERT_EQ(int, "%d", max_frames, shape[0]);
+    ASSERT_EQ(int, "%d", frames_per_layer, shape[0]);
     ASSERT_EQ(int, "%d", 1, shape[1]);
     ASSERT_EQ(int, "%d", layer_frame_height, shape[2]);
     ASSERT_EQ(int, "%d", layer_frame_width, shape[3]);
@@ -257,9 +259,9 @@ main()
     ASSERT_STREQ(multiscales["type"], "local_mean");
 
     // verify each layer
-    verify_layer({ 0, 240, 135, 80, 45, 100 });
-    verify_layer({ 1, 120, 68, 80, 45, 100 }); // padding here
-    verify_layer({ 2, 60, 34, 60, 34, 100 });
+    verify_layer({ 0, 240, 135, 80, 45, 100, 100 });
+    verify_layer({ 1, 120, 68, 80, 45, 50, 50 }); // padding here
+    verify_layer({ 2, 60, 34, 60, 34, 25, 25 });
 
     auto missing_path = fs::path(TEST ".zarr/3");
     CHECK(!fs::exists(missing_path));

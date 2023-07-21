@@ -18,10 +18,9 @@ class Zarr;
 
 struct Multiscale
 {
-    ImageShape image;
-    TileShape tile;
-    Multiscale(const ImageShape& image_shape,
-               const TileShape& tile_shape);
+    ImageShape image_shape;
+    TileShape tile_shape;
+    Multiscale(const ImageShape& image_shape, const TileShape& tile_shape);
 };
 
 struct FrameScaler final
@@ -34,15 +33,22 @@ struct FrameScaler final
     FrameScaler(const FrameScaler&) = delete;
     ~FrameScaler() = default;
 
-    [[nodiscard]] bool scale_frame(std::shared_ptr<TiledFrame> frame) const;
+    [[nodiscard]] bool push_frame(std::shared_ptr<TiledFrame> frame);
 
   private:
     Zarr* zarr_; // non-owning
 
-    const ImageShape& image_shape_;
-    const TileShape& tile_shape_;
+    std::vector<Multiscale> multiscales_;
+
+    // Accumulate downsampled layers until we have enough to average and write.
+    std::unordered_map<int16_t, std::vector<std::shared_ptr<TiledFrame>>>
+      accumulators_;
 
     mutable std::mutex mutex_;
+
+    void downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
+                                   int16_t layer);
+    std::shared_ptr<TiledFrame> average_two_frames(int16_t layer);
 };
 
 std::vector<Multiscale>
