@@ -67,7 +67,7 @@ pad(void* im_, size_t bytes_of_image, const ImageShape& image_shape)
 }
 
 template<typename T>
-void
+void // TODO (aliddell): avoid the pad
 average_frame(void* image_, size_t bytes_of_image, const ImageShape& shape)
 {
     const int downscale = 2;

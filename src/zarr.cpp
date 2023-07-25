@@ -337,7 +337,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         CHECK(tile_shape_.height <= image_shape_.dims.height);
         CHECK(tile_shape_.planes > 0);
         CHECK(tile_shape_.planes <= image_shape_.dims.planes);
-    }
+    } // TODO (aliddell): make this a function
 
     using namespace acquire::sink::zarr;
 
@@ -389,16 +389,11 @@ void
 zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
 {
     std::scoped_lock lock(job_queue_mutex_);
-    auto writer_found = writers_.find(frame->layer()) != writers_.end();
-    if (!writer_found) {
-        LOGE("No writer found for layer %zu", frame->layer());
-        return;
-    }
-    //    CHECK(writers_.find(frame->layer()) != writers_.end());
+    auto writer = writers_.at(frame->layer());
 
-    for (auto& writer : writers_.at(frame->layer())) {
+    for (auto& w : writer) {
         job_queue_.emplace(
-          [&writer, frame]() { return writer->write_frame(*frame); });
+          [w, frame]() { return w->write_frame(*frame); });
     }
 }
 

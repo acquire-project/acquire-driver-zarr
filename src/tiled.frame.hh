@@ -38,7 +38,7 @@ class TiledFrame
 
     uint64_t frame_id() const;
     size_t layer() const;
-    const uint8_t* data() const;
+    const uint8_t* data() const;  // TODO (aliddell): add mutable data reference
 
     /// @brief Copy the tile indexed by @p tile_col, @p tile_row, and
     ///        @p tile_plane into the buffer at @p tile.
