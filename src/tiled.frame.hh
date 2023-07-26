@@ -26,8 +26,7 @@ class TiledFrame
     TiledFrame(const VideoFrame* frame,
                const ImageShape&,
                const TileShape& tile_shape);
-    TiledFrame(uint8_t* const data,
-               uint64_t frame_id,
+    TiledFrame(uint64_t frame_id,
                size_t layer,
                const ImageShape& image_shape,
                const TileShape& tile_shape);
@@ -35,10 +34,13 @@ class TiledFrame
     ~TiledFrame() = default;
 
     size_t bytes_of_image() const;
+    const ImageShape& image_shape() const;
+    const TileShape& tile_shape() const;
 
     uint64_t frame_id() const;
     size_t layer() const;
-    const uint8_t* data() const;  // TODO (aliddell): add mutable data reference
+    const uint8_t* image() const;
+    uint8_t* data();
 
     /// @brief Copy the tile indexed by @p tile_col, @p tile_row, and
     ///        @p tile_plane into the buffer at @p tile.

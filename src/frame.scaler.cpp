@@ -67,7 +67,7 @@ pad(void* im_, size_t bytes_of_image, const ImageShape& image_shape)
 }
 
 template<typename T>
-void // TODO (aliddell): avoid the pad
+void
 average_frame(void* image_, size_t bytes_of_image, const ImageShape& shape)
 {
     const int downscale = 2;
@@ -124,6 +124,94 @@ average_frame(void* image_, size_t bytes_of_image, const ImageShape& shape)
 
 template<typename T>
 void
+average_one_frame(std::shared_ptr<zarr::TiledFrame> dst,
+                  std::shared_ptr<zarr::TiledFrame> src)
+{
+    CHECK(dst);
+    CHECK(src);
+
+    const int downscale = 2;
+
+    const auto& src_shape = src->image_shape();
+    const auto width = src_shape.dims.width;
+    const auto w_pad = width + (width % downscale);
+
+    const auto height = src_shape.dims.height;
+    const auto h_pad = height + (height % downscale);
+
+    const auto planes = src_shape.dims.planes;
+    const auto p_pad = planes > 1 ? planes + (planes % downscale) : 1;
+
+    //    const auto exponent = 2 + (planes > 1 ? 1 : 0); // 2x2x2 or 2x2
+    const auto factor = 0.125f;
+
+    CHECK(dst->bytes_of_image() >= w_pad * h_pad * p_pad * factor * sizeof(T));
+
+    const auto* src_img = (T*)src->image();
+    auto* dst_img = (T*)dst->data();
+
+    size_t dst_idx = 0;
+    for (auto plane = 0; plane < planes; plane += downscale) {
+        const bool pad_plane = (plane == planes - 1);
+
+        for (auto row = 0; row < height; row += downscale) {
+            const bool pad_height = (row == height - 1 && height != h_pad);
+
+            for (auto col = 0; col < width; col += downscale) {
+                const bool pad_width = (col == width - 1 && width != w_pad);
+
+                size_t idx = plane * width * height + row * width + col;
+                dst_img[dst_idx++] =
+                  (T)(factor *
+                      ((float)src_img[idx] +
+                       (float)src_img[idx + (1 - (int)pad_width)] +
+                       (float)src_img[idx + width * (1 - (int)pad_height)] +
+                       (float)src_img[idx + width * (1 - (int)pad_height) +
+                                      (1 - (int)pad_width)] +
+                       (float)
+                         src_img[idx + width * height * (1 - (int)pad_plane)] +
+                       (float)
+                         src_img[idx + width * height * (1 - (int)pad_plane) +
+                                 (1 - (int)pad_width)] +
+                       (float)
+                         src_img[idx + width * height * (1 - (int)pad_plane) +
+                                 width * (1 - (int)pad_height)] +
+                       (float)
+                         src_img[idx + width * height * (1 - (int)pad_plane) +
+                                 width * (1 - (int)pad_height) +
+                                 (1 - (int)pad_width)]));
+            }
+        }
+    }
+}
+
+template<typename T>
+void
+average_two_frames(std::shared_ptr<zarr::TiledFrame> dst,
+                   std::shared_ptr<zarr::TiledFrame> src1,
+                   std::shared_ptr<zarr::TiledFrame> src2)
+{
+    CHECK(dst);
+    CHECK(src1);
+    CHECK(src2);
+
+    CHECK(dst->bytes_of_image() == src1->bytes_of_image() &&
+          dst->bytes_of_image() == src2->bytes_of_image());
+
+    const float factor = 0.5f;
+    const size_t npx = dst->bytes_of_image() / sizeof(T);
+
+    const auto* src1_img = (T*)src1->image();
+    const auto* src2_img = (T*)src2->image();
+    auto* dst_img = (T*)dst->data();
+
+    for (auto i = 0; i < npx; ++i) {
+        dst_img[i] = (T)(factor * ((float)src1_img[i] + (float)src2_img[i]));
+    }
+}
+
+template<typename T>
+void
 average_tiled_frames(
   void* buf_,
   size_t bytes_of_buf,
@@ -136,7 +224,7 @@ average_tiled_frames(
     float factor = 1.f / frames.size();
 
     for (auto& frame : frames) {
-        auto* image = (T*)frame->data();
+        const auto* image = (T*)frame->image();
         for (size_t i = 0; i < n_elements; ++i) {
             buf[i] += factor * image[i];
         }
@@ -200,91 +288,108 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
       accumulators_.at(layer);
 
     const ImageShape& image_shape = multiscales_.at(layer - 1).image_shape;
-    const auto bytes_padded = get_padded_buffer_size_bytes(image_shape);
-
-    std::vector<uint8_t> im(bytes_padded);
-    memcpy(im.data(), frame->data(), frame->bytes_of_image());
+    auto dst = std::make_shared<TiledFrame>(frame->frame_id(),
+                                            layer,
+                                            multiscales_.at(layer).image_shape,
+                                            multiscales_.at(layer).tile_shape);
 
     switch (image_shape.type) {
         case SampleType_u10:
         case SampleType_u12:
         case SampleType_u14:
         case SampleType_u16:
-            pad<uint16_t>(im.data(), im.size(), image_shape);
-            average_frame<uint16_t>(im.data(), im.size(), image_shape);
+            average_one_frame<uint16_t>(dst, frame);
+            if (accumulator.size() == 1) {
+                auto averaged = std::make_shared<TiledFrame>(dst->frame_id(),
+                                                             dst->layer(),
+                                                             dst->image_shape(),
+                                                             dst->tile_shape());
+                average_two_frames<uint16_t>(
+                  averaged, accumulator.front(), dst);
+                accumulator.clear();
+
+                zarr_->push_frame_to_writers(averaged);
+                if (layer < multiscales_.size() - 1) {
+                    downsample_and_accumulate(averaged, layer + 1);
+                }
+            } else {
+                accumulator.push_back(dst);
+            }
             break;
         case SampleType_i8:
-            pad<int8_t>(im.data(), im.size(), image_shape);
-            average_frame<int8_t>(im.data(), im.size(), image_shape);
+            average_one_frame<int8_t>(dst, frame);
+            if (accumulator.size() == 1) {
+                auto averaged = std::make_shared<TiledFrame>(dst->frame_id(),
+                                                             dst->layer(),
+                                                             dst->image_shape(),
+                                                             dst->tile_shape());
+                average_two_frames<int8_t>(averaged, accumulator.front(), dst);
+                accumulator.clear();
+
+                zarr_->push_frame_to_writers(averaged);
+                if (layer < multiscales_.size() - 1) {
+                    downsample_and_accumulate(averaged, layer + 1);
+                }
+            } else {
+                accumulator.push_back(dst);
+            }
             break;
         case SampleType_i16:
-            pad<int16_t>(im.data(), im.size(), image_shape);
-            average_frame<int16_t>(im.data(), im.size(), image_shape);
+            average_one_frame<int16_t>(dst, frame);
+            if (accumulator.size() == 1) {
+                auto averaged = std::make_shared<TiledFrame>(dst->frame_id(),
+                                                             dst->layer(),
+                                                             dst->image_shape(),
+                                                             dst->tile_shape());
+                average_two_frames<int16_t>(averaged, accumulator.front(), dst);
+                accumulator.clear();
+
+                zarr_->push_frame_to_writers(averaged);
+                if (layer < multiscales_.size() - 1) {
+                    downsample_and_accumulate(averaged, layer + 1);
+                }
+            } else {
+                accumulator.push_back(dst);
+            }
             break;
         case SampleType_f32:
-            pad<float>(im.data(), im.size(), image_shape);
-            average_frame<float>(im.data(), im.size(), image_shape);
+            average_one_frame<float>(dst, frame);
+            if (accumulator.size() == 1) {
+                auto averaged = std::make_shared<TiledFrame>(dst->frame_id(),
+                                                             dst->layer(),
+                                                             dst->image_shape(),
+                                                             dst->tile_shape());
+                average_two_frames<float>(averaged, accumulator.front(), dst);
+                accumulator.clear();
+
+                zarr_->push_frame_to_writers(averaged);
+                if (layer < multiscales_.size() - 1) {
+                    downsample_and_accumulate(averaged, layer + 1);
+                }
+            } else {
+                accumulator.push_back(dst);
+            }
             break;
         case SampleType_u8:
         default:
-            pad<uint8_t>(im.data(), im.size(), image_shape);
-            average_frame<uint8_t>(im.data(), im.size(), image_shape);
+            average_one_frame<uint8_t>(dst, frame);
+            if (accumulator.size() == 1) {
+                auto averaged = std::make_shared<TiledFrame>(dst->frame_id(),
+                                                             dst->layer(),
+                                                             dst->image_shape(),
+                                                             dst->tile_shape());
+                average_two_frames<uint8_t>(averaged, accumulator.front(), dst);
+                accumulator.clear();
+
+                zarr_->push_frame_to_writers(averaged);
+                if (layer < multiscales_.size() - 1) {
+                    downsample_and_accumulate(averaged, layer + 1);
+                }
+            } else {
+                accumulator.push_back(dst);
+            }
             break;
     }
-
-    frame = std::make_shared<TiledFrame>(im.data(),
-                                         frame->frame_id(),
-                                         layer,
-                                         multiscales_.at(layer).image_shape,
-                                         multiscales_.at(layer).tile_shape);
-
-    accumulator.push_back(frame);
-    if (accumulator.size() == 2) {
-        frame = average_two_frames(layer);
-        zarr_->push_frame_to_writers(frame);
-        if (layer < multiscales_.size() - 1) {
-            downsample_and_accumulate(frame, layer + 1);
-        }
-        accumulator.clear();
-    }
-}
-
-std::shared_ptr<TiledFrame>
-FrameScaler::average_two_frames(int16_t layer)
-{
-    std::vector<std::shared_ptr<TiledFrame>>& frames = accumulators_.at(layer);
-    size_t nbytes_frame = frames.front()->bytes_of_image();
-    std::vector<uint8_t> buf(nbytes_frame);
-
-    const auto& base_image_shape = multiscales_.at(0).image_shape;
-    switch (base_image_shape.type) {
-        case SampleType_u10:
-        case SampleType_u12:
-        case SampleType_u14:
-        case SampleType_u16:
-            average_tiled_frames<uint16_t>(buf.data(), nbytes_frame, frames);
-            break;
-        case SampleType_i8:
-            average_tiled_frames<int8_t>(buf.data(), nbytes_frame, frames);
-            break;
-        case SampleType_i16:
-            average_tiled_frames<int16_t>(buf.data(), nbytes_frame, frames);
-            break;
-        case SampleType_f32:
-            average_tiled_frames<float>(buf.data(), nbytes_frame, frames);
-            break;
-        case SampleType_u8:
-        default:
-            average_tiled_frames<uint8_t>(buf.data(), nbytes_frame, frames);
-            break;
-    }
-
-    return std::make_shared<zarr::TiledFrame>(
-      (uint8_t*)buf.data(),
-      frames.front()->frame_id(),
-      layer,
-      multiscales_.at(layer).image_shape,
-      multiscales_.at(layer).tile_shape);
 }
 
 std::vector<Multiscale>
@@ -459,6 +564,53 @@ test_average_plane_inner(const SampleType& stype)
     }
 }
 
+template<typename T>
+void
+test_average_frame_inner(const SampleType& stype)
+{
+    ImageShape image_shape {
+        .dims = {
+          .channels = 1,
+          .width = 3,
+          .height = 3,
+          .planes = 1,
+        },
+        .strides = {
+            .channels = 1,
+            .width = 1,
+            .height = 3,
+            .planes = 9
+        },
+        .type = stype
+    };
+    zarr::TileShape tile_shape{ .width = 3, .height = 3, .planes = 1 };
+
+    auto src =
+      std::make_shared<zarr::TiledFrame>(0, 0, image_shape, tile_shape);
+    for (auto i = 0; i < 9; ++i) {
+        ((T*)src->data())[i] = (T)(i + 1);
+    }
+
+    image_shape.dims = { .channels = 1, .width = 2, .height = 2, .planes = 1 };
+    image_shape.strides = {
+        .channels = 1, .width = 1, .height = 2, .planes = 4
+    };
+    tile_shape = {
+        .width = 2,
+        .height = 2,
+        .planes = 1,
+    };
+
+    auto dst =
+      std::make_shared<zarr::TiledFrame>(0, 0, image_shape, tile_shape);
+
+    average_one_frame<T>(dst, src);
+    CHECK(((T*)dst->image())[0] == (T)3);
+    CHECK(((T*)dst->image())[1] == (T)4.5);
+    CHECK(((T*)dst->image())[2] == (T)7.5);
+    CHECK(((T*)dst->image())[3] == (T)9);
+}
+
 extern "C"
 {
     acquire_export int unit_test__padding()
@@ -488,6 +640,25 @@ extern "C"
             test_average_plane_inner<uint16_t>(SampleType_u16);
             test_average_plane_inner<int16_t>(SampleType_i16);
             test_average_plane_inner<float>(SampleType_f32);
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+            return 0;
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+            return 0;
+        }
+
+        return 1;
+    }
+
+    acquire_export int unit_test__average_frame()
+    {
+        try {
+            test_average_frame_inner<uint8_t>(SampleType_u8);
+            test_average_frame_inner<int8_t>(SampleType_i8);
+            test_average_frame_inner<uint16_t>(SampleType_u16);
+            test_average_frame_inner<int16_t>(SampleType_i16);
+            test_average_frame_inner<float>(SampleType_f32);
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
             return 0;

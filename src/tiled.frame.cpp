@@ -58,8 +58,7 @@ TiledFrame::TiledFrame(const VideoFrame* frame,
     frame_id_ = frame->frame_id;
 }
 
-TiledFrame::TiledFrame(uint8_t* const data,
-                       uint64_t frame_id,
+TiledFrame::TiledFrame(uint64_t frame_id,
                        size_t layer,
                        const ImageShape& image_shape,
                        const TileShape& tile_shape)
@@ -69,15 +68,26 @@ TiledFrame::TiledFrame(uint8_t* const data,
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
 {
-    CHECK(data);
     buf_.resize(bytes_of_image_);
-    memcpy(buf_.data(), data, bytes_of_image_);
+    std::fill_n(buf_.begin(), bytes_of_image_, 0);
 }
 
 size_t
 TiledFrame::bytes_of_image() const
 {
     return bytes_of_image_;
+}
+
+const ImageShape&
+TiledFrame::image_shape() const
+{
+    return image_shape_;
+}
+
+const TileShape&
+TiledFrame::tile_shape() const
+{
+    return tile_shape_;
 }
 
 uint64_t
@@ -93,7 +103,13 @@ TiledFrame::layer() const
 }
 
 const uint8_t*
-TiledFrame::data() const
+TiledFrame::image() const
+{
+    return buf_.data();
+}
+
+uint8_t*
+TiledFrame::data()
 {
     return buf_.data();
 }

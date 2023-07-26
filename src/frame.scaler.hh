@@ -48,7 +48,6 @@ struct FrameScaler final
 
     void downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
                                    int16_t layer);
-    std::shared_ptr<TiledFrame> average_two_frames(int16_t layer);
 };
 
 std::vector<Multiscale>
