@@ -306,6 +306,7 @@ get_tile_shapes(const ImageShape& base_image_shape,
 #define acquire_export
 #endif
 
+///< Test that a single frame with 1 plane is padded and averaged correctly.
 template<typename T>
 void
 test_average_frame_inner(const SampleType& stype)
@@ -353,16 +354,77 @@ test_average_frame_inner(const SampleType& stype)
     CHECK(((T*)dst->image())[3] == (T)9);
 }
 
+///< Test that a single frame with 3 planes is padded and averaged correctly.
+template<typename T>
+void
+test_average_planes_inner(const SampleType& stype)
+{
+    ImageShape image_shape {
+        .dims = {
+          .channels = 1,
+          .width = 4,
+          .height = 4,
+          .planes = 3,
+        },
+        .strides = {
+          .channels = 1,
+          .width = 1,
+          .height = 4,
+          .planes = 16
+        },
+        .type = stype
+    };
+    zarr::TileShape tile_shape{ .width = 4, .height = 4, .planes = 1 };
+
+    auto src =
+      std::make_shared<zarr::TiledFrame>(0, 0, image_shape, tile_shape);
+    for (auto i = 0; i < 48; ++i) {
+        ((T*)src->data())[i] = (T)(i + 1);
+    }
+
+    image_shape.dims = { .channels = 1, .width = 2, .height = 2, .planes = 2 };
+    image_shape.strides = {
+        .channels = 1, .width = 1, .height = 2, .planes = 4
+    };
+    tile_shape = {
+        .width = 2,
+        .height = 2,
+        .planes = 2,
+    };
+
+    auto dst =
+      std::make_shared<zarr::TiledFrame>(0, 0, image_shape, tile_shape);
+
+    average_one_frame<T>(dst, src);
+    CHECK(((T*)dst->image())[0] == (T)11.5);
+    CHECK(((T*)dst->image())[1] == (T)13.5);
+    CHECK(((T*)dst->image())[2] == (T)19.5);
+    CHECK(((T*)dst->image())[3] == (T)21.5);
+    CHECK(((T*)dst->image())[4] == (T)35.5);
+    CHECK(((T*)dst->image())[5] == (T)37.5);
+    CHECK(((T*)dst->image())[6] == (T)43.5);
+    CHECK(((T*)dst->image())[7] == (T)45.5);
+}
+
 extern "C"
 {
     acquire_export int unit_test__average_frame()
     {
         try {
             test_average_frame_inner<uint8_t>(SampleType_u8);
+            test_average_planes_inner<uint8_t>(SampleType_u8);
+
             test_average_frame_inner<int8_t>(SampleType_i8);
+            test_average_planes_inner<int8_t>(SampleType_i8);
+
             test_average_frame_inner<uint16_t>(SampleType_u16);
+            test_average_planes_inner<uint16_t>(SampleType_u16);
+
             test_average_frame_inner<int16_t>(SampleType_i16);
+            test_average_planes_inner<int16_t>(SampleType_i16);
+
             test_average_frame_inner<float>(SampleType_f32);
+            test_average_planes_inner<float>(SampleType_f32);
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
             return 0;
