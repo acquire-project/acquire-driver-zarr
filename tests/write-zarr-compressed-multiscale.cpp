@@ -260,7 +260,7 @@ main()
         ASSERT_STREQ("scale", coord_trans["type"]);
 
         const auto& scale = coord_trans["scale"];
-        ASSERT_EQ(float, "%f", 1.f, scale[0].get<float>());
+        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[0].get<float>());
         ASSERT_EQ(float, "%f", 1.f, scale[1].get<float>());
         ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[2].get<float>());
         ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[3].get<float>());

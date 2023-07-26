@@ -593,7 +593,7 @@ zarr::Zarr::write_group_zattrs_json_() const
                   {
                     { "type", "scale" },
                     { "scale",
-                      { 1,
+                      { std::pow(2, layer),
                         1,
                         std::pow(2, layer) * pixel_scale_um_.y,
                         std::pow(2, layer) * pixel_scale_um_.x } },
