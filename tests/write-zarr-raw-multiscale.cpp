@@ -76,14 +76,14 @@ reporter(int is_error,
                b_.c_str());                                                    \
     } while (0)
 
-const static uint32_t frame_width = 14192;
-const static uint32_t frame_height = 10640;
+const static uint32_t frame_width = 240;
+const static uint32_t frame_height = 135;
 
-const static uint32_t tile_width = frame_width / 16;
-const static uint32_t tile_height = frame_height / 16;
+const static uint32_t tile_width = frame_width / 3;
+const static uint32_t tile_height = frame_height / 3;
 
-const static uint32_t max_bytes_per_chunk = 1 << 30;
-const static auto max_frames = 50;
+const static uint32_t max_bytes_per_chunk = 1 << 16;
+const static auto max_frames = 100;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -129,7 +129,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
-    props.video[0].camera.settings.exposure_time_us = 1e7;
+    props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = max_frames;
 
     OK(acquire_configure(runtime, &props));
@@ -241,30 +241,30 @@ main()
 
     const auto multiscales = group_zattrs["multiscales"][0];
     const auto& datasets = multiscales["datasets"];
-//    ASSERT_EQ(int, "%d", 3, datasets.size());
-//    for (auto i = 0; i < 3; ++i) {
-//        const auto& dataset = datasets.at(i);
-//        ASSERT_STREQ(std::to_string(i), dataset["path"]);
-//
-//        const auto& coord_trans = dataset["coordinateTransformations"][0];
-//        ASSERT_STREQ("scale", coord_trans["type"]);
-//
-//        const auto& scale = coord_trans["scale"];
-//        ASSERT_EQ(float, "%f", 1.f, scale[0].get<float>());
-//        ASSERT_EQ(float, "%f", 1.f, scale[1].get<float>());
-//        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[2].get<float>());
-//        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[3].get<float>());
-//    }
+    ASSERT_EQ(int, "%d", 3, datasets.size());
+    for (auto i = 0; i < 3; ++i) {
+        const auto& dataset = datasets.at(i);
+        ASSERT_STREQ(std::to_string(i), dataset["path"]);
+
+        const auto& coord_trans = dataset["coordinateTransformations"][0];
+        ASSERT_STREQ("scale", coord_trans["type"]);
+
+        const auto& scale = coord_trans["scale"];
+        ASSERT_EQ(float, "%f", 1.f, scale[0].get<float>());
+        ASSERT_EQ(float, "%f", 1.f, scale[1].get<float>());
+        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[2].get<float>());
+        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[3].get<float>());
+    }
 
     ASSERT_STREQ(multiscales["type"], "local_mean");
 
     // verify each layer
-//    verify_layer({ 0, 240, 135, 80, 45, 100, 100 });
-//    verify_layer({ 1, 120, 68, 80, 45, 50, 50 }); // padding here
-//    verify_layer({ 2, 60, 34, 60, 34, 25, 25 });
+    verify_layer({ 0, 240, 135, 80, 45, 100, 100 });
+    verify_layer({ 1, 120, 68, 80, 45, 50, 50 }); // padding here
+    verify_layer({ 2, 60, 34, 60, 34, 25, 25 });
 
-//    auto missing_path = fs::path(TEST ".zarr/3");
-//    CHECK(!fs::exists(missing_path));
+    auto missing_path = fs::path(TEST ".zarr/3");
+    CHECK(!fs::exists(missing_path));
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);
