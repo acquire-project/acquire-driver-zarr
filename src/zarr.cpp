@@ -327,16 +327,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 
     // validate start conditions
     if (0 == frame_count_) {
-        CHECK(image_shape_.dims.channels > 0);
-        CHECK(image_shape_.dims.width > 0);
-        CHECK(image_shape_.dims.height > 0);
-        CHECK(image_shape_.dims.planes > 0);
-        CHECK(tile_shape_.width > 0);
-        CHECK(tile_shape_.width <= image_shape_.dims.width);
-        CHECK(tile_shape_.height > 0);
-        CHECK(tile_shape_.height <= image_shape_.dims.height);
-        CHECK(tile_shape_.planes > 0);
-        CHECK(tile_shape_.planes <= image_shape_.dims.planes);
+        validate_image_and_tile_shapes_();
     } // TODO (aliddell): make this a function
 
     using namespace acquire::sink::zarr;
@@ -386,14 +377,13 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 }
 
 void
-zarr::Zarr::push_frame_to_writers(std::shared_ptr<TiledFrame> frame)
+zarr::Zarr::push_frame_to_writers(const std::shared_ptr<TiledFrame> frame)
 {
     std::scoped_lock lock(job_queue_mutex_);
     auto writer = writers_.at(frame->layer());
 
     for (auto& w : writer) {
-        job_queue_.emplace(
-          [w, frame]() { return w->write_frame(*frame); });
+        job_queue_.emplace([w, frame]() { return w->write_frame(*frame); });
     }
 }
 
@@ -491,8 +481,8 @@ zarr::Zarr::write_zarray_json_() const
 
 void
 zarr::Zarr::write_zarray_json_inner_(size_t layer,
-                                     const ImageShape& is,
-                                     const TileShape& ts) const
+                                     const ImageShape& image_shape,
+                                     const TileShape& tile_shape) const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -502,26 +492,28 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
     }
 
     const uint64_t frame_count = writers_.at(layer).front()->frames_written();
-    const auto frames_per_chunk = std::min(
-      frame_count, (uint64_t)get_tiles_per_chunk(is, ts, max_bytes_per_chunk_));
+    const auto frames_per_chunk =
+      std::min(frame_count,
+               (uint64_t)get_tiles_per_chunk(
+                 image_shape, tile_shape, max_bytes_per_chunk_));
 
     json zarray_attrs = {
         { "zarr_format", 2 },
         { "shape",
           {
             frame_count,
-            is.dims.channels,
-            is.dims.height,
-            is.dims.width,
+            image_shape.dims.channels,
+            image_shape.dims.height,
+            image_shape.dims.width,
           } },
         { "chunks",
           {
             frames_per_chunk,
             1,
-            ts.height,
-            ts.width,
+            tile_shape.height,
+            tile_shape.width,
           } },
-        { "dtype", sample_type_to_dtype(is.type) },
+        { "dtype", sample_type_to_dtype(image_shape.type) },
         { "fill_value", 0 },
         { "order", "C" },
         { "filters", nullptr },
@@ -644,15 +636,15 @@ zarr::Zarr::allocate_writers_()
 {
     writers_.clear();
 
-    std::vector<Multiscale> multiscales;
+    std::vector<ScalingParameters> scaling_params;
     if (frame_scaler_) {
-        multiscales = get_tile_shapes(image_shape_, tile_shape_);
+        scaling_params = make_scaling_parameters(image_shape_, tile_shape_);
     } else {
-        multiscales.emplace_back(image_shape_, tile_shape_);
+        scaling_params.emplace_back(image_shape_, tile_shape_);
     }
 
-    for (auto layer = 0; layer < multiscales.size(); ++layer) {
-        auto multiscale = multiscales.at(layer);
+    for (auto layer = 0; layer < scaling_params.size(); ++layer) {
+        auto multiscale = scaling_params.at(layer);
         auto& image_shape = multiscale.image_shape;
         auto& tile_shape = multiscale.tile_shape;
 
@@ -709,6 +701,21 @@ zarr::Zarr::allocate_writers_()
             }
         }
     }
+}
+
+void
+zarr::Zarr::validate_image_and_tile_shapes_() const
+{
+    CHECK(image_shape_.dims.channels > 0);
+    CHECK(image_shape_.dims.width > 0);
+    CHECK(image_shape_.dims.height > 0);
+    CHECK(image_shape_.dims.planes > 0);
+    CHECK(tile_shape_.width > 0);
+    CHECK(tile_shape_.width <= image_shape_.dims.width);
+    CHECK(tile_shape_.height > 0);
+    CHECK(tile_shape_.height <= image_shape_.dims.height);
+    CHECK(tile_shape_.planes > 0);
+    CHECK(tile_shape_.planes <= image_shape_.dims.planes);
 }
 
 void

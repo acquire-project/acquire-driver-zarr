@@ -16,11 +16,12 @@
 namespace acquire::sink::zarr {
 class Zarr;
 
-struct Multiscale
+struct ScalingParameters
 {
     ImageShape image_shape;
     TileShape tile_shape;
-    Multiscale(const ImageShape& image_shape, const TileShape& tile_shape);
+    ScalingParameters(const ImageShape& image_shape,
+                      const TileShape& tile_shape);
 };
 
 struct FrameScaler final
@@ -38,7 +39,7 @@ struct FrameScaler final
   private:
     Zarr* zarr_; // non-owning
 
-    std::vector<Multiscale> multiscales_;
+    std::vector<ScalingParameters> scaling_params_;
 
     // Accumulate downsampled layers until we have enough to average and write.
     std::unordered_map<int16_t, std::vector<std::shared_ptr<TiledFrame>>>
@@ -50,9 +51,9 @@ struct FrameScaler final
                                    int16_t layer);
 };
 
-std::vector<Multiscale>
-get_tile_shapes(const ImageShape& base_image_shape,
-                const TileShape& base_tile_shape);
+std::vector<ScalingParameters>
+make_scaling_parameters(const ImageShape& base_image_shape,
+                        const TileShape& base_tile_shape);
 } // namespace acquire::sink::zarr
 
 #endif // __cplusplus

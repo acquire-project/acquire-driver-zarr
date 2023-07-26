@@ -68,7 +68,7 @@ CompressionParams::CompressionParams(const std::string& codec_id,
 ChunkWriter::ChunkWriter(BaseEncoder* encoder,
                          const ImageShape& image_shape,
                          const TileShape& tile_shape,
-                         uint32_t layer,
+                         uint32_t lod,
                          uint32_t tile_col,
                          uint32_t tile_row,
                          uint32_t tile_plane,
@@ -83,7 +83,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , dimension_separator_{ dimension_separator }
   , base_dir_{ base_directory }
   , current_file_{}
-  , layer_{ layer }
+  , layer_{ lod }
   , tile_col_{ tile_col }
   , tile_row_{ tile_row }
   , tile_plane_{ tile_plane }
@@ -146,10 +146,9 @@ ChunkWriter::tile_shape() const noexcept
 uint32_t
 ChunkWriter::frames_written() const
 {
-    const uint32_t bpt = bytes_per_tile(image_shape_, tile_shape_);
+    const uint64_t bpt = bytes_per_tile(image_shape_, tile_shape_);
     CHECK(bpt > 0);
-    const auto b = bytes_written_ / bpt;
-    return b;
+    return (uint32_t)(bytes_written_ / bpt);
 }
 
 size_t

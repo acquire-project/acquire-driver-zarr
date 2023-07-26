@@ -113,8 +113,8 @@ average_two_frames(std::shared_ptr<zarr::TiledFrame> dst,
 } // ::<anonymous> namespace
 
 namespace acquire::sink::zarr {
-Multiscale::Multiscale(const ImageShape& image_shape,
-                       const TileShape& tile_shape)
+ScalingParameters::ScalingParameters(const ImageShape& image_shape,
+                                     const TileShape& tile_shape)
   : image_shape{ image_shape }
   , tile_shape{ tile_shape }
 {
@@ -126,8 +126,8 @@ FrameScaler::FrameScaler(Zarr* zarr,
   : zarr_{ zarr }
 {
     CHECK(zarr_);
-    multiscales_ = get_tile_shapes(image_shape, tile_shape);
-    for (int16_t i = 1; i < multiscales_.size(); ++i) {
+    scaling_params_ = make_scaling_parameters(image_shape, tile_shape);
+    for (int16_t i = 1; i < scaling_params_.size(); ++i) {
         accumulators_.insert({ i, {} });
     }
 }
@@ -156,11 +156,12 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
     std::vector<std::shared_ptr<TiledFrame>>& accumulator =
       accumulators_.at(layer);
 
-    const ImageShape& image_shape = multiscales_.at(layer - 1).image_shape;
-    auto dst = std::make_shared<TiledFrame>(frame->frame_id(),
-                                            layer,
-                                            multiscales_.at(layer).image_shape,
-                                            multiscales_.at(layer).tile_shape);
+    const ImageShape& image_shape = scaling_params_.at(layer - 1).image_shape;
+    auto dst =
+      std::make_shared<TiledFrame>(frame->frame_id(),
+                                   layer,
+                                   scaling_params_.at(layer).image_shape,
+                                   scaling_params_.at(layer).tile_shape);
 
     switch (image_shape.type) {
         case SampleType_u10:
@@ -178,7 +179,7 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
                 accumulator.clear();
 
                 zarr_->push_frame_to_writers(averaged);
-                if (layer < multiscales_.size() - 1) {
+                if (layer < scaling_params_.size() - 1) {
                     downsample_and_accumulate(averaged, layer + 1);
                 }
             } else {
@@ -196,7 +197,7 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
                 accumulator.clear();
 
                 zarr_->push_frame_to_writers(averaged);
-                if (layer < multiscales_.size() - 1) {
+                if (layer < scaling_params_.size() - 1) {
                     downsample_and_accumulate(averaged, layer + 1);
                 }
             } else {
@@ -214,7 +215,7 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
                 accumulator.clear();
 
                 zarr_->push_frame_to_writers(averaged);
-                if (layer < multiscales_.size() - 1) {
+                if (layer < scaling_params_.size() - 1) {
                     downsample_and_accumulate(averaged, layer + 1);
                 }
             } else {
@@ -232,7 +233,7 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
                 accumulator.clear();
 
                 zarr_->push_frame_to_writers(averaged);
-                if (layer < multiscales_.size() - 1) {
+                if (layer < scaling_params_.size() - 1) {
                     downsample_and_accumulate(averaged, layer + 1);
                 }
             } else {
@@ -251,7 +252,7 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
                 accumulator.clear();
 
                 zarr_->push_frame_to_writers(averaged);
-                if (layer < multiscales_.size() - 1) {
+                if (layer < scaling_params_.size() - 1) {
                     downsample_and_accumulate(averaged, layer + 1);
                 }
             } else {
@@ -261,11 +262,11 @@ FrameScaler::downsample_and_accumulate(std::shared_ptr<TiledFrame> frame,
     }
 }
 
-std::vector<Multiscale>
-get_tile_shapes(const ImageShape& base_image_shape,
-                const TileShape& base_tile_shape)
+std::vector<ScalingParameters>
+make_scaling_parameters(const ImageShape& base_image_shape,
+                        const TileShape& base_tile_shape)
 {
-    std::vector<Multiscale> shapes;
+    std::vector<ScalingParameters> shapes;
     shapes.emplace_back(base_image_shape, base_tile_shape);
 
     const int downscale = 2;

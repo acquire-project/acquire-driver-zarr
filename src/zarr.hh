@@ -81,7 +81,7 @@ struct Zarr final : StorageInterface
 
     void reserve_image_shape(const ImageShape* shape) override;
 
-    void push_frame_to_writers(std::shared_ptr<TiledFrame> frame);
+    void push_frame_to_writers(const std::shared_ptr<TiledFrame> frame);
     std::optional<JobT> pop_from_job_queue();
 
   private:
@@ -119,13 +119,14 @@ struct Zarr final : StorageInterface
     void create_data_directory_() const;
     void write_zarray_json_() const;
     void write_zarray_json_inner_(size_t layer,
-                                  const ImageShape& is,
-                                  const TileShape& ts) const;
+                                  const ImageShape& image_shape,
+                                  const TileShape& tile_shape) const;
     void write_external_metadata_json_() const;
     void write_zgroup_json_() const;
     void write_group_zattrs_json_() const;
 
     void allocate_writers_();
+    void validate_image_and_tile_shapes_() const;
 
     void start_threads_();
     void recover_threads_();
