@@ -14,7 +14,6 @@ else()
     #
     set(tests
         list-devices
-        no-striping
         write-zarr-compressed-with-chunking
         write-zarr-compressed-with-chunking-and-rollover
         write-zarr-raw-with-chunking

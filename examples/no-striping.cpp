@@ -1,13 +1,18 @@
+/// @file
+/// @brief Generate a Zarr dataset with a single chunk using the simulated
+/// radial sine pattern with a u16 sample type. This example was used to generate
+/// data for a visual EXAMPLE of a fix for a striping artifact observed when
+/// writing to a Zarr dataset with multibyte samples.
+
 #include "device/hal/device.manager.h"
 #include "acquire.h"
-#include "platform.h" // clock
 #include "logger.h"
 
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
 
-#include "json.hpp"
+#include "tests/json.hpp"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -55,6 +60,20 @@ reporter(int is_error,
         T a_ = (T)(a);                                                         \
         T b_ = (T)(b);                                                         \
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
+    } while (0)
+
+/// Check that strings a == b
+/// example: `ASSERT_STREQ("foo",container_of_foo)`
+#define ASSERT_STREQ(a, b)                                                     \
+    do {                                                                       \
+        std::string a_ = (a);                                                  \
+        std::string b_ = (b);                                                  \
+        EXPECT(a_ == b_,                                                       \
+               "Expected %s==%s but '%s' != '%s'",                             \
+               #a,                                                             \
+               #b,                                                             \
+               a_.c_str(),                                                     \
+               b_.c_str());                                                    \
     } while (0)
 
 /// Check that a>b
@@ -113,22 +132,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].max_frame_count = expected_frames_per_chunk;
 
     OK(acquire_configure(runtime, &props));
-
-    const auto next = [](VideoFrame* cur) -> VideoFrame* {
-        return (VideoFrame*)(((uint8_t*)cur) + cur->bytes_of_frame);
-    };
-
-    const auto consumed_bytes = [](const VideoFrame* const cur,
-                                   const VideoFrame* const end) -> size_t {
-        return (uint8_t*)end - (uint8_t*)cur;
-    };
-
-    struct clock clock;
-    static double time_limit_ms = 20000.0;
-    clock_init(&clock);
-    clock_shift_ms(&clock, time_limit_ms);
     OK(acquire_start(runtime));
-
     OK(acquire_stop(runtime));
 }
 
@@ -136,26 +140,28 @@ int
 main()
 {
     auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
+    acquire(runtime, EXAMPLE ".zarr");
 
-    CHECK(fs::is_directory(TEST ".zarr"));
+    CHECK(fs::is_directory(EXAMPLE ".zarr"));
 
     const auto external_metadata_path =
-      fs::path(TEST ".zarr") / "0" / ".zattrs";
+      fs::path(EXAMPLE ".zarr") / "0" / ".zattrs";
     CHECK(fs::is_regular_file(external_metadata_path));
     ASSERT_GT(size_t, "%zu", fs::file_size(external_metadata_path), 0);
 
-    const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
+    const auto group_zattrs_path = fs::path(EXAMPLE ".zarr") / ".zattrs";
     CHECK(fs::is_regular_file(group_zattrs_path));
     ASSERT_GT(size_t, "%zu", fs::file_size(group_zattrs_path), 0);
 
-    const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
+    const auto zarray_path = fs::path(EXAMPLE ".zarr") / "0" / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));
     ASSERT_GT(size_t, "%zu", fs::file_size(zarray_path), 0);
 
     // check metadata
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
+
+    ASSERT_STREQ("<u2", zarray["dtype"].get<std::string>());
 
     auto shape = zarray["shape"];
     ASSERT_EQ(int, "%d", expected_frames_per_chunk, shape[0]);
@@ -173,7 +179,7 @@ main()
     auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
                       chunks[2].get<int>() * chunks[3].get<int>();
 
-    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
+    const auto chunk_file_path = fs::path(EXAMPLE ".zarr/0/0/0/0/0");
     CHECK(fs::is_regular_file(chunk_file_path));
     ASSERT_EQ(int, "%d", 2 * chunk_size, fs::file_size(chunk_file_path));
 
