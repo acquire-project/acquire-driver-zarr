@@ -6,6 +6,9 @@ on:
       - "v*.*.*"
       - "nightly"
 
+env:
+  BUILD_TYPE: Release
+
 jobs:
   build:
     strategy:
