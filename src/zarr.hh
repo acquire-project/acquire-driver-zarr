@@ -7,6 +7,7 @@
 
 #include "prelude.h"
 #include "chunk.writer.hh"
+#include "frame.scaler.hh"
 
 #include <condition_variable>
 #include <filesystem>
@@ -15,6 +16,7 @@
 #include <string>
 #include <thread>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 #ifndef __cplusplus
@@ -79,6 +81,7 @@ struct Zarr final : StorageInterface
 
     void reserve_image_shape(const ImageShape* shape) override;
 
+    void push_frame_to_writers(const std::shared_ptr<TiledFrame> frame);
     std::optional<JobT> pop_from_job_queue();
 
   private:
@@ -98,11 +101,16 @@ struct Zarr final : StorageInterface
     uint64_t max_bytes_per_chunk_;
     ImageShape image_shape_;
     TileShape tile_shape_;
-    std::vector<std::shared_ptr<ChunkWriter>> writers_;
-    size_t tiles_per_chunk_;
+    bool enable_multiscale_;
+
+    /// Downsampling of incoming frames.
+    std::optional<FrameScaler> frame_scaler_;
+
+    /// Chunk writers for each layer/scale
+    std::map<size_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
 
     // changes during acquisition
-    size_t frame_count_;
+    uint32_t frame_count_;
     mutable std::mutex job_queue_mutex_;
     std::queue<JobT> job_queue_;
 
@@ -110,11 +118,15 @@ struct Zarr final : StorageInterface
 
     void create_data_directory_() const;
     void write_zarray_json_() const;
+    void write_zarray_json_inner_(size_t layer,
+                                  const ImageShape& image_shape,
+                                  const TileShape& tile_shape) const;
     void write_external_metadata_json_() const;
     void write_zgroup_json_() const;
     void write_group_zattrs_json_() const;
 
     void allocate_writers_();
+    void validate_image_and_tile_shapes_() const;
 
     void start_threads_();
     void recover_threads_();
@@ -153,10 +165,10 @@ size_t
 get_bytes_per_tile(const ImageShape& image_shape,
                    const TileShape& tile_shape) noexcept;
 
-size_t
+uint32_t
 get_tiles_per_chunk(const ImageShape& image_shape,
                     const TileShape& tile_shape,
-                    size_t max_bytes_per_chunk) noexcept;
+                    uint64_t max_bytes_per_chunk) noexcept;
 
 size_t
 get_bytes_per_chunk(const ImageShape& image_shape,

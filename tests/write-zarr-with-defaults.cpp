@@ -58,7 +58,7 @@ reporter(int is_error,
     } while (0)
 
 /// Check that a>b
-/// example: `ASSERT_GT(int,"%d",42,meaning_of_life())`
+/// example: `ASSERT_GT(int,"%d",43,meaning_of_life())`
 #define ASSERT_GT(T, fmt, a, b)                                                \
     do {                                                                       \
         T a_ = (T)(a);                                                         \
@@ -155,7 +155,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
             clock_sleep_ms(&throttle, 100.0f);
 
             LOG(
-              "stream %d nframes %d time %f", 0, nframes, clock_toc_ms(&clock));
+              "stream %d expected_frames_per_chunk %d time %f", 0, nframes, clock_toc_ms(&clock));
         } while (DeviceState_Running == acquire_get_state(runtime) &&
                  nframes < props.video[0].max_frame_count);
 
@@ -192,15 +192,15 @@ main()
     const auto external_metadata_path =
       fs::path(TEST ".zarr") / "0" / ".zattrs";
     CHECK(fs::is_regular_file(external_metadata_path));
-    ASSERT_GT(size_t, "%zu", fs::file_size(external_metadata_path), 0);
+    ASSERT_GT(int, "%d", fs::file_size(external_metadata_path), 0);
 
     const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
     CHECK(fs::is_regular_file(group_zattrs_path));
-    ASSERT_GT(size_t, "%zu", fs::file_size(group_zattrs_path), 0);
+    ASSERT_GT(int, "%d", fs::file_size(group_zattrs_path), 0);
 
     const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));
-    ASSERT_GT(size_t, "%zu", fs::file_size(zarray_path), 0);
+    ASSERT_GT(int, "%d", fs::file_size(zarray_path), 0);
 
     // check metadata
     std::ifstream f(zarray_path);

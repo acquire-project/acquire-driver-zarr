@@ -7,8 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Support for writing multiscale OME-Zarr.
+
+### Changed
+
+- `ChunkWriter`s need to specify which multiscale layer they write to.
+- The Zarr writer now validates that image and tile shapes are set and compatible with each other before the first
+  append.
+
+### Removed
+
+- Noisy thread status messages.
+
 ### Fixed
 
+- Check that the image shape has been set before complaining that the tile shape along any dimension is also zero.
 - A bug where multibyte samples exhibited striping behavior due to being copied from the wrong offset in the source
   buffer.
 

@@ -68,6 +68,7 @@ CompressionParams::CompressionParams(const std::string& codec_id,
 ChunkWriter::ChunkWriter(BaseEncoder* encoder,
                          const ImageShape& image_shape,
                          const TileShape& tile_shape,
+                         uint32_t lod,
                          uint32_t tile_col,
                          uint32_t tile_row,
                          uint32_t tile_plane,
@@ -82,6 +83,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , dimension_separator_{ dimension_separator }
   , base_dir_{ base_directory }
   , current_file_{}
+  , layer_{ lod }
   , tile_col_{ tile_col }
   , tile_row_{ tile_row }
   , tile_plane_{ tile_plane }
@@ -127,6 +129,26 @@ ChunkWriter::write_frame(const TiledFrame& frame)
     nbytes = write(data, data + nbytes);
 
     return nbytes == bpt;
+}
+
+const ImageShape&
+ChunkWriter::image_shape() const noexcept
+{
+    return image_shape_;
+}
+
+const TileShape&
+ChunkWriter::tile_shape() const noexcept
+{
+    return tile_shape_;
+}
+
+uint32_t
+ChunkWriter::frames_written() const
+{
+    const uint64_t bpt = bytes_per_tile(image_shape_, tile_shape_);
+    CHECK(bpt > 0);
+    return (uint32_t)(bytes_written_ / bpt);
 }
 
 size_t
@@ -175,7 +197,7 @@ ChunkWriter::open_chunk_file()
     snprintf(file_path,
              sizeof(file_path) - 1,
              "%d%c%d%c%d%c%d%c%d",
-             0,
+             layer_,
              dimension_separator_,
              current_chunk_,
              dimension_separator_,

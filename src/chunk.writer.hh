@@ -20,6 +20,7 @@ struct ChunkWriter final
     /// @param encoder Encoder to use for encoding data as it comes in.
     /// @param image_shape Shape and strides of the frame.
     /// @param tile_shape Dimensions of the tile.
+    /// @param lod Multiscale level of detail. Full resolution is 0.
     /// @param tile_col Column index, in tile space, of this tile.
     /// @param tile_row Row index, in tile space, of this tile.
     /// @param tile_plane Plane index, in tile space, of this tile.
@@ -29,6 +30,7 @@ struct ChunkWriter final
     ChunkWriter(BaseEncoder* encoder,
                 const ImageShape& image_shape,
                 const TileShape& tile_shape,
+                uint32_t lod,
                 uint32_t tile_col,
                 uint32_t tile_row,
                 uint32_t tile_plane,
@@ -39,6 +41,11 @@ struct ChunkWriter final
 
     [[nodiscard]] bool write_frame(const TiledFrame& frame);
 
+    const ImageShape& image_shape() const noexcept;
+    const TileShape& tile_shape() const noexcept;
+
+    uint32_t frames_written() const;
+
   private:
     BaseEncoder* const encoder_;
 
@@ -46,11 +53,12 @@ struct ChunkWriter final
     const uint32_t tile_row_;
     const uint32_t tile_plane_;
 
-    size_t bytes_per_chunk_;
-    size_t tiles_per_chunk_;
-    size_t bytes_written_;
+    uint64_t bytes_per_chunk_;
+    uint32_t tiles_per_chunk_;
+    uint64_t bytes_written_;
 
     std::string base_dir_;
+    uint32_t layer_;
     int current_chunk_;
     char dimension_separator_;
     std::optional<struct file> current_file_;
