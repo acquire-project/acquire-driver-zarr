@@ -109,9 +109,10 @@ TiledFrame::get_contiguous_region(uint8_t** region,
         frame_plane >= image_shape_.dims.planes) {
         *region = nullptr;
     } else {
-        size_t frame_offset = frame_col +
-                              frame_row * image_shape_.strides.height +
-                              frame_plane * image_shape_.strides.planes;
+        size_t frame_offset =
+          bytes_of_type(image_shape_.type) *
+          (frame_col + frame_row * image_shape_.strides.height +
+           frame_plane * image_shape_.strides.planes);
         // widths are in pixels
         size_t img_width = image_shape_.dims.width;
         size_t tile_width = tile_shape_.width;
