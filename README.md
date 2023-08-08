@@ -86,8 +86,10 @@ raw, before compression.
 Compression is done via [Blosc][].
 Supported codecs are **lz4** and **zstd**, which can be used by using the **ZarrBlosc1Lz4ByteShuffle** and
 **ZarrBlosc1ZstdByteShuffle** devices, respectively.
-For a comparison of these codecs, please refer to the [Blosc docs][Blosc].
+For a comparison of these codecs, please refer to the [Blosc docs][].
 
 [zarr]: https://zarr.readthedocs.io/en/stable/spec/v2.html
 
 [Blosc]: https://github.com/Blosc/c-blosc
+
+[Blosc docs]: https://www.blosc.org/
