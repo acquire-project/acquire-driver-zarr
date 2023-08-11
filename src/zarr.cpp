@@ -370,7 +370,8 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 void
 zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 {
-    // `shape` is verified nonnull in storage_reserve_image_shape
+    // `shape` should be verified nonnull in storage_reserve_image_shape, but let's check anyway
+    CHECK(shape);
     image_shape_ = *shape;
 
     // ensure that tile dimensions are compatible with the image shape
