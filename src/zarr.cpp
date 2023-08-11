@@ -251,13 +251,17 @@ zarr::Zarr::set(const StorageProperties* props)
 void
 zarr::Zarr::get(StorageProperties* props) const
 {
-    CHECK(Device_Ok == storage_properties_set_filename(
-                         props, data_dir_.c_str(), data_dir_.size()));
-    CHECK(Device_Ok == storage_properties_set_external_metadata(
-                         props,
-                         external_metadata_json_.c_str(),
-                         external_metadata_json_.size()));
+    CHECK(storage_properties_set_filename(
+      props, data_dir_.c_str(), data_dir_.size()));
+    CHECK(storage_properties_set_external_metadata(
+      props, external_metadata_json_.c_str(), external_metadata_json_.size()));
     props->pixel_scale_um = pixel_scale_um_;
+
+    props->chunking.tile.width = tile_shape_.width;
+    props->chunking.tile.height = tile_shape_.height;
+    props->chunking.tile.planes = tile_shape_.planes;
+
+    props->enable_multiscale = enable_multiscale_;
 }
 
 void
