@@ -29,17 +29,20 @@ jobs:
         with:
           submodules: true
 
-      - name: CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
-
       - name: Build
         run: |
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
           cmake --build ${{github.workspace}}/build --config Release
-          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C Release -G ZIP
 
       - name: Test  # don't release if tests are failing
         working-directory: ${{github.workspace}}/build
-        run: ctest -C ${{env.BUILD_TYPE}} -L anyplatform --output-on-failure
+        run: ctest -C Release -L anyplatform --output-on-failure
+
+      - name: Package
+        run: |
+          cmake -B ${{github.workspace}}/pack -DCMAKE_BUILD_TYPE=Release -DNOTEST=1
+          cmake --build ${{github.workspace}}/pack --config Release
+          cpack --config ${{github.workspace}}/pack/CPackConfig.cmake -C Release -G ZIP
 
       - uses: actions/upload-artifact@v3
         with:
