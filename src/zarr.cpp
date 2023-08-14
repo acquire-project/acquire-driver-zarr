@@ -251,13 +251,17 @@ zarr::Zarr::set(const StorageProperties* props)
 void
 zarr::Zarr::get(StorageProperties* props) const
 {
-    CHECK(Device_Ok == storage_properties_set_filename(
-                         props, data_dir_.c_str(), data_dir_.size()));
-    CHECK(Device_Ok == storage_properties_set_external_metadata(
-                         props,
-                         external_metadata_json_.c_str(),
-                         external_metadata_json_.size()));
+    CHECK(storage_properties_set_filename(
+      props, data_dir_.c_str(), data_dir_.size()));
+    CHECK(storage_properties_set_external_metadata(
+      props, external_metadata_json_.c_str(), external_metadata_json_.size()));
     props->pixel_scale_um = pixel_scale_um_;
+
+    props->chunking.tile.width = tile_shape_.width;
+    props->chunking.tile.height = tile_shape_.height;
+    props->chunking.tile.planes = tile_shape_.planes;
+
+    props->enable_multiscale = enable_multiscale_;
 }
 
 void
@@ -366,8 +370,58 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 void
 zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 {
+    // `shape` should be verified nonnull in storage_reserve_image_shape, but let's check anyway
     CHECK(shape);
     image_shape_ = *shape;
+
+    // ensure that tile dimensions are compatible with the image shape
+    {
+        StorageProperties props = { 0 };
+        get(&props);
+
+        uint32_t tile_width = props.chunking.tile.width;
+        if (image_shape_.dims.width > 0 &&
+            (tile_width == 0 || tile_width > image_shape_.dims.width)) {
+            LOGE("%s. Setting width to %u.",
+                 tile_width == 0 ? "Tile width not specified"
+                                 : "Specified tile width is too large",
+                 image_shape_.dims.width);
+            tile_width = image_shape_.dims.width;
+        }
+        tile_shape_.width = tile_width;
+
+        uint32_t tile_height = props.chunking.tile.height;
+        if (image_shape_.dims.height > 0 &&
+            (tile_height == 0 || tile_height > image_shape_.dims.height)) {
+            LOGE("%s. Setting height to %u.",
+                 tile_height == 0 ? "Tile height not specified"
+                                  : "Specified tile height is too large",
+                 image_shape_.dims.height);
+            tile_height = image_shape_.dims.height;
+        }
+        tile_shape_.height = tile_height;
+
+        uint32_t tile_planes = props.chunking.tile.planes;
+        if (image_shape_.dims.planes > 0 &&
+            (tile_planes == 0 || tile_planes > image_shape_.dims.planes)) {
+            LOGE("%s. Setting planes to %u.",
+                 tile_planes == 0 ? "Tile plane count not specified"
+                                  : "Specified tile plane count is too large",
+                 image_shape_.dims.planes);
+            tile_planes = image_shape_.dims.planes;
+        }
+        tile_shape_.planes = tile_planes;
+        storage_properties_destroy(&props);
+    }
+
+    // ensure that the chunk size can accommodate at least one tile
+    uint64_t bytes_per_tile = get_bytes_per_tile(image_shape_, tile_shape_);
+    if (max_bytes_per_chunk_ < bytes_per_tile) {
+        LOGE("Specified chunk size %llu is too small. Setting to %llu bytes.",
+             max_bytes_per_chunk_,
+             bytes_per_tile);
+        max_bytes_per_chunk_ = bytes_per_tile;
+    }
 
     if (enable_multiscale_) {
         frame_scaler_.emplace(this, image_shape_, tile_shape_);
@@ -407,40 +461,10 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
                                       (uint64_t)meta.max_bytes_per_chunk.low,
                                       (uint64_t)meta.max_bytes_per_chunk.high);
 
-    uint32_t tile_width = props.tile.width;
-    if (image_shape_.dims.width > 0 &&
-        (tile_width == 0 || tile_width > image_shape_.dims.width)) {
-        LOGE("%s. Setting width to %u.",
-             tile_width == 0 ? "Tile width not specified"
-                             : "Specified roi width is too large",
-             image_shape_.dims.width);
-        tile_width = image_shape_.dims.width;
-    }
-
-    uint32_t tile_height = props.tile.height;
-    if (image_shape_.dims.height > 0 &&
-        (tile_height == 0 || tile_height > image_shape_.dims.height)) {
-        LOGE("%s. Setting height to %u.",
-             tile_height == 0 ? "Tile height not specified"
-                              : "Specified roi height is too large",
-             image_shape_.dims.height);
-        tile_height = image_shape_.dims.height;
-    }
-
-    uint32_t tile_planes = props.tile.planes;
-    if (image_shape_.dims.planes > 0 &&
-        (tile_planes == 0 || tile_planes > image_shape_.dims.planes)) {
-        LOGE("%s. Setting planes to %u.",
-             tile_planes == 0 ? "Tile planes not specified"
-                              : "Specified roi planes is too large",
-             image_shape_.dims.planes);
-        tile_planes = image_shape_.dims.planes;
-    }
-
     tile_shape_ = {
-        .width = tile_width,
-        .height = tile_height,
-        .planes = tile_planes,
+        .width = props.tile.width,
+        .height = props.tile.height,
+        .planes = props.tile.planes,
     };
 }
 

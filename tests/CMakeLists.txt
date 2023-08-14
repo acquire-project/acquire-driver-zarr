@@ -16,6 +16,7 @@ else()
         list-devices
         get-meta
         unit-tests
+        no-set-chunking
         write-zarr-compressed-multiscale
         write-zarr-compressed-with-chunking
         write-zarr-compressed-with-chunking-and-rollover
