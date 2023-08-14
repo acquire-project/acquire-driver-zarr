@@ -92,6 +92,5 @@ main()
     setup(runtime);
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
-    //    std::cout << acquire_get_state(runtime) << std::endl;
     return 0;
 }

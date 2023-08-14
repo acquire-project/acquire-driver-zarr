@@ -377,7 +377,6 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     // ensure that tile dimensions are compatible with the image shape
     {
         StorageProperties props = { 0 };
-        storage_properties_init(&props, 0, nullptr, 0, nullptr, 0, { 0 });
         get(&props);
 
         uint32_t tile_width = props.chunking.tile.width;
