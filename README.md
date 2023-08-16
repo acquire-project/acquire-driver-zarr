@@ -2,6 +2,7 @@
 
 [![Build](https://github.com/acquire-project/acquire-driver-zarr/actions/workflows/build.yml/badge.svg)](https://github.com/acquire-project/acquire-driver-zarr/actions/workflows/build.yml)
 [![Tests](https://github.com/acquire-project/acquire-driver-zarr/actions/workflows/test_pr.yml/badge.svg)](https://github.com/acquire-project/acquire-driver-zarr/actions/workflows/test_pr.yml)
+[![Chat](https://img.shields.io/badge/zulip-join_chat-brightgreen.svg)](https://acquire-imaging.zulipchat.com/)
 
 This is an Acquire Driver that supports chunked streaming to [zarr][].
 
@@ -15,14 +16,18 @@ This is an Acquire Driver that supports chunked streaming to [zarr][].
 
 ## Using the Zarr storage device
 
-Zarr has additional capabilities relative to the basic storage devices, namely _chunking_ and _compression_.
-These can be configured using the `storage_properties_set_chunking_props()`, or by selecting one of the `ZarrBlosc1*`
-devices, respectively.
+Zarr has additional capabilities relative to the basic storage devices, namely _chunking_, _compression_, and
+_multiscale storage_.
+
+To compress while streaming, you can use one of the `ZarrBlosc1*` devices.
+Chunking is configured using `storage_properties_set_chunking_props()` when configuring your video stream.
+Multiscale storage can be enabled or disabled by calling `storage_properties_set_enable_multiscale()` when configuring
+the video stream.
 
 ### Configuring chunking
 
-You can configure chunking by calling `storage_properties_set_chunking_props()` on your Zarr `Storage` object _after_
-calling `storage_properties_init()`.
+You can configure chunking by calling `storage_properties_set_chunking_props()` on your `StorageProperties` object
+_after_ calling `storage_properties_init()`.
 There are 4 parameters you can set to determine the chunk size, namely `tile_width`, `tile_height`, `tile_planes`,
 and `bytes_per_chunk`:
 
@@ -87,6 +92,28 @@ Compression is done via [Blosc][].
 Supported codecs are **lz4** and **zstd**, which can be used by using the **ZarrBlosc1Lz4ByteShuffle** and
 **ZarrBlosc1ZstdByteShuffle** devices, respectively.
 For a comparison of these codecs, please refer to the [Blosc docs][].
+
+### Configuring multiscale
+
+In order to enable or disable multiscale storage for your video stream, you can call
+`storage_properties_set_enable_multiscale()` on your `StorageProperties` object _after_ calling
+`storage_properties_init()` on it.
+
+```c
+int
+storage_properties_set_enable_multiscale(struct StorageProperties* out,
+                                         uint8_t enable);
+```
+
+To enable, pass `1` as the `enable` parameter, and to disable, pass `0`.
+
+If enabled, the Zarr writer will write a pyramid of frames, with each level of the pyramid halving each dimension of
+the previous level, until the dimensions are less than or equal to a single tile.
+
+#### Example
+
+Suppose your frame size is 1920 x 1080, with a tile size of 384 x 216.
+Then the sequence of levels will have dimensions 1920 x 1080, 960 x 540, 480 x 270, and 240 x 135.
 
 [zarr]: https://zarr.readthedocs.io/en/stable/spec/v2.html
 
