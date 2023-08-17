@@ -19,6 +19,7 @@ else()
         get-meta
         unit-tests
         no-set-chunking
+        write-basic-zarr-v3
         write-zarr-compressed-multiscale
         write-zarr-compressed-with-chunking
         write-zarr-compressed-with-chunking-and-rollover

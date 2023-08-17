@@ -27,6 +27,7 @@ struct ChunkWriter final
     /// @param max_bytes_per_chunk Maximum bytes per chunk.
     /// @param dimension_separator Separator to use between dimension names.
     /// @param base_directory Base directory to write chunks to.
+    /// @param version Zarr spec version.
     ChunkWriter(BaseEncoder* encoder,
                 const ImageShape& image_shape,
                 const TileShape& tile_shape,
@@ -36,7 +37,8 @@ struct ChunkWriter final
                 uint32_t tile_plane,
                 uint64_t max_bytes_per_chunk,
                 char dimension_separator,
-                const std::string& base_directory);
+                const std::string& base_directory,
+                int version = 2);
     ~ChunkWriter();
 
     [[nodiscard]] bool write_frame(const TiledFrame& frame);
@@ -48,6 +50,8 @@ struct ChunkWriter final
 
   private:
     BaseEncoder* const encoder_;
+
+    int zarr_version_;
 
     const uint32_t tile_col_;
     const uint32_t tile_row_;

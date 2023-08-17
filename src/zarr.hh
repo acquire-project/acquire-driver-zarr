@@ -62,7 +62,7 @@ struct StorageInterface : public Storage
 /// of group and array attributes.
 ///
 /// https://ngff.openmicroscopy.org/0.4/
-struct Zarr final : StorageInterface
+struct Zarr : StorageInterface
 {
     using JobT = std::function<bool()>;
 
@@ -84,7 +84,7 @@ struct Zarr final : StorageInterface
     void push_frame_to_writers(const std::shared_ptr<TiledFrame> frame);
     std::optional<JobT> pop_from_job_queue();
 
-  private:
+  protected:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
@@ -117,19 +117,44 @@ struct Zarr final : StorageInterface
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
 
     void create_data_directory_() const;
-    void write_zarray_json_() const;
-    void write_zarray_json_inner_(size_t layer,
-                                  const ImageShape& image_shape,
-                                  const TileShape& tile_shape) const;
-    void write_external_metadata_json_() const;
-    void write_zgroup_json_() const;
-    void write_group_zattrs_json_() const;
+    void write_all_array_metadata_() const;
+    virtual void write_array_metadata_(size_t level,
+                                       const ImageShape& image_shape,
+                                       const TileShape& tile_shape) const;
+    virtual void write_external_metadata_json_() const;
+    virtual void write_base_metadata_() const;
+    virtual void write_group_metadata_() const;
+
+    virtual std::string get_data_directory_() const;
 
     void allocate_writers_();
     void validate_image_and_tile_shapes_() const;
 
     void start_threads_();
     void recover_threads_();
+
+    virtual int zarr_version_() const;
+};
+
+struct ZarrV3 final : public Zarr
+{
+  public:
+    ZarrV3() = default;
+    ~ZarrV3() override = default;
+
+  private:
+    void write_array_metadata_(size_t level,
+                               const ImageShape& image_shape,
+                               const TileShape& tile_shape) const override;
+
+    void write_external_metadata_json_() const override;
+
+    void write_base_metadata_() const override;
+    void write_group_metadata_() const override;
+
+    std::string get_data_directory_() const override;
+
+    int zarr_version_() const override;
 };
 
 // utilities
