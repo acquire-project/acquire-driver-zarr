@@ -1,3 +1,7 @@
+/// @brief Test the basic Zarr v3 writer.
+/// @details Ensure that chunking is working as expected and metadata is written
+/// correctly.
+
 #include "device/hal/device.manager.h"
 #include "acquire.h"
 #include "platform.h" // clock
@@ -68,9 +72,11 @@ reporter(int is_error,
     } while (0)
 
 const static uint32_t frame_width = 1920;
+const static uint32_t tile_width = 480;
 const static uint32_t frame_height = 1080;
-const static uint32_t expected_frames_per_chunk = 16;
-const static uint32_t max_frame_count = 80;
+const static uint32_t tile_height = 360;
+const static uint32_t expected_frames_per_chunk = 97;
+const static uint32_t max_frame_count = 200;
 
 void
 setup(AcquireRuntime* runtime)
@@ -104,7 +110,7 @@ setup(AcquireRuntime* runtime)
                             sample_spacing_um);
 
     storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, frame_width, frame_height, 1, 32 << 20);
+      &props.video[0].storage.settings, tile_width, tile_height, 1, 16 << 20);
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -226,8 +232,8 @@ validate(AcquireRuntime* runtime)
     auto chunk_shape = chunk_grid["chunk_shape"];
     ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunk_shape[0]);
     ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
-    ASSERT_EQ(int, "%d", frame_height, chunk_shape[2]);
-    ASSERT_EQ(int, "%d", frame_width, chunk_shape[3]);
+    ASSERT_EQ(int, "%d", tile_height, chunk_shape[2]);
+    ASSERT_EQ(int, "%d", tile_width, chunk_shape[3]);
 
     CHECK("C" == metadata["chunk_memory_layout"]);
     CHECK("<u1" == metadata["data_type"]);
@@ -238,6 +244,23 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(int, "%d", 1, array_shape[1]);
     ASSERT_EQ(int, "%d", frame_height, array_shape[2]);
     ASSERT_EQ(int, "%d", frame_width, array_shape[3]);
+
+    // check that each chunked data file is the expected size
+    uint32_t bytes_per_chunk =
+      chunk_shape[0].get<uint32_t>() * chunk_shape[1].get<uint32_t>() *
+      chunk_shape[2].get<uint32_t>() * chunk_shape[3].get<uint32_t>();
+    for (auto t = 0; t < std::ceil(max_frame_count / expected_frames_per_chunk);
+         ++t) {
+        for (auto y = 0; y < 3; ++y) {
+            for (auto x = 0; x < 4; ++x) {
+                fs::path path = test_path / "data" / "root" / "0" /
+                                ("c" + std::to_string(t)) / "0" /
+                                std::to_string(y) / std::to_string(x);
+                CHECK(fs::is_regular_file(path));
+                ASSERT_EQ(int, "%d", bytes_per_chunk, fs::file_size(path));
+            }
+        }
+    }
 }
 
 void
