@@ -784,6 +784,11 @@ zarr::Zarr::zarr_version_() const
     return 2;
 }
 
+zarr::ZarrV3::ZarrV3(CompressionParams&& compression_params)
+  : Zarr(std::move(compression_params))
+{
+}
+
 void
 zarr::ZarrV3::write_array_metadata_(
   size_t level,
@@ -826,6 +831,20 @@ zarr::ZarrV3::write_array_metadata_(
       image_shape.dims.height,
       image_shape.dims.width,
     });
+
+    if (compression_params_.has_value()) {
+        auto params = compression_params_.value();
+        metadata["compressor"] = {
+            { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0"},
+            { "configuration",
+              { { "blocksize", 0 },
+                { "clevel", params.clevel_},
+                { "cname", params.codec_id_},
+                {"shuffle", params.shuffle_}
+              }
+            },
+        };
+    }
 
     auto path = (fs::path(data_dir_) / "meta" / "root" /
                  (std::to_string(level) + ".array.json"))

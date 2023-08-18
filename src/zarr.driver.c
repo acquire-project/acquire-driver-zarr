@@ -41,6 +41,10 @@ struct Storage*
 compressed_zarr_lz4_init();
 struct Storage*
 zarr_v3_init();
+struct Storage*
+compressed_zarr_v3_zstd_init();
+struct Storage*
+compressed_zarr_v3_lz4_init();
 
 //
 //                  GLOBALS
@@ -52,6 +56,8 @@ enum StorageKind
     Storage_ZarrBlosc1ZstdByteShuffle,
     Storage_ZarrBlosc1Lz4ByteShuffle,
     Storage_ZarrV3,
+    Storage_ZarrV3Blosc1ZstdByteShuffle,
+    Storage_ZarrV3Blosc1Lz4ByteShuffle,
     Storage_Number_Of_Kinds
 };
 
@@ -75,6 +81,8 @@ storage_kind_to_string(const enum StorageKind kind)
         CASE(Storage_ZarrBlosc1ZstdByteShuffle);
         CASE(Storage_ZarrBlosc1Lz4ByteShuffle);
         CASE(Storage_ZarrV3);
+        CASE(Storage_ZarrV3Blosc1ZstdByteShuffle);
+        CASE(Storage_ZarrV3Blosc1Lz4ByteShuffle);
 #undef CASE
         default:
             return "(unknown)";
@@ -104,6 +112,8 @@ zarr_describe(const struct Driver* driver,
         XXX(ZarrBlosc1ZstdByteShuffle),
         XXX(ZarrBlosc1Lz4ByteShuffle),
         XXX(ZarrV3),
+        XXX(ZarrV3Blosc1ZstdByteShuffle),
+        XXX(ZarrV3Blosc1Lz4ByteShuffle),
     };
     // clang-format on
 #undef XXX
@@ -166,6 +176,9 @@ acquire_driver_init_v0(acquire_reporter_t reporter)
             [Storage_ZarrBlosc1ZstdByteShuffle] = compressed_zarr_zstd_init,
             [Storage_ZarrBlosc1Lz4ByteShuffle] = compressed_zarr_lz4_init,
             [Storage_ZarrV3] = zarr_v3_init,
+            [Storage_ZarrV3Blosc1ZstdByteShuffle] =
+              compressed_zarr_v3_zstd_init,
+            [Storage_ZarrV3Blosc1Lz4ByteShuffle] = compressed_zarr_v3_lz4_init,
         };
         memcpy(
           globals.constructors, impls, nbytes); // cppcheck-suppress uninitvar

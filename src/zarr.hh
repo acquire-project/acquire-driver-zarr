@@ -139,6 +139,7 @@ struct ZarrV3 final : public Zarr
 {
   public:
     ZarrV3() = default;
+    explicit ZarrV3(CompressionParams&& compression_params);
     ~ZarrV3() override = default;
 
   private:

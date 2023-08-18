@@ -25,6 +25,22 @@ compressed_zarr_init()
     }
     return nullptr;
 }
+
+template<zarr::BloscCodecId CodecId>
+struct Storage*
+compressed_zarr_v3_init()
+{
+    try {
+        zarr::CompressionParams params(
+          zarr::compression_codec_as_string<CodecId>(), 1, 1);
+        return new zarr::ZarrV3(std::move(params));
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
+    } catch (...) {
+        LOGE("Exception: (unknown)");
+    }
+    return nullptr;
+}
 } // end ::{anonymous} namespace
 
 //
@@ -88,14 +104,30 @@ zarr::BloscEncoder::flush_impl()
     return nbytes_out;
 }
 
-extern "C" struct Storage*
-compressed_zarr_zstd_init()
-{
-    return compressed_zarr_init<zarr::BloscCodecId::Zstd>();
+extern "C" {
+    struct Storage*
+    compressed_zarr_zstd_init()
+    {
+        return compressed_zarr_init<zarr::BloscCodecId::Zstd>();
+    }
+
+    struct Storage*
+    compressed_zarr_lz4_init()
+    {
+        return compressed_zarr_init<zarr::BloscCodecId::Lz4>();
+    }
+
+    struct Storage*
+    compressed_zarr_v3_zstd_init()
+    {
+        return compressed_zarr_v3_init<zarr::BloscCodecId::Zstd>();
+    }
+
+    struct Storage*
+    compressed_zarr_v3_lz4_init()
+    {
+        return compressed_zarr_v3_init<zarr::BloscCodecId::Lz4>();
+    }
 }
 
-extern "C" struct Storage*
-compressed_zarr_lz4_init()
-{
-    return compressed_zarr_init<zarr::BloscCodecId::Lz4>();
-}
+
