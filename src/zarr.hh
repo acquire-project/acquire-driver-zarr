@@ -94,7 +94,7 @@ struct Zarr : StorageInterface
     std::vector<ThreadContext> thread_pool_;
 
     // changes on set()
-    std::string data_dir_;
+    std::string data_root_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     uint64_t max_bytes_per_chunk_;

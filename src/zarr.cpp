@@ -234,7 +234,7 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // checks the directory exists and is writable
     validate_props(props);
-    data_dir_ = as_path(*props).string();
+    data_root_ = as_path(*props).string();
 
     if (props->external_metadata_json.str)
         external_metadata_json_ = props->external_metadata_json.str;
@@ -252,7 +252,7 @@ void
 zarr::Zarr::get(StorageProperties* props) const
 {
     CHECK(storage_properties_set_filename(
-      props, data_dir_.c_str(), data_dir_.size()));
+      props, data_root_.c_str(), data_root_.size()));
     CHECK(storage_properties_set_external_metadata(
       props, external_metadata_json_.c_str(), external_metadata_json_.size()));
     props->pixel_scale_um = pixel_scale_um_;
@@ -332,7 +332,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     // validate start conditions
     if (0 == frame_count_) {
         validate_image_and_tile_shapes_();
-    } // TODO (aliddell): make this a function
+    }
 
     using namespace acquire::sink::zarr;
 
@@ -473,17 +473,17 @@ void
 zarr::Zarr::create_data_directory_() const
 {
     namespace fs = std::filesystem;
-    if (fs::exists(data_dir_)) {
+    if (fs::exists(data_root_)) {
         std::error_code ec;
-        EXPECT(fs::remove_all(data_dir_, ec),
+        EXPECT(fs::remove_all(data_root_, ec),
                R"(Failed to remove folder for "%s": %s)",
-               data_dir_.c_str(),
+               data_root_.c_str(),
                ec.message().c_str());
     }
 
-    EXPECT(fs::create_directory(data_dir_),
+    EXPECT(fs::create_directory(data_root_),
            "Failed to create folder for \"%s\"",
-           data_dir_.c_str());
+           data_root_.c_str());
 }
 
 void
@@ -551,7 +551,7 @@ zarr::Zarr::write_array_metadata_(size_t level,
         zarray_attrs["compressor"] = nullptr;
 
     std::string zarray_path =
-      (fs::path(data_dir_) / std::to_string(level) / ".zarray").string();
+      (fs::path(data_root_) / std::to_string(level) / ".zarray").string();
     write_string(zarray_path, zarray_attrs.dump());
 }
 
@@ -561,7 +561,7 @@ zarr::Zarr::write_external_metadata_json_() const
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
-    std::string zattrs_path = (fs::path(data_dir_) / "0" / ".zattrs").string();
+    std::string zattrs_path = (fs::path(data_root_) / "0" / ".zattrs").string();
     write_string(zattrs_path, external_metadata_json_);
 }
 
@@ -641,7 +641,7 @@ zarr::Zarr::write_group_metadata_() const
         };
     }
 
-    std::string zattrs_path = (fs::path(data_dir_) / ".zattrs").string();
+    std::string zattrs_path = (fs::path(data_root_) / ".zattrs").string();
     write_string(zattrs_path, zgroup_attrs.dump(4));
 }
 
@@ -652,14 +652,14 @@ zarr::Zarr::write_base_metadata_() const
     using json = nlohmann::json;
 
     const json zgroup = { { "zarr_format", 2 } };
-    std::string zgroup_path = (fs::path(data_dir_) / ".zgroup").string();
+    std::string zgroup_path = (fs::path(data_root_) / ".zgroup").string();
     write_string(zgroup_path, zgroup.dump());
 }
 
 std::string
 zarr::Zarr::get_data_directory_() const
 {
-    return data_dir_;
+    return data_root_;
 }
 
 void
@@ -846,7 +846,7 @@ zarr::ZarrV3::write_array_metadata_(
         };
     }
 
-    auto path = (fs::path(data_dir_) / "meta" / "root" /
+    auto path = (fs::path(data_root_) / "meta" / "root" /
                  (std::to_string(level) + ".array.json"))
                   .string();
     write_string(path, metadata.dump(4));
@@ -875,7 +875,7 @@ zarr::ZarrV3::write_base_metadata_() const
     metadata["metadata_key_suffix"] = ".json";
     metadata["zarr_format"] = "https://purl.org/zarr/spec/protocol/core/3.0";
 
-    auto path = (fs::path(data_dir_) / "zarr.json").string();
+    auto path = (fs::path(data_root_) / "zarr.json").string();
     write_string(path, metadata.dump(4));
 }
 
@@ -891,14 +891,14 @@ zarr::ZarrV3::write_group_metadata_() const
     json metadata;
     metadata["attributes"]["acquire"] = json::parse(external_metadata_json_);
 
-    auto path = (fs::path(data_dir_) / "meta" / "root.group.json").string();
+    auto path = (fs::path(data_root_) / "meta" / "root.group.json").string();
     write_string(path, metadata.dump(4));
 }
 
 std::string
 zarr::ZarrV3::get_data_directory_() const
 {
-    return (fs::path(data_dir_) / "data" / "root").string();
+    return (fs::path(data_root_) / "data" / "root").string();
 }
 
 int
