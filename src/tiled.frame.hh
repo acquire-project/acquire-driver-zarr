@@ -6,7 +6,6 @@
 #include <functional>
 #include <iterator>
 #include <stdexcept>
-#include <unordered_map>
 #include <vector>
 
 #include "device/props/components.h"
