@@ -75,7 +75,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
                          uint64_t max_bytes_per_chunk,
                          char dimension_separator,
                          const std::string& base_directory,
-                         int version)
+                         const std::string& chunk_dir_prefix)
   : encoder_{ encoder }
   , bytes_per_chunk_{ 0 }
   , tiles_per_chunk_{ 0 }
@@ -90,7 +90,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , tile_plane_{ tile_plane }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
-  , zarr_version_{ version }
+  , chunk_dir_prefix_{ chunk_dir_prefix }
 {
     CHECK(encoder_);
     const auto bpt = (float)::bytes_per_tile(image_shape_, tile_shape_);
@@ -201,7 +201,7 @@ ChunkWriter::open_chunk_file()
              "%d%c%s%d%c%d%c%d%c%d",
              layer_,
              dimension_separator_,
-             zarr_version_ == 3 ? "c" : "",
+             chunk_dir_prefix_.c_str(),
              current_chunk_,
              dimension_separator_,
              tile_plane_,

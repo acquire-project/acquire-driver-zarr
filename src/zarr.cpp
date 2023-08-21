@@ -728,7 +728,7 @@ zarr::Zarr::allocate_writers_()
                                                     max_bytes_per_chunk_,
                                                     dimension_separator_,
                                                     get_data_directory_(),
-                                                    zarr_version_()));
+                                                    get_chunk_dir_prefix_()));
                 }
             }
         }
@@ -778,10 +778,10 @@ zarr::Zarr::recover_threads_()
     }
 }
 
-int
-zarr::Zarr::zarr_version_() const
+std::string
+zarr::Zarr::get_chunk_dir_prefix_() const
 {
-    return 2;
+    return "";
 }
 
 zarr::ZarrV3::ZarrV3(CompressionParams&& compression_params)
@@ -899,10 +899,10 @@ zarr::ZarrV3::get_data_directory_() const
     return (fs::path(data_root_) / "data" / "root").string();
 }
 
-int
-zarr::ZarrV3::zarr_version_() const
+std::string
+zarr::ZarrV3::get_chunk_dir_prefix_() const
 {
-    return 3;
+    return "c";
 }
 
 /// \brief Check that the StorageProperties are valid.

@@ -125,14 +125,13 @@ struct Zarr : StorageInterface
     virtual void write_group_metadata_() const;
 
     virtual std::string get_data_directory_() const;
+    virtual std::string get_chunk_dir_prefix_() const;
 
     void allocate_writers_();
     void validate_image_and_tile_shapes_() const;
 
     void start_threads_();
     void recover_threads_();
-
-    virtual int zarr_version_() const;
 };
 
 struct ZarrV3 final : public Zarr
@@ -153,8 +152,7 @@ struct ZarrV3 final : public Zarr
     void write_group_metadata_() const override;
 
     std::string get_data_directory_() const override;
-
-    int zarr_version_() const override;
+    std::string get_chunk_dir_prefix_() const override;
 };
 
 // utilities
