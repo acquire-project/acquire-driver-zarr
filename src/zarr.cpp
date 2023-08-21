@@ -835,14 +835,12 @@ zarr::ZarrV3::write_array_metadata_(
     if (compression_params_.has_value()) {
         auto params = compression_params_.value();
         metadata["compressor"] = {
-            { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0"},
+            { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
             { "configuration",
               { { "blocksize", 0 },
-                { "clevel", params.clevel_},
-                { "cname", params.codec_id_},
-                {"shuffle", params.shuffle_}
-              }
-            },
+                { "clevel", params.clevel_ },
+                { "cname", params.codec_id_ },
+                { "shuffle", params.shuffle_ } } },
         };
     }
 
@@ -1165,15 +1163,29 @@ zarr::StorageInterface::StorageInterface()
 {
 }
 
-extern "C" struct Storage*
-zarr_init()
+extern "C"
 {
-    try {
-        return new zarr::Zarr();
-    } catch (const std::exception& exc) {
-        LOGE("Exception: %s\n", exc.what());
-    } catch (...) {
-        LOGE("Exception: (unknown)");
+    struct Storage* zarr_init()
+    {
+        try {
+            return new zarr::Zarr();
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+        return nullptr;
     }
-    return nullptr;
+
+    struct Storage* zarr_v3_init()
+    {
+        try {
+            return new zarr::ZarrV3();
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+        return nullptr;
+    }
 }

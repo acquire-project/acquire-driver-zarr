@@ -21,7 +21,6 @@ add_library(${tgt} MODULE
         zarr.raw.cpp
         zarr.blosc.hh
         zarr.blosc.cpp
-        zarr.v3.cpp
         zarr.driver.c
 )
 target_enable_simd(${tgt})
