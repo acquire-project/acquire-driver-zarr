@@ -138,7 +138,9 @@ FrameScaler::push_frame(std::shared_ptr<TiledFrame> frame)
     std::unique_lock lock(mutex_);
     try {
         zarr_->push_frame_to_writers(frame);
-        downsample_and_accumulate(frame, 1);
+        if (accumulators_.contains(1)) {
+            downsample_and_accumulate(frame, 1);
+        }
         return true;
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
