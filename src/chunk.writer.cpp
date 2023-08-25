@@ -111,7 +111,6 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
 ChunkWriter::~ChunkWriter()
 {
     close_current_file();
-    std::stringstream ss;
     if (!std::is_sorted(frame_ids_.begin(), frame_ids_.end()))
         LOGE("Unsorted chunk writer!");
     delete encoder_;

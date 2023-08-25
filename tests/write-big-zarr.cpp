@@ -2,7 +2,6 @@
 
 #include "device/hal/device.manager.h"
 #include "acquire.h"
-#include "platform.h" // clock
 #include "logger.h"
 
 #include <stdexcept>
@@ -120,10 +119,6 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     OK(acquire_configure(runtime, &props));
 
-    struct clock clock;
-    static double time_limit_ms = 20000.0;
-    clock_init(&clock);
-    clock_shift_ms(&clock, time_limit_ms);
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
 }
@@ -133,45 +128,6 @@ main()
 {
     auto runtime = acquire_init(reporter);
     acquire(runtime, TEST ".zarr");
-
-    //    CHECK(fs::is_directory(TEST ".zarr"));
-    //
-    //    const auto external_metadata_path =
-    //      fs::path(TEST ".zarr") / "0" / ".zattrs";
-    //    CHECK(fs::is_regular_file(external_metadata_path));
-    //    ASSERT_GT(int, "%d", fs::file_size(external_metadata_path), 0);
-    //
-    //    const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
-    //    CHECK(fs::is_regular_file(group_zattrs_path));
-    //    ASSERT_GT(int, "%d", fs::file_size(group_zattrs_path), 0);
-    //
-    //    const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
-    //    CHECK(fs::is_regular_file(zarray_path));
-    //    ASSERT_GT(int, "%d", fs::file_size(zarray_path), 0);
-    //
-    //    // check metadata
-    //    std::ifstream f(zarray_path);
-    //    json zarray = json::parse(f);
-    //
-    //    auto shape = zarray["shape"];
-    //    ASSERT_EQ(int, "%d", max_frames, shape[0]);
-    //    ASSERT_EQ(int, "%d", 1, shape[1]);
-    //    ASSERT_EQ(int, "%d", frame_height, shape[2]);
-    //    ASSERT_EQ(int, "%d", frame_width, shape[3]);
-    //
-    //    auto chunks = zarray["chunks"];
-    //    ASSERT_EQ(int, "%d", max_frames, chunks[0]);
-    //    ASSERT_EQ(int, "%d", 1, chunks[1]);
-    //    ASSERT_EQ(int, "%d", frame_height, chunks[2]);
-    //    ASSERT_EQ(int, "%d", frame_width, chunks[3]);
-    //
-    //    // check chunked data
-    //    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
-    //                      chunks[2].get<int>() * chunks[3].get<int>();
-    //
-    //    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
-    //    CHECK(fs::is_regular_file(chunk_file_path));
-    //    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);
