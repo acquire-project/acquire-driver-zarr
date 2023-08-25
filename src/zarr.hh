@@ -113,6 +113,7 @@ struct Zarr final : StorageInterface
     uint32_t frame_count_;
     mutable std::mutex job_queue_mutex_;
     std::queue<JobT> job_queue_;
+    size_t queue_cap_;
 
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
 

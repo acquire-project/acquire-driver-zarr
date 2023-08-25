@@ -19,8 +19,8 @@
     } while (0)
 #define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t%s", #e)
 
-//#define TRACE(...) LOG(__VA_ARGS__)
-#define TRACE(...)
+#define TRACE(...) LOG(__VA_ARGS__)  // TODO (aliddell): switch this back
+//#define TRACE(...)
 
 #define containerof(ptr, T, V) ((T*)(((char*)(ptr)) - offsetof(T, V)))
 #define countof(e) (sizeof(e) / sizeof(*(e)))

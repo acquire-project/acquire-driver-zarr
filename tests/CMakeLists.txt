@@ -20,6 +20,7 @@ else()
         unit-tests
         multiscale-with-trivial-tile-size
         no-set-chunking
+        write-big-zarr
         write-zarr-compressed-multiscale
         write-zarr-compressed-with-chunking
         write-zarr-compressed-with-chunking-and-rollover

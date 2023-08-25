@@ -332,7 +332,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     // validate start conditions
     if (0 == frame_count_) {
         validate_image_and_tile_shapes_();
-    } // TODO (aliddell): make this a function
+    }
 
     using namespace acquire::sink::zarr;
 
@@ -343,7 +343,20 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         return (const VideoFrame*)p;
     };
 
-    for (cur = frames; cur < end; cur = next()) {
+    for (cur = frames; cur < end;) {
+        // check that the number of jobs on the queue is not too large
+        {
+            std::scoped_lock lock(job_queue_mutex_);
+            if (job_queue_.size() >= queue_cap_) {
+                TRACE("Queue size at or beyond capacity: %llu > %llu",
+                      job_queue_.size(),
+                      queue_cap_);
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+                continue;
+            }
+        }
+
         // handle incoming image shape
         validate_image_shapes_equal(image_shape_, cur->shape);
 
@@ -362,6 +375,8 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         }
 
         ++frame_count_;
+
+        cur = next();
     }
 
     return nbytes;
@@ -370,7 +385,8 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 void
 zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 {
-    // `shape` should be verified nonnull in storage_reserve_image_shape, but let's check anyway
+    // `shape` should be verified nonnull in storage_reserve_image_shape, but
+    // let's check anyway
     CHECK(shape);
     image_shape_ = *shape;
 
@@ -428,6 +444,9 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     }
 
     allocate_writers_();
+
+    // ensure the data stored on the queue takes up no more than 1 GiB
+    queue_cap_ = std::max((uint64_t)1, (uint64_t)(1 << 30) / bytes_per_tile);
 }
 
 void
