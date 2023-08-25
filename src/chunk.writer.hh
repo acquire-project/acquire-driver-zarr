@@ -70,6 +70,7 @@ struct ChunkWriter final
     TileShape tile_shape_;
 
     std::vector<uint8_t> buffer_;
+    std::vector<uint64_t> frame_ids_; // TODO (aliddell): remove me
 
     void open_chunk_file();
     void close_current_file();

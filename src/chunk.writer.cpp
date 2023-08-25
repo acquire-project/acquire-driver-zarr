@@ -111,6 +111,9 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
 ChunkWriter::~ChunkWriter()
 {
     close_current_file();
+    std::stringstream ss;
+    if (!std::is_sorted(frame_ids_.begin(), frame_ids_.end()))
+        LOGE("Unsorted chunk writer!");
     delete encoder_;
 }
 
@@ -127,6 +130,9 @@ ChunkWriter::write_frame(const TiledFrame& frame)
       frame.copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
 
     nbytes = write(data, data + nbytes);
+
+    if (frame_ids_.size() < 100)
+        frame_ids_.push_back(frame.frame_id());
 
     return nbytes == bpt;
 }
