@@ -107,7 +107,7 @@ struct Zarr final : StorageInterface
     std::optional<FrameScaler> frame_scaler_;
 
     /// Chunk writers for each layer/scale
-    std::map<size_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
+    std::map<uint16_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
 
     // changes during acquisition
     uint32_t frame_count_;
@@ -119,7 +119,7 @@ struct Zarr final : StorageInterface
 
     void create_data_directory_() const;
     void write_zarray_json_() const;
-    void write_zarray_json_inner_(size_t layer,
+    void write_zarray_json_inner_(uint16_t layer,
                                   const ImageShape& image_shape,
                                   const TileShape& tile_shape) const;
     void write_external_metadata_json_() const;

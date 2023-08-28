@@ -523,7 +523,7 @@ zarr::Zarr::write_zarray_json_() const
 }
 
 void
-zarr::Zarr::write_zarray_json_inner_(size_t layer,
+zarr::Zarr::write_zarray_json_inner_(uint16_t layer,
                                      const ImageShape& image_shape,
                                      const TileShape& tile_shape) const
 {

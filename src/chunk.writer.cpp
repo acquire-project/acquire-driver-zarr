@@ -68,7 +68,7 @@ CompressionParams::CompressionParams(const std::string& codec_id,
 ChunkWriter::ChunkWriter(BaseEncoder* encoder,
                          const ImageShape& image_shape,
                          const TileShape& tile_shape,
-                         uint32_t lod,
+                         uint16_t lod,
                          uint32_t tile_col,
                          uint32_t tile_row,
                          uint32_t tile_plane,
@@ -83,7 +83,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , dimension_separator_{ dimension_separator }
   , base_dir_{ base_directory }
   , current_file_{}
-  , layer_{ lod }
+  , level_of_detail_{ lod }
   , tile_col_{ tile_col }
   , tile_row_{ tile_row }
   , tile_plane_{ tile_plane }
