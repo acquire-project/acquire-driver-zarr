@@ -198,6 +198,7 @@ zarr::Zarr::Zarr()
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
   , thread_pool_(std::thread::hardware_concurrency())
+  , queue_cap_{ 0 }
 {
     start_threads_();
 }
@@ -210,6 +211,7 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
   , thread_pool_(std::thread::hardware_concurrency())
+  , queue_cap_{ 0 }
 {
     compression_params_ = std::move(compression_params);
     start_threads_();
@@ -348,7 +350,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
         {
             std::scoped_lock lock(job_queue_mutex_);
             if (job_queue_.size() >= queue_cap_) {
-                TRACE("Queue size at or beyond capacity: %llu > %llu",
+                TRACE("Queue size at or beyond capacity: %llu >= %llu ",
                       job_queue_.size(),
                       queue_cap_);
 
@@ -453,10 +455,10 @@ void
 zarr::Zarr::push_frame_to_writers(const std::shared_ptr<TiledFrame> frame)
 {
     std::scoped_lock lock(job_queue_mutex_);
-    auto writer = writers_.at(frame->layer());
+    auto lod = writers_.at(frame->layer());
 
-    for (auto& w : writer) {
-        job_queue_.emplace([w, frame]() { return w->write_frame(*frame); });
+    for (auto& w : lod) {
+        job_queue_.emplace([w, frame]() { return w->emplace_frame(frame); });
     }
 }
 

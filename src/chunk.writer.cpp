@@ -1,6 +1,5 @@
 #include "chunk.writer.hh"
 
-#include <algorithm>
 #include <filesystem>
 #include <mutex>
 #include <string>
@@ -89,6 +88,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , tile_plane_{ tile_plane }
   , image_shape_{ image_shape }
   , tile_shape_{ tile_shape }
+  , last_frame_{ -1 }
 {
     CHECK(encoder_);
     const auto bpt = (float)::bytes_per_tile(image_shape_, tile_shape_);
@@ -111,29 +111,25 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
 ChunkWriter::~ChunkWriter()
 {
     close_current_file();
-    if (!std::is_sorted(frame_ids_.begin(), frame_ids_.end()))
-        LOGE("Unsorted chunk writer!");
     delete encoder_;
 }
 
 bool
-ChunkWriter::write_frame(const TiledFrame& frame)
+ChunkWriter::emplace_frame(std::shared_ptr<TiledFrame> frame)
 {
     std::scoped_lock lock(mutex_);
-    const size_t bpt = ::bytes_per_tile(image_shape_, tile_shape_);
-    if (buffer_.size() < bpt)
-        buffer_.resize(bpt);
+    frames_.insert(frame);
 
-    uint8_t* data = buffer_.data();
-    size_t nbytes =
-      frame.copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
+    try {
+        write_frames_();
+        return true;
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
+    } catch (...) {
+        LOGE("Exception: (unknown)");
+    }
 
-    nbytes = write(data, data + nbytes);
-
-    if (frame_ids_.size() < 100)
-        frame_ids_.push_back(frame.frame_id());
-
-    return nbytes == bpt;
+    return false;
 }
 
 const ImageShape&
@@ -196,13 +192,46 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
 }
 
 void
+ChunkWriter::write_frames_()
+{
+    const size_t bpt = bytes_per_tile(image_shape_, tile_shape_);
+    CHECK(bpt > 0);
+
+    if (buffer_.size() < bpt) {
+        buffer_.resize(bpt);
+    }
+
+    uint8_t* data = buffer_.data();
+
+    for (auto& frame : frames_) {
+        // Frames are inserted in order, but there may be gaps in the sequence
+        // because we could have received frames from other threads.
+        // If we encounter a gap, we need to stop writing.
+        if (frame->frame_id() != last_frame_ + std::pow(2, level_of_detail_)) {
+            break;
+        }
+        size_t nbytes = frame->copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
+        nbytes = write(data, data + nbytes);
+
+        EXPECT(nbytes == bpt,
+               "Expected to write %lu bytes, but wrote %lu bytes.",
+               bpt,
+               nbytes);
+
+        last_frame_ = frame->frame_id();
+    }
+
+    frames_.clear();
+}
+
+void
 ChunkWriter::open_chunk_file()
 {
     char file_path[512];
     snprintf(file_path,
              sizeof(file_path) - 1,
              "%d%c%d%c%d%c%d%c%d",
-             layer_,
+             level_of_detail_,
              dimension_separator_,
              current_chunk_,
              dimension_separator_,

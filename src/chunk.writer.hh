@@ -3,12 +3,25 @@
 
 #include <optional>
 #include <vector>
+#include <set>
 
 #include "platform.h"
 
 #include "zarr.encoder.hh"
 #include "zarr.blosc.hh"
 #include "tiled.frame.hh"
+
+namespace {
+struct FrameCmp
+{
+    bool operator()(
+      const std::shared_ptr<acquire::sink::zarr::TiledFrame>& a,
+      const std::shared_ptr<acquire::sink::zarr::TiledFrame>& b) const
+    {
+        return a->frame_id() < b->frame_id();
+    }
+};
+}
 
 namespace acquire::sink::zarr {
 
@@ -39,7 +52,7 @@ struct ChunkWriter final
                 const std::string& base_directory);
     ~ChunkWriter();
 
-    [[nodiscard]] bool write_frame(const TiledFrame& frame);
+    [[nodiscard]] bool emplace_frame(std::shared_ptr<TiledFrame> frame);
 
     const ImageShape& image_shape() const noexcept;
     const TileShape& tile_shape() const noexcept;
@@ -65,15 +78,18 @@ struct ChunkWriter final
 
     std::optional<CompressionParams> compressor_;
 
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     ImageShape image_shape_;
     TileShape tile_shape_;
 
+    std::set<std::shared_ptr<TiledFrame>, FrameCmp> frames_;
+    int64_t last_frame_;
+
     std::vector<uint8_t> buffer_;
-    std::vector<uint64_t> frame_ids_; // TODO (aliddell): remove me
 
     void open_chunk_file();
     void close_current_file();
+    void write_frames_();
     size_t write(const uint8_t* beg, const uint8_t* end);
     void finalize_chunk();
     void rollover();
