@@ -9,6 +9,7 @@ if (${WITH_EXAMPLES})
     #
     set(examples
             no-striping
+            write-big-zarr
     )
 
     foreach (name ${examples})

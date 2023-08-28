@@ -1,4 +1,4 @@
-// @file TODO: delete this file
+/// @file Write a Zarr with a large number of frames.
 
 #include "device/hal/device.manager.h"
 #include "acquire.h"
@@ -6,7 +6,7 @@
 
 #include <stdexcept>
 
-#include "json.hpp"
+#include "tests/json.hpp"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
