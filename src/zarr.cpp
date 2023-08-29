@@ -370,7 +370,8 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 void
 zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 {
-    // `shape` should be verified nonnull in storage_reserve_image_shape, but let's check anyway
+    // `shape` should be verified nonnull in storage_reserve_image_shape, but
+    // let's check anyway
     CHECK(shape);
     image_shape_ = *shape;
 
@@ -442,7 +443,7 @@ zarr::Zarr::push_frame_to_writers(const std::shared_ptr<TiledFrame> frame)
 }
 
 std::optional<zarr::Zarr::JobT>
-zarr::Zarr::pop_from_job_queue()
+zarr::Zarr::pop_from_job_queue() noexcept
 {
     std::scoped_lock lock(job_queue_mutex_);
     if (job_queue_.empty())
@@ -996,7 +997,10 @@ zarr::worker_thread(ThreadContext* ctx)
     using namespace std::chrono_literals;
 
     TRACE("Worker thread starting.");
-    CHECK(ctx);
+    if (nullptr == ctx) {
+        LOGE("Worker thread context is NULL.");
+        return;
+    }
 
     while (true) {
         std::unique_lock lock(ctx->mutex);
@@ -1007,7 +1011,16 @@ zarr::worker_thread(ThreadContext* ctx)
         }
 
         if (auto job = ctx->zarr->pop_from_job_queue(); job.has_value()) {
-            CHECK(job.value()());
+            try {
+                if (!job.value()()) {
+                    LOGE("Job failed on thread %d.", ctx->thread.get_id());
+                    // TODO (aliddell): call ctx->zarr->stop()?
+                }
+            } catch (const std::exception& exc) {
+                LOGE("Job failed. Exception thrown: %s\n", exc.what());
+            } catch (...) {
+                LOGE("Job failed: (unknown exception)");
+            }
         }
     }
 

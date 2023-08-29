@@ -82,7 +82,7 @@ struct Zarr final : StorageInterface
     void reserve_image_shape(const ImageShape* shape) override;
 
     void push_frame_to_writers(const std::shared_ptr<TiledFrame> frame);
-    std::optional<JobT> pop_from_job_queue();
+    std::optional<JobT> pop_from_job_queue() noexcept;
 
   private:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;

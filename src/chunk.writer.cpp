@@ -166,8 +166,9 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
     if (0 == bytes_in)
         return 0;
 
-    if (!current_file_.has_value())
-        open_chunk_file();
+    if (!current_file_.has_value()) {
+        CHECK(open_chunk_file());
+    }
 
     size_t bytes_out = 0;
     auto* cur = (uint8_t*)beg;
