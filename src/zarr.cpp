@@ -974,8 +974,9 @@ zarr::get_bytes_per_chunk(const ImageShape& image_shape,
 void
 zarr::write_string(const std::string& path, const std::string& str)
 {
-    if (auto p = fs::path(path); !fs::exists(p.parent_path()))
+    if (auto p = fs::path(path); !fs::exists(p.parent_path())) {
         fs::create_directories(p.parent_path());
+    }
 
     struct file f = { 0 };
     auto is_ok = file_create(&f, path.c_str(), path.size());

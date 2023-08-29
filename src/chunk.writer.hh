@@ -39,7 +39,7 @@ struct ChunkWriter final
                 const std::string& base_directory);
     ~ChunkWriter();
 
-    [[nodiscard]] bool write_frame(const TiledFrame& frame);
+    [[nodiscard]] bool write_frame(const TiledFrame& frame) noexcept;
 
     const ImageShape& image_shape() const noexcept;
     const TileShape& tile_shape() const noexcept;
@@ -71,7 +71,7 @@ struct ChunkWriter final
 
     std::vector<uint8_t> buffer_;
 
-    void open_chunk_file();
+    [[nodiscard]] bool open_chunk_file();
     void close_current_file();
     size_t write(const uint8_t* beg, const uint8_t* end);
     void finalize_chunk();

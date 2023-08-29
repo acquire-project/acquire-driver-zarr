@@ -115,20 +115,28 @@ ChunkWriter::~ChunkWriter()
 }
 
 bool
-ChunkWriter::write_frame(const TiledFrame& frame)
+ChunkWriter::write_frame(const TiledFrame& frame) noexcept
 {
     std::scoped_lock lock(mutex_);
-    const size_t bpt = ::bytes_per_tile(image_shape_, tile_shape_);
-    if (buffer_.size() < bpt)
-        buffer_.resize(bpt);
+    try {
+        const size_t bpt = ::bytes_per_tile(image_shape_, tile_shape_);
+        if (buffer_.size() < bpt)
+            buffer_.resize(bpt);
 
-    uint8_t* data = buffer_.data();
-    size_t nbytes =
-      frame.copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
+        uint8_t* data = buffer_.data();
+        size_t nbytes =
+          frame.copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
 
-    nbytes = write(data, data + nbytes);
+        nbytes = write(data, data + nbytes);
 
-    return nbytes == bpt;
+        return nbytes == bpt;
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
+    } catch (...) {
+        LOGE("Exception: (unknown)");
+    }
+
+    return false;
 }
 
 const ImageShape&
@@ -190,7 +198,7 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
     return bytes_out;
 }
 
-void
+bool
 ChunkWriter::open_chunk_file()
 {
     char file_path[512];
@@ -210,13 +218,26 @@ ChunkWriter::open_chunk_file()
     std::string path = (fs::path(base_dir_) / file_path).string();
     auto parent_path = fs::path(path).parent_path();
 
-    if (!fs::is_directory(parent_path))
-        fs::create_directories(parent_path);
+    if (!fs::is_directory(parent_path)) {
+        std::error_code ec;
+        // the call may fail if the directory is being created in another thread
+        if (!fs::create_directories(parent_path, ec) &&
+            !fs::is_directory(parent_path)) {
+            LOGE("Failed to create directory '%s': %s",
+                 parent_path.string().c_str(),
+                 ec.message().c_str());
+            return false;
+        }
+    }
 
     current_file_ = file{};
-    CHECK(file_create(&current_file_.value(), path.c_str(), path.size()));
+    if (!file_create(&current_file_.value(), path.c_str(), path.size())) {
+        LOGE("Failed to create file '%s'", path.c_str());
+        return false;
+    }
 
     encoder_->set_file(&current_file_.value());
+    return true;
 }
 
 void

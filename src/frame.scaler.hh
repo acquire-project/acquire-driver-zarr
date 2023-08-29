@@ -34,7 +34,7 @@ struct FrameScaler final
     FrameScaler(const FrameScaler&) = delete;
     ~FrameScaler() = default;
 
-    [[nodiscard]] bool push_frame(std::shared_ptr<TiledFrame> frame);
+    [[nodiscard]] bool push_frame(std::shared_ptr<TiledFrame> frame) noexcept;
 
   private:
     Zarr* zarr_; // non-owning

@@ -133,7 +133,7 @@ FrameScaler::FrameScaler(Zarr* zarr,
 }
 
 bool
-FrameScaler::push_frame(std::shared_ptr<TiledFrame> frame)
+FrameScaler::push_frame(std::shared_ptr<TiledFrame> frame) noexcept
 {
     std::unique_lock lock(mutex_);
     try {
