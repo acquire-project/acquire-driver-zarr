@@ -179,7 +179,7 @@ void
 write_string(const std::string& path, const std::string& str);
 
 void
-worker_thread(ThreadContext* ctx);
+worker_thread(ThreadContext* ctx) noexcept;
 } // namespace acquire::sink::zarr
 
 #endif // H_ACQUIRE_STORAGE_ZARR_V0

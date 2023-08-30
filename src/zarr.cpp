@@ -992,7 +992,7 @@ zarr::write_string(const std::string& path, const std::string& str)
 }
 
 void
-zarr::worker_thread(ThreadContext* ctx)
+zarr::worker_thread(ThreadContext* ctx) noexcept
 {
     using namespace std::chrono_literals;
 
@@ -1012,14 +1012,15 @@ zarr::worker_thread(ThreadContext* ctx)
 
         if (auto job = ctx->zarr->pop_from_job_queue(); job.has_value()) {
             try {
-                if (!job.value()()) {
-                    LOGE("Job failed on thread %d.", ctx->thread.get_id());
-                    // TODO (aliddell): call ctx->zarr->stop()?
-                }
+                EXPECT(job.value()(),
+                       "Job failed on thread %d.",
+                       ctx->thread.get_id());
             } catch (const std::exception& exc) {
                 LOGE("Job failed. Exception thrown: %s\n", exc.what());
+                ctx->zarr->stop();
             } catch (...) {
                 LOGE("Job failed: (unknown exception)");
+                ctx->zarr->stop();
             }
         }
     }
