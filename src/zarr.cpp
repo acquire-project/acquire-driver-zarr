@@ -197,6 +197,8 @@ zarr::Zarr::Zarr()
   , max_bytes_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , enable_multiscale_{ false }
+  , error_{ false }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     start_threads_();
@@ -209,6 +211,8 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
   , max_bytes_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , enable_multiscale_{ false }
+  , error_{ false }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     compression_params_ = std::move(compression_params);
@@ -242,7 +246,7 @@ zarr::Zarr::set(const StorageProperties* props)
     pixel_scale_um_ = props->pixel_scale_um;
 
     // chunking
-    set_chunking(props->chunking, meta.chunking);
+    set_chunking_(props->chunking, meta.chunking);
 
     // hang on to this until we have the image shape
     enable_multiscale_ = (bool)props->enable_multiscale;
@@ -287,6 +291,8 @@ void
 zarr::Zarr::start()
 {
     frame_count_ = 0;
+    error_ = false;
+
     create_data_directory_();
     write_zgroup_json_();
     write_group_zattrs_json_();
@@ -326,13 +332,15 @@ zarr::Zarr::stop() noexcept
 size_t
 zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 {
+    EXPECT(!error_, "%s", err_msg_.c_str());
+
     if (0 == nbytes)
         return nbytes;
 
     // validate start conditions
     if (0 == frame_count_) {
         validate_image_and_tile_shapes_();
-    } // TODO (aliddell): make this a function
+    }
 
     using namespace acquire::sink::zarr;
 
@@ -456,7 +464,14 @@ zarr::Zarr::pop_from_job_queue() noexcept
 }
 
 void
-zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
+zarr::Zarr::set_error(const std::string& msg) noexcept
+{
+    error_ = true;
+    err_msg_ = msg;
+}
+
+void
+zarr::Zarr::set_chunking_(const ChunkingProps& props, const ChunkingMeta& meta)
 {
     max_bytes_per_chunk_ = std::clamp(props.max_bytes_per_chunk,
                                       (uint64_t)meta.max_bytes_per_chunk.low,
@@ -1012,15 +1027,16 @@ zarr::worker_thread(ThreadContext* ctx) noexcept
 
         if (auto job = ctx->zarr->pop_from_job_queue(); job.has_value()) {
             try {
-                EXPECT(job.value()(),
-                       "Job failed on thread %d.",
-                       ctx->thread.get_id());
+                if (!job.value()()) {
+                    LOGE("Job failed on thread %d.", ctx->thread.get_id());
+                    ctx->zarr->set_error("Job failed.");
+                }
             } catch (const std::exception& exc) {
                 LOGE("Job failed. Exception thrown: %s\n", exc.what());
-                ctx->zarr->stop();
+                ctx->zarr->set_error(exc.what());
             } catch (...) {
                 LOGE("Job failed: (unknown exception)");
-                ctx->zarr->stop();
+                ctx->zarr->set_error("Job failed: (unknown exception)");
             }
         }
     }

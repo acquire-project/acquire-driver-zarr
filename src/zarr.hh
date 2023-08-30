@@ -84,6 +84,9 @@ struct Zarr final : StorageInterface
     void push_frame_to_writers(const std::shared_ptr<TiledFrame> frame);
     std::optional<JobT> pop_from_job_queue() noexcept;
 
+    /// @brief Set the error flag with a message.
+    void set_error(const std::string& msg) noexcept;
+
   private:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
@@ -114,7 +117,10 @@ struct Zarr final : StorageInterface
     mutable std::mutex job_queue_mutex_;
     std::queue<JobT> job_queue_;
 
-    void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
+    bool error_; // set to true if any thread encounters an error
+    std::string err_msg_;
+
+    void set_chunking_(const ChunkingProps& props, const ChunkingMeta& meta);
 
     void create_data_directory_() const;
     void write_zarray_json_() const;
