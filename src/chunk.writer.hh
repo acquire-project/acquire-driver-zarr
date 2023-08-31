@@ -2,8 +2,8 @@
 #define H_ACQUIRE_ZARR_CHUNK_WRITER_V0
 
 #include <optional>
+#include <queue>
 #include <vector>
-#include <set>
 
 #include "platform.h"
 
@@ -18,7 +18,7 @@ struct FrameCmp
       const std::shared_ptr<acquire::sink::zarr::TiledFrame>& a,
       const std::shared_ptr<acquire::sink::zarr::TiledFrame>& b) const
     {
-        return a->frame_id() < b->frame_id();
+        return a->frame_id() > b->frame_id();
     }
 };
 }
@@ -82,7 +82,10 @@ struct ChunkWriter final
     ImageShape image_shape_;
     TileShape tile_shape_;
 
-    std::set<std::shared_ptr<TiledFrame>, FrameCmp> frames_;
+    std::priority_queue<std::shared_ptr<TiledFrame>,
+                        std::vector<std::shared_ptr<TiledFrame>>,
+                        FrameCmp>
+      frames_;
     int64_t last_frame_;
 
     std::vector<uint8_t> buffer_;

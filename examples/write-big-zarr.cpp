@@ -127,7 +127,7 @@ int
 main()
 {
     auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
+    acquire(runtime, EXAMPLE ".zarr");
 
     LOG("Done (OK)");
     acquire_shutdown(runtime);

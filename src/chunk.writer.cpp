@@ -118,7 +118,7 @@ bool
 ChunkWriter::push_frame(std::shared_ptr<TiledFrame> frame)
 {
     std::scoped_lock lock(mutex_);
-    frames_.insert(frame);
+    frames_.push(frame);
 
     try {
         const size_t bpt = bytes_per_tile(image_shape_, tile_shape_);
@@ -130,14 +130,16 @@ ChunkWriter::push_frame(std::shared_ptr<TiledFrame> frame)
 
         uint8_t* data = buffer_.data();
 
-        for (auto& frame : frames_) {
-            // Frames are inserted in order, but there may be gaps in the sequence
-            // because we could have received frames from other threads.
-            // If we encounter a gap, we need to stop writing.
-            if (frame->frame_id() != last_frame_ + std::pow(2, level_of_detail_)) {
+        while (!frames_.empty()) {
+            auto f = frames_.top();
+            if (f->frame_id() != last_frame_ + std::pow(2, level_of_detail_)) {
                 break;
             }
-            size_t nbytes = frame->copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
+
+            frames_.pop();
+
+            size_t nbytes =
+              f->copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
             nbytes = write_(data, data + nbytes);
 
             EXPECT(nbytes == bpt,
@@ -145,10 +147,8 @@ ChunkWriter::push_frame(std::shared_ptr<TiledFrame> frame)
                    bpt,
                    nbytes);
 
-            last_frame_ = frame->frame_id();
+            last_frame_ = f->frame_id();
         }
-
-        frames_.clear();
 
         return true;
     } catch (const std::exception& exc) {
