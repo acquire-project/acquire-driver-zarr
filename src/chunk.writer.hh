@@ -52,7 +52,7 @@ struct ChunkWriter final
                 const std::string& base_directory);
     ~ChunkWriter();
 
-    [[nodiscard]] bool push_frame(std::shared_ptr<TiledFrame> frame);
+    [[nodiscard]] bool push_frame(std::shared_ptr<TiledFrame> frame) noexcept;
 
     const ImageShape& image_shape() const noexcept;
     const TileShape& tile_shape() const noexcept;

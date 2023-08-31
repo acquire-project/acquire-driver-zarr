@@ -115,7 +115,7 @@ ChunkWriter::~ChunkWriter()
 }
 
 bool
-ChunkWriter::push_frame(std::shared_ptr<TiledFrame> frame)
+ChunkWriter::push_frame(std::shared_ptr<TiledFrame> frame) noexcept
 {
     std::scoped_lock lock(mutex_);
     frames_.push(frame);
