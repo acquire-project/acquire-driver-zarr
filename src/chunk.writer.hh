@@ -87,12 +87,11 @@ struct ChunkWriter final
 
     std::vector<uint8_t> buffer_;
 
-    void open_chunk_file();
-    void close_current_file();
-    void write_frames_();
-    size_t write(const uint8_t* beg, const uint8_t* end);
-    void finalize_chunk();
-    void rollover();
+    void open_chunk_file_();
+    void close_current_file_();
+    size_t write_(const uint8_t* beg, const uint8_t* end);
+    void finalize_chunk_();
+    void rollover_();
 };
 } // namespace acquire::sink::zarr
 #endif // H_ACQUIRE_ZARR_CHUNK_WRITER_V0

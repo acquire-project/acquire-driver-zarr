@@ -110,7 +110,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
 
 ChunkWriter::~ChunkWriter()
 {
-    close_current_file();
+    close_current_file_();
     delete encoder_;
 }
 
@@ -153,14 +153,14 @@ ChunkWriter::frames_written() const
 }
 
 size_t
-ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
+ChunkWriter::write_(const uint8_t* beg, const uint8_t* end)
 {
     const size_t bytes_in = (uint8_t*)end - (uint8_t*)beg;
     if (0 == bytes_in)
         return 0;
 
     if (!current_file_.has_value())
-        open_chunk_file();
+        open_chunk_file_();
 
     size_t bytes_out = 0;
     auto* cur = (uint8_t*)beg;
@@ -175,7 +175,7 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
         bytes_out = encoder_->write(beg, beg + bytes_remaining);
         bytes_written_ += bytes_out;
         if (bytes_out && bytes_written_ % bytes_per_chunk_ == 0)
-            rollover();
+            rollover_();
 
         cur += bytes_out;
     }
@@ -185,7 +185,7 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
         bytes_out += b;
 
         if (bytes_written_ % bytes_per_chunk_ == 0)
-            rollover();
+            rollover_();
     }
 
     return bytes_out;
@@ -225,7 +225,7 @@ ChunkWriter::write_frames_()
 }
 
 void
-ChunkWriter::open_chunk_file()
+ChunkWriter::open_chunk_file_()
 {
     char file_path[512];
     snprintf(file_path,
@@ -254,7 +254,7 @@ ChunkWriter::open_chunk_file()
 }
 
 void
-ChunkWriter::close_current_file()
+ChunkWriter::close_current_file_()
 {
     if (!current_file_.has_value())
         return;
@@ -265,7 +265,7 @@ ChunkWriter::close_current_file()
 
     if (tiles_written > tiles_per_chunk_ &&
         tiles_written % tiles_per_chunk_ > 0)
-        finalize_chunk();
+        finalize_chunk_();
 
     encoder_->flush();
 
@@ -276,7 +276,7 @@ ChunkWriter::close_current_file()
 }
 
 void
-ChunkWriter::finalize_chunk()
+ChunkWriter::finalize_chunk_()
 {
     CHECK(bytes_per_chunk_ > 0);
     size_t bytes_remaining =
@@ -289,10 +289,10 @@ ChunkWriter::finalize_chunk()
 }
 
 void
-ChunkWriter::rollover()
+ChunkWriter::rollover_()
 {
     TRACE("Rolling over");
-    close_current_file();
+    close_current_file_();
     ++current_chunk_;
 }
 } // namespace acquire::sink::zarr
