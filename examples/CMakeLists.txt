@@ -1,3 +1,4 @@
+option(WITH_EXAMPLES "Build examples" OFF)
 if (${WITH_EXAMPLES})
     #
     # PARAMETERS
