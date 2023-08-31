@@ -458,7 +458,7 @@ zarr::Zarr::push_frame_to_writers(const std::shared_ptr<TiledFrame> frame)
     auto lod = writers_.at(frame->layer());
 
     for (auto& w : lod) {
-        job_queue_.emplace([w, frame]() { return w->emplace_frame(frame); });
+        job_queue_.emplace([w, frame]() { return w->push_frame(frame); });
     }
 }
 

@@ -115,13 +115,41 @@ ChunkWriter::~ChunkWriter()
 }
 
 bool
-ChunkWriter::emplace_frame(std::shared_ptr<TiledFrame> frame)
+ChunkWriter::push_frame(std::shared_ptr<TiledFrame> frame)
 {
     std::scoped_lock lock(mutex_);
     frames_.insert(frame);
 
     try {
-        write_frames_();
+        const size_t bpt = bytes_per_tile(image_shape_, tile_shape_);
+        CHECK(bpt > 0);
+
+        if (buffer_.size() < bpt) {
+            buffer_.resize(bpt);
+        }
+
+        uint8_t* data = buffer_.data();
+
+        for (auto& frame : frames_) {
+            // Frames are inserted in order, but there may be gaps in the sequence
+            // because we could have received frames from other threads.
+            // If we encounter a gap, we need to stop writing.
+            if (frame->frame_id() != last_frame_ + std::pow(2, level_of_detail_)) {
+                break;
+            }
+            size_t nbytes = frame->copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
+            nbytes = write_(data, data + nbytes);
+
+            EXPECT(nbytes == bpt,
+                   "Expected to write %lu bytes, but wrote %lu bytes.",
+                   bpt,
+                   nbytes);
+
+            last_frame_ = frame->frame_id();
+        }
+
+        frames_.clear();
+
         return true;
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -189,39 +217,6 @@ ChunkWriter::write_(const uint8_t* beg, const uint8_t* end)
     }
 
     return bytes_out;
-}
-
-void
-ChunkWriter::write_frames_()
-{
-    const size_t bpt = bytes_per_tile(image_shape_, tile_shape_);
-    CHECK(bpt > 0);
-
-    if (buffer_.size() < bpt) {
-        buffer_.resize(bpt);
-    }
-
-    uint8_t* data = buffer_.data();
-
-    for (auto& frame : frames_) {
-        // Frames are inserted in order, but there may be gaps in the sequence
-        // because we could have received frames from other threads.
-        // If we encounter a gap, we need to stop writing.
-        if (frame->frame_id() != last_frame_ + std::pow(2, level_of_detail_)) {
-            break;
-        }
-        size_t nbytes = frame->copy_tile(data, bpt, tile_col_, tile_row_, tile_plane_);
-        nbytes = write(data, data + nbytes);
-
-        EXPECT(nbytes == bpt,
-               "Expected to write %lu bytes, but wrote %lu bytes.",
-               bpt,
-               nbytes);
-
-        last_frame_ = frame->frame_id();
-    }
-
-    frames_.clear();
 }
 
 void
