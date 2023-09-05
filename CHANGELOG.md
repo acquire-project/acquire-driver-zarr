@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Support for [Zarr v3](https://zarr-specs.readthedocs.io/en/latest/v3/core/v3.0.html).
 
+### Fixed
+
+- A bug where enabling multiscale without specifying the tile size would cause an error.
+
 ## [0.1.4](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.3...v0.1.4) - 2023-08-11
 
 ### Fixed

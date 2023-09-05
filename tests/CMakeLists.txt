@@ -18,6 +18,7 @@ else()
         list-devices
         get-meta
         unit-tests
+        multiscale-with-trivial-tile-size
         no-set-chunking
         write-zarr-compressed-multiscale
         write-zarr-compressed-with-chunking
