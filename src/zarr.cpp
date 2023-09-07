@@ -234,7 +234,7 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // checks the directory exists and is writable
     validate_props(props);
-    data_root_ = as_path(*props).string();
+    dataset_root_ = as_path(*props).string();
 
     if (props->external_metadata_json.str)
         external_metadata_json_ = props->external_metadata_json.str;
@@ -252,7 +252,7 @@ void
 zarr::Zarr::get(StorageProperties* props) const
 {
     CHECK(storage_properties_set_filename(
-      props, data_root_.c_str(), data_root_.size()));
+      props, dataset_root_.c_str(), dataset_root_.size()));
     CHECK(storage_properties_set_external_metadata(
       props, external_metadata_json_.c_str(), external_metadata_json_.size()));
     props->pixel_scale_um = pixel_scale_um_;
@@ -291,7 +291,7 @@ zarr::Zarr::start()
     write_base_metadata_();
     write_group_metadata_();
     write_all_array_metadata_();
-    write_external_metadata_json_();
+    write_external_metadata_();
 }
 
 int
@@ -473,17 +473,17 @@ void
 zarr::Zarr::create_data_directory_() const
 {
     namespace fs = std::filesystem;
-    if (fs::exists(data_root_)) {
+    if (fs::exists(dataset_root_)) {
         std::error_code ec;
-        EXPECT(fs::remove_all(data_root_, ec),
+        EXPECT(fs::remove_all(dataset_root_, ec),
                R"(Failed to remove folder for "%s": %s)",
-               data_root_.c_str(),
+               dataset_root_.c_str(),
                ec.message().c_str());
     }
 
-    EXPECT(fs::create_directory(data_root_),
+    EXPECT(fs::create_directory(dataset_root_),
            "Failed to create folder for \"%s\"",
-           data_root_.c_str());
+           dataset_root_.c_str());
 }
 
 void
@@ -502,164 +502,6 @@ zarr::Zarr::write_all_array_metadata_() const
             write_array_metadata_(layer, is, ts);
         }
     }
-}
-
-void
-zarr::Zarr::write_array_metadata_(size_t level,
-                                  const ImageShape& image_shape,
-                                  const TileShape& tile_shape) const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    if (!writers_.contains(level)) {
-        return;
-    }
-
-    const uint64_t frame_count = writers_.at(level).front()->frames_written();
-    const auto frames_per_chunk =
-      std::min(frame_count,
-               (uint64_t)get_tiles_per_chunk(
-                 image_shape, tile_shape, max_bytes_per_chunk_));
-
-    json zarray_attrs = {
-        { "zarr_format", 2 },
-        { "shape",
-          {
-            frame_count,
-            image_shape.dims.channels,
-            image_shape.dims.height,
-            image_shape.dims.width,
-          } },
-        { "chunks",
-          {
-            frames_per_chunk,
-            1,
-            tile_shape.height,
-            tile_shape.width,
-          } },
-        { "dtype", sample_type_to_dtype(image_shape.type) },
-        { "fill_value", 0 },
-        { "order", "C" },
-        { "filters", nullptr },
-        { "dimension_separator", std::string(1, dimension_separator_) },
-    };
-
-    if (compression_params_.has_value())
-        zarray_attrs["compressor"] = compression_params_.value();
-    else
-        zarray_attrs["compressor"] = nullptr;
-
-    std::string zarray_path =
-      (fs::path(data_root_) / std::to_string(level) / ".zarray").string();
-    write_string(zarray_path, zarray_attrs.dump());
-}
-
-void
-zarr::Zarr::write_external_metadata_json_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    std::string zattrs_path = (fs::path(data_root_) / "0" / ".zattrs").string();
-    write_string(zattrs_path, external_metadata_json_);
-}
-
-void
-zarr::Zarr::write_group_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    json zgroup_attrs;
-    zgroup_attrs["multiscales"] = json::array({ json::object() });
-    zgroup_attrs["multiscales"][0]["version"] = "0.4";
-    zgroup_attrs["multiscales"][0]["axes"] = {
-        {
-          { "name", "t" },
-          { "type", "time" },
-        },
-        {
-          { "name", "c" },
-          { "type", "channel" },
-        },
-        {
-          { "name", "y" },
-          { "type", "space" },
-          { "unit", "micrometer" },
-        },
-        {
-          { "name", "x" },
-          { "type", "space" },
-          { "unit", "micrometer" },
-        },
-    };
-
-    // spatial multiscale metadata
-    if (writers_.empty() || !frame_scaler_.has_value()) {
-        zgroup_attrs["multiscales"][0]["datasets"] = {
-            {
-              { "path", "0" },
-              { "coordinateTransformations",
-                {
-                  {
-                    { "type", "scale" },
-                    { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
-                  },
-                } },
-            },
-        };
-    } else {
-        for (const auto& [layer, _] : writers_) {
-            zgroup_attrs["multiscales"][0]["datasets"].push_back({
-              { "path", std::to_string(layer) },
-              { "coordinateTransformations",
-                {
-                  {
-                    { "type", "scale" },
-                    { "scale",
-                      { std::pow(2, layer),
-                        1,
-                        std::pow(2, layer) * pixel_scale_um_.y,
-                        std::pow(2, layer) * pixel_scale_um_.x } },
-                  },
-                } },
-            });
-        }
-
-        // downsampling metadata
-        zgroup_attrs["multiscales"][0]["type"] = "local_mean";
-        zgroup_attrs["multiscales"][0]["metadata"] = {
-            { "description",
-              "The fields in the metadata describe how to reproduce this "
-              "multiscaling in scikit-image. The method and its parameters are "
-              "given here." },
-            { "method", "skimage.transform.downscale_local_mean" },
-            { "version", "0.21.0" },
-            { "args", "[2]" },
-            { "kwargs", { "cval", 0 } },
-        };
-    }
-
-    std::string zattrs_path = (fs::path(data_root_) / ".zattrs").string();
-    write_string(zattrs_path, zgroup_attrs.dump(4));
-}
-
-void
-zarr::Zarr::write_base_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    const json zgroup = { { "zarr_format", 2 } };
-    std::string zgroup_path = (fs::path(data_root_) / ".zgroup").string();
-    write_string(zgroup_path, zgroup.dump());
-}
-
-std::string
-zarr::Zarr::get_data_directory_() const
-{
-    return data_root_;
 }
 
 void
@@ -776,133 +618,6 @@ zarr::Zarr::recover_threads_()
             ctx.thread.join();
         }
     }
-}
-
-std::string
-zarr::Zarr::get_chunk_dir_prefix_() const
-{
-    return "";
-}
-
-zarr::ZarrV3::ZarrV3(CompressionParams&& compression_params)
-  : Zarr(std::move(compression_params))
-{
-}
-
-void
-zarr::ZarrV3::write_array_metadata_(
-  size_t level,
-  const ImageShape& image_shape,
-  const acquire::sink::zarr::TileShape& tile_shape) const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    if (!writers_.contains(level)) {
-        return;
-    }
-
-    const uint64_t frame_count = writers_.at(level).front()->frames_written();
-    const auto frames_per_chunk =
-      std::min(frame_count,
-               (uint64_t)get_tiles_per_chunk(
-                 image_shape, tile_shape, max_bytes_per_chunk_));
-
-    json metadata;
-    metadata["attributes"] = json::object();
-    metadata["chunk_grid"] = json::object({
-      { "chunk_shape",
-        json::array({
-          frames_per_chunk,
-          1,
-          tile_shape.height,
-          tile_shape.width,
-        }) },
-      { "separator", std::string(1, dimension_separator_) },
-      { "type", "regular" },
-    });
-    metadata["chunk_memory_layout"] = "C";
-    metadata["data_type"] = sample_type_to_dtype(image_shape.type);
-    metadata["extensions"] = json::array();
-    metadata["fill_value"] = 0;
-    metadata["shape"] = json::array({
-      frame_count,
-      image_shape.dims.channels,
-      image_shape.dims.height,
-      image_shape.dims.width,
-    });
-
-    if (compression_params_.has_value()) {
-        auto params = compression_params_.value();
-        metadata["compressor"] = {
-            { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
-            { "configuration",
-              { { "blocksize", 0 },
-                { "clevel", params.clevel_ },
-                { "cname", params.codec_id_ },
-                { "shuffle", params.shuffle_ } } },
-        };
-    }
-
-    auto path = (fs::path(data_root_) / "meta" / "root" /
-                 (std::to_string(level) + ".array.json"))
-                  .string();
-    write_string(path, metadata.dump(4));
-}
-
-/// @brief Write the metadata for the group.
-/// @details This is a no-op for ZarrV3. Instead, external metadata is stored in
-/// the group metadata.
-void
-zarr::ZarrV3::write_external_metadata_json_() const
-{
-    // no-op
-}
-
-/// @brief Write the metadata for the dataset.
-void
-zarr::ZarrV3::write_base_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    json metadata;
-    metadata["extensions"] = json::array();
-    metadata["metadata_encoding"] =
-      "https://purl.org/zarr/spec/protocol/core/3.0";
-    metadata["metadata_key_suffix"] = ".json";
-    metadata["zarr_format"] = "https://purl.org/zarr/spec/protocol/core/3.0";
-
-    auto path = (fs::path(data_root_) / "zarr.json").string();
-    write_string(path, metadata.dump(4));
-}
-
-/// @brief Write the metadata for the group.
-/// @details Zarr v3 stores group metadata in
-/// /meta/{group_name}.group.json. We will call the group "root".
-void
-zarr::ZarrV3::write_group_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    json metadata;
-    metadata["attributes"]["acquire"] = json::parse(external_metadata_json_);
-
-    auto path = (fs::path(data_root_) / "meta" / "root.group.json").string();
-    write_string(path, metadata.dump(4));
-}
-
-std::string
-zarr::ZarrV3::get_data_directory_() const
-{
-    return (fs::path(data_root_) / "data" / "root").string();
-}
-
-std::string
-zarr::ZarrV3::get_chunk_dir_prefix_() const
-{
-    return "c";
 }
 
 /// \brief Check that the StorageProperties are valid.
@@ -1161,31 +876,4 @@ zarr::StorageInterface::StorageInterface()
       .reserve_image_shape = ::zarr_reserve_image_shape,
   }
 {
-}
-
-extern "C"
-{
-    struct Storage* zarr_init()
-    {
-        try {
-            return new zarr::Zarr();
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-        }
-        return nullptr;
-    }
-
-    struct Storage* zarr_v3_init()
-    {
-        try {
-            return new zarr::ZarrV3();
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-        }
-        return nullptr;
-    }
 }

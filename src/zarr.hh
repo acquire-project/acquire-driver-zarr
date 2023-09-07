@@ -94,7 +94,7 @@ struct Zarr : StorageInterface
     std::vector<ThreadContext> thread_pool_;
 
     // changes on set()
-    std::string data_root_;
+    std::string dataset_root_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     uint64_t max_bytes_per_chunk_;
@@ -116,43 +116,25 @@ struct Zarr : StorageInterface
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
 
     void create_data_directory_() const;
-    void write_all_array_metadata_() const;
-    virtual void write_array_metadata_(size_t level,
-                                       const ImageShape& image_shape,
-                                       const TileShape& tile_shape) const;
-    virtual void write_external_metadata_json_() const;
-    virtual void write_base_metadata_() const;
-    virtual void write_group_metadata_() const;
-
-    virtual std::string get_data_directory_() const;
-    virtual std::string get_chunk_dir_prefix_() const;
 
     void allocate_writers_();
     void validate_image_and_tile_shapes_() const;
 
     void start_threads_();
     void recover_threads_();
-};
 
-struct ZarrV3 final : public Zarr
-{
-  public:
-    ZarrV3() = default;
-    explicit ZarrV3(CompressionParams&& compression_params);
-    ~ZarrV3() override = default;
+    /// Metadata
+    void write_all_array_metadata_() const;
+    virtual void write_array_metadata_(size_t level,
+                                       const ImageShape& image_shape,
+                                       const TileShape& tile_shape) const = 0;
+    virtual void write_external_metadata_() const = 0;
+    virtual void write_base_metadata_() const = 0;
+    virtual void write_group_metadata_() const = 0;
 
-  private:
-    void write_array_metadata_(size_t level,
-                               const ImageShape& image_shape,
-                               const TileShape& tile_shape) const override;
-
-    void write_external_metadata_json_() const override;
-
-    void write_base_metadata_() const override;
-    void write_group_metadata_() const override;
-
-    std::string get_data_directory_() const override;
-    std::string get_chunk_dir_prefix_() const override;
+    /// Filesystem
+    virtual std::string get_data_directory_() const = 0;
+    virtual std::string get_chunk_dir_prefix_() const = 0;
 };
 
 // utilities

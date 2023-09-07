@@ -7,6 +7,10 @@ endif()
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         prelude.h
+        v2/zarr.v2.hh
+        v2/zarr.v2.cpp
+        v3/zarr.v3.hh
+        v3/zarr.v3.cpp
         tiled.frame.hh
         tiled.frame.cpp
         chunk.writer.hh

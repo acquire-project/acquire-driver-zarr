@@ -9,7 +9,6 @@
 #include "platform.h"
 
 #include "prelude.h"
-#include "json.hpp"
 
 namespace acquire::sink::zarr {
 

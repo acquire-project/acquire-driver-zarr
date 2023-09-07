@@ -6,6 +6,7 @@
 #include "zarr.encoder.hh"
 
 #include "blosc.h"
+#include "json.hpp"
 
 namespace acquire::sink::zarr {
 

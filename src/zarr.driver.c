@@ -34,11 +34,11 @@
 //
 // The deallocate themselves when their `destroy()` method is called.
 struct Storage*
-zarr_init();
+zarr_v2_init();
 struct Storage*
-compressed_zarr_zstd_init();
+compressed_zarr_v2_zstd_init();
 struct Storage*
-compressed_zarr_lz4_init();
+compressed_zarr_v2_lz4_init();
 struct Storage*
 zarr_v3_init();
 struct Storage*
@@ -172,9 +172,9 @@ acquire_driver_init_v0(acquire_reporter_t reporter)
           sizeof(globals.constructors[0]) * Storage_Number_Of_Kinds;
         CHECK(globals.constructors = (struct Storage * (**)()) malloc(nbytes));
         struct Storage* (*impls[])() = {
-            [Storage_Zarr] = zarr_init,
-            [Storage_ZarrBlosc1ZstdByteShuffle] = compressed_zarr_zstd_init,
-            [Storage_ZarrBlosc1Lz4ByteShuffle] = compressed_zarr_lz4_init,
+            [Storage_Zarr] = zarr_v2_init,
+            [Storage_ZarrBlosc1ZstdByteShuffle] = compressed_zarr_v2_zstd_init,
+            [Storage_ZarrBlosc1Lz4ByteShuffle] = compressed_zarr_v2_lz4_init,
             [Storage_ZarrV3] = zarr_v3_init,
             [Storage_ZarrV3Blosc1ZstdByteShuffle] =
               compressed_zarr_v3_zstd_init,
