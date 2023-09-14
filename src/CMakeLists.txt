@@ -1,14 +1,27 @@
 add_subdirectory(3rdParty)
 
-if(NOT TARGET acquire-core-logger)
-        add_subdirectory(acquire-core-libs)
-endif()
+if (NOT TARGET acquire-core-logger)
+    add_subdirectory(acquire-core-libs)
+endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         prelude.h
         common.hh
         common.cpp
+        encoders/encoder.hh
+        encoders/raw.encoder.hh
+        encoders/raw.encoder.cpp
+        encoders/blosc.encoder.hh
+        encoders/chunking.encoder.hh
+        encoders/chunking.encoder.cpp
+        encoders/sharding.encoder.hh
+        encoders/sharding.encoder.cpp
+        writers/writer.hh
+        writers/chunk.writer.hh
+        writers/chunk.writer.cpp
+        czar.hh
+        czar.cpp
         v2/zarr.v2.hh
         v2/zarr.v2.cpp
         v3/zarr.v3.hh
