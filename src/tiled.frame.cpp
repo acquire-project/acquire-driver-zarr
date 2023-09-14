@@ -1,5 +1,6 @@
 #include "tiled.frame.hh"
 #include "zarr.hh"
+#include "common.hh"
 
 #include <algorithm>
 #include <cstring>
@@ -11,28 +12,10 @@ namespace zarr = acquire::sink::zarr;
 
 namespace {
 size_t
-bytes_of_type(const SampleType& type)
-{
-    CHECK(type < SampleTypeCount);
-    static size_t table[SampleTypeCount]; // = { 1, 2, 1, 2, 4, 2, 2, 2 };
-#define XXX(s, b) table[(s)] = (b)
-    XXX(SampleType_u8, 1);
-    XXX(SampleType_u16, 2);
-    XXX(SampleType_i8, 1);
-    XXX(SampleType_i16, 2);
-    XXX(SampleType_f32, 4);
-    XXX(SampleType_u10, 2);
-    XXX(SampleType_u12, 2);
-    XXX(SampleType_u14, 2);
-#undef XXX
-    return table[type];
-}
-
-size_t
 bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
 {
-    return bytes_of_type(image.type) * image.dims.channels * tile.width *
-           tile.height * tile.planes;
+    return zarr::common::bytes_of_type(image.type) * image.dims.channels *
+           tile.width * tile.height * tile.planes;
 }
 } // ::{anonymous}
 
@@ -127,7 +110,7 @@ TiledFrame::copy_tile(uint8_t* tile,
 
     uint8_t* region = nullptr;
 
-    const size_t bytes_per_row = bytes_of_type(image_shape_.type) *
+    const size_t bytes_per_row = common::bytes_of_type(image_shape_.type) *
                                  image_shape_.dims.channels * tile_shape_.width;
 
     size_t offset = 0;
@@ -168,16 +151,16 @@ TiledFrame::get_contiguous_region(uint8_t** region,
         frame_plane >= image_shape_.dims.planes) {
         *region = nullptr;
     } else {
+        const auto bytes_of_type = common::bytes_of_type(image_shape_.type);
         size_t frame_offset =
-          bytes_of_type(image_shape_.type) *
-          (frame_col + frame_row * image_shape_.strides.height +
-           frame_plane * image_shape_.strides.planes);
+          bytes_of_type * (frame_col + frame_row * image_shape_.strides.height +
+                           frame_plane * image_shape_.strides.planes);
         // widths are in pixels
         size_t img_width = image_shape_.dims.width;
         size_t tile_width = tile_shape_.width;
         size_t region_width =
           std::min(frame_col + tile_width, img_width) - frame_col;
-        nbytes = region_width * bytes_of_type(image_shape_.type);
+        nbytes = region_width * bytes_of_type;
         *region = data + frame_offset;
     }
 

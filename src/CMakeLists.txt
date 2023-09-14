@@ -7,6 +7,8 @@ endif()
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         prelude.h
+        common.hh
+        common.cpp
         v2/zarr.v2.hh
         v2/zarr.v2.cpp
         v3/zarr.v3.hh

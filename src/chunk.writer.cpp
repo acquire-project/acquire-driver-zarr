@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 
+#include "common.hh"
 #include "device/props/components.h"
 #include "platform.h"
 
@@ -22,30 +23,10 @@ namespace zarr = acquire::sink::zarr;
 
 namespace {
 size_t
-bytes_of_type(const SampleType& type) noexcept
-{
-    if (type >= SampleTypeCount)
-        return 0;
-
-    static size_t table[SampleTypeCount]; // = { 1, 2, 1, 2, 4, 2, 2, 2 };
-#define XXX(s, b) table[(s)] = (b)
-    XXX(SampleType_u8, 1);
-    XXX(SampleType_u16, 2);
-    XXX(SampleType_i8, 1);
-    XXX(SampleType_i16, 2);
-    XXX(SampleType_f32, 4);
-    XXX(SampleType_u10, 2);
-    XXX(SampleType_u12, 2);
-    XXX(SampleType_u14, 2);
-#undef XXX
-    return table[type];
-}
-
-size_t
 bytes_per_tile(const ImageShape& image, const zarr::TileShape& tile)
 {
-    return bytes_of_type(image.type) * image.dims.channels * tile.width *
-           tile.height * tile.planes;
+    return zarr::common::bytes_of_type(image.type) * image.dims.channels *
+           tile.width * tile.height * tile.planes;
 }
 } // ::{anonymous}
 
@@ -100,7 +81,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
     EXPECT(tiles_per_chunk_ > 0,
            "Given %lu bytes per chunk, %lu bytes per tile.",
            max_bytes_per_chunk,
-           ::bytes_of_type(image_shape.type));
+           common::bytes_of_type(image_shape.type));
 
     // this is guaranteed to be positive
     bytes_per_chunk_ = tiles_per_chunk_ * (size_t)bpt;
