@@ -288,10 +288,10 @@ zarr::Zarr::start()
 {
     frame_count_ = 0;
     create_data_directory_();
-    write_base_metadata_();
-    write_group_metadata_();
-    write_all_array_metadata_();
-    write_external_metadata_();
+//    write_base_metadata_();
+//    write_group_metadata_();
+//    write_all_array_metadata_();
+//    write_external_metadata_();
 }
 
 int
@@ -309,8 +309,8 @@ zarr::Zarr::stop() noexcept
                 clock_sleep_ms(nullptr, 50.0);
             }
             recover_threads_();
-            write_all_array_metadata_(); // must precede close of chunk file
-            write_group_metadata_();     // write multiscales metadata
+//            write_all_array_metadata_(); // must precede close of chunk file
+//            write_group_metadata_();     // write multiscales metadata
             is_ok = 1;
             frame_count_ = 0;
         } catch (const std::exception& exc) {
@@ -487,24 +487,6 @@ zarr::Zarr::create_data_directory_() const
 }
 
 void
-zarr::Zarr::write_all_array_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    if (writers_.empty()) {
-        write_array_metadata_(0, image_shape_, tile_shape_);
-    } else {
-        for (const auto& [layer, writers] : writers_) {
-            auto writer = writers.front();
-            const auto& is = writer->image_shape();
-            const auto& ts = writer->tile_shape();
-            write_array_metadata_(layer, is, ts);
-        }
-    }
-}
-
-void
 zarr::Zarr::allocate_writers_()
 {
     writers_.clear();
@@ -569,8 +551,10 @@ zarr::Zarr::allocate_writers_()
                                                     plane,
                                                     max_bytes_per_chunk_,
                                                     dimension_separator_,
-                                                    get_data_directory_(),
-                                                    get_chunk_dir_prefix_()));
+                                                    "foo",
+                                                    "bar"));
+//                                                    get_data_directory_(),
+//                                                    get_chunk_dir_prefix_()));
                 }
             }
         }

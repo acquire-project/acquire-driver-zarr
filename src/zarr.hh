@@ -123,18 +123,6 @@ struct Zarr : StorageInterface
     void start_threads_();
     void recover_threads_();
 
-    /// Metadata
-    void write_all_array_metadata_() const;
-    virtual void write_array_metadata_(size_t level,
-                                       const ImageShape& image_shape,
-                                       const TileShape& tile_shape) const = 0;
-    virtual void write_external_metadata_() const = 0;
-    virtual void write_base_metadata_() const = 0;
-    virtual void write_group_metadata_() const = 0;
-
-    /// Filesystem
-    virtual std::string get_data_directory_() const = 0;
-    virtual std::string get_chunk_dir_prefix_() const = 0;
 };
 
 // utilities

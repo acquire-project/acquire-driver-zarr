@@ -52,6 +52,8 @@ struct ChonkWriter final
 
     std::optional<JobContext> pop_from_job_queue() noexcept;
 
+    uint32_t frames_written() const noexcept;
+
   private:
     ChunkingEncoder chunking_encoder_;
 

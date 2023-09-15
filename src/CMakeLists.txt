@@ -22,24 +22,24 @@ add_library(${tgt} MODULE
         writers/chunk.writer.cpp
         czar.hh
         czar.cpp
-        v2/zarr.v2.hh
-        v2/zarr.v2.cpp
-        v3/zarr.v3.hh
-        v3/zarr.v3.cpp
-        tiled.frame.hh
-        tiled.frame.cpp
-        chunk.writer.hh
-        chunk.writer.cpp
-        frame.scaler.hh
-        frame.scaler.cpp
-        zarr.hh
-        zarr.cpp
-        zarr.encoder.hh
-        zarr.encoder.cpp
-        zarr.raw.hh
-        zarr.raw.cpp
-        zarr.blosc.hh
-        zarr.blosc.cpp
+        czar.v2.hh
+        czar.v2.cpp
+        czar.v3.hh
+        czar.v3.cpp
+#        tiled.frame.hh
+#        tiled.frame.cpp
+#        chunk.writer.hh
+#        chunk.writer.cpp
+#        frame.scaler.hh
+#        frame.scaler.cpp
+#        zarr.hh
+#        zarr.cpp
+#        zarr.encoder.hh
+#        zarr.encoder.cpp
+#        zarr.raw.hh
+#        zarr.raw.cpp
+#        zarr.blosc.hh
+#        zarr.blosc.cpp
         zarr.driver.c
 )
 target_enable_simd(${tgt})

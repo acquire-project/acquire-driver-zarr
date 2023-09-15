@@ -42,9 +42,9 @@ worker_thread(zarr::ChonkWriter::ThreadContext* ctx)
 } // namespace
 
 zarr::ChonkWriter::ChonkWriter(const ImageDims& frame_dims,
-                                 const ImageDims& tile_dims,
-                                 uint32_t frames_per_chunk,
-                                 const std::string& data_root)
+                               const ImageDims& tile_dims,
+                               uint32_t frames_per_chunk,
+                               const std::string& data_root)
   : chunking_encoder_{ frame_dims, tile_dims }
   , frame_dims_{ frame_dims }
   , tile_dims_{ tile_dims }
@@ -125,7 +125,7 @@ zarr::ChonkWriter::write(const VideoFrame* frame)
           chunking_encoder_.encode(buf_.data(),
                                    bytes_of_tiled_frame,
                                    frame->data,
-                                   frame->bytes_of_frame);
+                                   frame->bytes_of_frame - sizeof(*frame));
         EXPECT(bytes_encoded == bytes_of_tiled_frame,
                "Expected to encode %d bytes. Got %d.",
                bytes_of_tiled_frame,
@@ -184,6 +184,12 @@ zarr::ChonkWriter::pop_from_job_queue() noexcept
     return job;
 }
 
+uint32_t
+zarr::ChonkWriter::frames_written() const noexcept
+{
+    return frames_written_;
+}
+
 void
 zarr::ChonkWriter::make_files_()
 {
@@ -192,6 +198,7 @@ zarr::ChonkWriter::make_files_()
         for (auto x = 0; x < tile_cols_; ++x) {
             const auto filename = data_root_ / std::to_string(t) /
                                   std::to_string(y) / std::to_string(x);
+            fs::create_directories(filename.parent_path());
             files_.emplace_back();
             CHECK(file_create(&files_.back(),
                               filename.string().c_str(),
@@ -235,9 +242,7 @@ unit_test__chunk_writer_write()
         fs::path data_dir = "data";
         zarr::ImageDims frame_dims{ 16, 16 };
         zarr::ImageDims tile_dims{ 8, 8 };
-        zarr::ChonkWriter writer{
-            frame_dims, tile_dims, 8, data_dir.string()
-        };
+        zarr::ChonkWriter writer{ frame_dims, tile_dims, 8, data_dir.string() };
 
         std::vector<uint16_t> frame_data(16 * 16);
         for (auto i = 0; i < 16 * 16; ++i) {
@@ -245,7 +250,7 @@ unit_test__chunk_writer_write()
         }
 
         VideoFrame frame{ 0 };
-        frame.bytes_of_frame = frame_data.size() * 2;
+        frame.bytes_of_frame = sizeof(VideoFrame) + frame_data.size() * 2;
         frame.shape = {
             .dims = { .channels = 1, .width = 16, .height = 16, .planes = 1 },
             .strides = { .channels = 1,
@@ -255,12 +260,11 @@ unit_test__chunk_writer_write()
             .type = SampleType_i16,
         };
 
-        auto frame_ptr =
-          (uint8_t*)malloc(sizeof(VideoFrame) + frame.bytes_of_frame);
+        auto frame_ptr = (uint8_t*)malloc(frame.bytes_of_frame);
         memcpy(frame_ptr, &frame, sizeof(VideoFrame));
         memcpy(frame_ptr + sizeof(VideoFrame),
                frame_data.data(),
-               frame.bytes_of_frame);
+               frame.bytes_of_frame - sizeof(VideoFrame));
 
         CHECK(writer.write((VideoFrame*)frame_ptr));
         delete frame_ptr;

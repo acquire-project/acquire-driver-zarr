@@ -7,20 +7,11 @@
 
 #include "encoder.hh"
 
+#include "../common.hh"
+
 #include <vector>
 
 namespace acquire::sink::zarr {
-struct ImageDims
-{
-    uint32_t cols;
-    uint32_t rows;
-
-    friend bool operator<=(const ImageDims& lhs, const ImageDims& rhs) noexcept
-    {
-        return (lhs.cols <= rhs.cols) && (lhs.rows <= rhs.rows);
-    }
-};
-
 struct ChunkingEncoder final
 {
   public:
