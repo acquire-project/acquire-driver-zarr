@@ -18,8 +18,11 @@ add_library(${tgt} MODULE
         encoders/sharding.encoder.hh
         encoders/sharding.encoder.cpp
         writers/writer.hh
+        writers/writer.cpp
         writers/chunk.writer.hh
         writers/chunk.writer.cpp
+        writers/shard.writer.hh
+        writers/shard.writer.cpp
         czar.hh
         czar.cpp
         czar.v2.hh

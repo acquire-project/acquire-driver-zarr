@@ -15,9 +15,6 @@ struct CzarV3 final : public Czar
     void get_meta(StoragePropertyMetadata* meta) const override;
 
   private:
-    /// Setup
-    void allocate_writers_() override;
-
     /// Metadata
     void write_array_metadata_(size_t level,
                                const ImageDims& image_shape,
@@ -27,7 +24,7 @@ struct CzarV3 final : public Czar
     void write_group_metadata_() const override;
 
     /// Filesystem
-    std::string get_data_directory_() const override;
+    fs::path get_data_directory_() const override;
     std::string get_chunk_dir_prefix_() const override;
 };
 } // namespace acquire::sink::zarr

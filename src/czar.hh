@@ -9,11 +9,11 @@
 
 #include "prelude.h"
 #include "json.hpp"
-#include "writers/writer.hh"
 #include "writers/chunk.writer.hh"
 
 #include <filesystem>
 #include <stdexcept>
+#include <utility> // std::pair
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -99,7 +99,7 @@ struct Czar : StorageInterface
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
 
-    std::vector<std::shared_ptr<ChonkWriter>> writers_;
+    std::vector<std::shared_ptr<ChunkWriter>> writers_;
 
     // static - set on construction
     std::optional<CompressionParams> compression_params_;
@@ -111,13 +111,12 @@ struct Czar : StorageInterface
     uint64_t max_bytes_per_chunk_;
     bool enable_multiscale_;
 
-    ImageDims image_shape_;
-    ImageDims tile_shape_;
+    std::vector<std::pair<ImageDims, ImageDims>> image_tile_shapes_;
     SampleType pixel_type_;
 
     /// Setup
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
-    virtual void allocate_writers_() = 0;
+    void allocate_writers_();
 
     /// Metadata
     void write_all_array_metadata_() const;
@@ -129,7 +128,7 @@ struct Czar : StorageInterface
     virtual void write_group_metadata_() const = 0;
 
     /// Filesystem
-    virtual std::string get_data_directory_() const = 0;
+    virtual fs::path get_data_directory_() const = 0;
     virtual std::string get_chunk_dir_prefix_() const = 0;
 };
 

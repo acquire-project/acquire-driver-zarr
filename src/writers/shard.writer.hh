@@ -5,8 +5,8 @@
 #error "This header requires C++20"
 #endif
 
-#include "../encoders/encoder.hh"
-#include "../encoders/chunking.encoder.hh"
+#include "writer.hh"
+#include "../encoders/sharding.encoder.hh"
 
 #include "platform.h"
 #include "device/props/components.h"
@@ -21,62 +21,26 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
-struct ShardWriter final
+struct ShardWriter final : public Writer
 {
   public:
-    struct ThreadContext
-    {
-        std::thread thread;
-        ShardWriter* writer;
-        std::mutex mutex;
-        std::condition_variable cv;
-        bool should_stop;
-    };
-
-    struct JobContext
-    {
-        uint8_t* buf;
-        size_t buf_size;
-        file* file;
-        uint64_t offset;
-    };
-
     ShardWriter() = delete;
     ShardWriter(const ImageDims& frame_dims,
-                 const ImageDims& tile_dims,
-                 uint32_t frames_per_chunk,
-                 const std::string& data_root);
-    ~ShardWriter();
+                const ImageDims& tile_dims,
+                uint32_t frames_per_chunk,
+                const std::string& data_root);
+    ~ShardWriter() = default;
 
     [[nodiscard]] bool write(VideoFrame* frame) noexcept;
 
-    std::optional<JobContext> pop_from_job_queue() noexcept;
-
   private:
-    ChunkingEncoder chunking_encoder_;
+    ShardingEncoder sharding_encoder_;
 
-    ImageDims frame_dims_;
-    ImageDims tile_dims_;
-
-    /// Tiling of the frame. The product is the number of tiles in a frame.
-    uint16_t tile_cols_;
-    uint16_t tile_rows_;
-
-    fs::path data_root_;
-    std::vector<file> files_;
-
-    uint32_t frames_per_chunk_;
-    uint32_t frames_written_;
-
-    std::vector<ThreadContext> threads_;
-    std::queue<JobContext> jobs_;
-    std::mutex mutex_;
+    ImageDims shard_dims_;
 
     std::vector<uint8_t> buf_;
 
-    void make_files_();
-    void close_files_();
-    void rollover_();
+    void flush() noexcept;
 };
 } // namespace acquire::sink::zarr
 

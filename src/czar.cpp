@@ -289,6 +289,9 @@ zarr::Czar::set(const StorageProperties* props)
     pixel_scale_um_ = props->pixel_scale_um;
 
     // chunking
+    image_tile_shapes_.clear();
+    image_tile_shapes_.emplace_back();
+
     set_chunking(props->chunking, meta.chunking);
 
     if (props->enable_multiscale && !meta.multiscale.supported) {
@@ -306,8 +309,10 @@ zarr::Czar::get(StorageProperties* props) const
       props, external_metadata_json_.c_str(), external_metadata_json_.size()));
     props->pixel_scale_um = pixel_scale_um_;
 
-    props->chunking.tile.width = tile_shape_.cols;
-    props->chunking.tile.height = tile_shape_.rows;
+    if (!image_tile_shapes_.empty()) {
+        props->chunking.tile.width = image_tile_shapes_.at(0).second.cols;
+        props->chunking.tile.height = image_tile_shapes_.at(0).second.rows;
+    }
     props->chunking.tile.planes = 1;
 
     props->enable_multiscale = enable_multiscale_;
@@ -316,6 +321,13 @@ zarr::Czar::get(StorageProperties* props) const
 void
 zarr::Czar::start()
 {
+    if (fs::exists(dataset_root_)) {
+        std::error_code ec;
+        EXPECT(fs::remove_all(dataset_root_, ec),
+               R"(Failed to remove folder for "%s": %s)",
+               dataset_root_.c_str(),
+               ec.message().c_str());
+    }
     fs::create_directories(dataset_root_);
 
     write_base_metadata_();
@@ -368,40 +380,46 @@ zarr::Czar::reserve_image_shape(const ImageShape* shape)
     // `shape` should be verified nonnull in storage_reserve_image_shape, but
     // let's check anyway
     CHECK(shape);
-    image_shape_ = { shape->dims.width, shape->dims.height };
+    image_tile_shapes_.at(0).first = {
+        .cols = shape->dims.width,
+        .rows = shape->dims.height,
+    };
     pixel_type_ = shape->type;
+
+    ImageDims& image_shape = image_tile_shapes_.at(0).first;
+    ImageDims& tile_shape = image_tile_shapes_.at(0).second;
 
     // ensure that tile dimensions are compatible with the image shape
     {
         StorageProperties props = { 0 };
         get(&props);
         uint32_t tile_width = props.chunking.tile.width;
-        if (image_shape_.cols > 0 &&
-            (tile_width == 0 || tile_width > image_shape_.cols)) {
+        if (image_shape.cols > 0 &&
+            (tile_width == 0 || tile_width > image_shape.cols)) {
             LOGE("%s. Setting width to %u.",
                  tile_width == 0 ? "Tile width not specified"
                                  : "Specified tile width is too large",
-                 image_shape_.cols);
-            tile_width = image_shape_.cols;
+                 image_shape.cols);
+            tile_width = image_shape.cols;
         }
-        tile_shape_.cols = tile_width;
+        tile_shape.cols = tile_width;
 
         uint32_t tile_height = props.chunking.tile.height;
-        if (image_shape_.rows > 0 &&
-            (tile_height == 0 || tile_height > image_shape_.rows)) {
+        if (image_shape.rows > 0 &&
+            (tile_height == 0 || tile_height > image_shape.rows)) {
             LOGE("%s. Setting height to %u.",
                  tile_height == 0 ? "Tile height not specified"
                                   : "Specified tile height is too large",
-                 image_shape_.rows);
-            tile_height = image_shape_.rows;
+                 image_shape.rows);
+            tile_height = image_shape.rows;
         }
-        tile_shape_.rows = tile_height;
+        tile_shape.rows = tile_height;
 
         storage_properties_destroy(&props);
     }
 
     // ensure that the chunk size can accommodate at least one tile
-    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape_, pixel_type_);
+    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape, pixel_type_);
     CHECK(bytes_per_tile > 0);
 
     if (max_bytes_per_chunk_ < bytes_per_tile) {
@@ -423,10 +441,29 @@ zarr::Czar::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
                                       (uint64_t)meta.max_bytes_per_chunk.low,
                                       (uint64_t)meta.max_bytes_per_chunk.high);
 
-    tile_shape_ = {
+    image_tile_shapes_.at(0).second = {
         .cols = props.tile.width,
         .rows = props.tile.height,
     };
+}
+
+void
+zarr::Czar::allocate_writers_()
+{
+    ImageDims& image_shape = image_tile_shapes_.at(0).first;
+    ImageDims& tile_shape = image_tile_shapes_.at(0).second;
+
+    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape, pixel_type_);
+
+    writers_.clear();
+    writers_.push_back(std::make_shared<ChunkWriter>(
+      image_shape,
+      tile_shape,
+      (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+      (get_data_directory_() / "0").string() ));
+
+    if (enable_multiscale_) {
+    }
 }
 
 void
@@ -434,16 +471,11 @@ zarr::Czar::write_all_array_metadata_() const
 {
     namespace fs = std::filesystem;
 
-    if (writers_.empty()) {
-        write_array_metadata_(0, image_shape_, tile_shape_);
-    } else {
-        for (auto i = 0; i < writers_.size(); ++i) {
-            auto writer = writers_.at(i);
-            // TODO (aliddell): fix this
-//            const auto& is = writer->image_shape();
-//            const auto& ts = writer->tile_shape();
-            write_array_metadata_(i, image_shape_, tile_shape_);
-        }
+    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
+        const auto image_shape = image_tile_shapes_.at(i).first;
+        const auto tile_shape = image_tile_shapes_.at(i).second;
+
+        write_array_metadata_(i, image_shape, tile_shape);
     }
 }
 

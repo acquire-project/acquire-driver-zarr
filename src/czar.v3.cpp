@@ -48,19 +48,6 @@ zarr::CzarV3::get_meta(StoragePropertyMetadata* meta) const
 }
 
 void
-zarr::CzarV3::allocate_writers_()
-{
-    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape_, pixel_type_);
-
-    writers_.clear();
-    writers_.push_back(std::make_shared<ChonkWriter>(
-      image_shape_,
-      tile_shape_,
-      (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-      dataset_root_.string()));
-}
-
-void
 zarr::CzarV3::write_array_metadata_(size_t level,
                                     const ImageDims& image_shape,
                                     const ImageDims& tile_shape) const
@@ -165,10 +152,10 @@ zarr::CzarV3::write_group_metadata_() const
     common::write_string(path, metadata.dump(4));
 }
 
-std::string
+fs::path
 zarr::CzarV3::get_data_directory_() const
 {
-    return (dataset_root_ / "data" / "root").string();
+    return dataset_root_ / "data" / "root";
 }
 
 std::string

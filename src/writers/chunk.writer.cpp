@@ -1,114 +1,30 @@
 #include "chunk.writer.hh"
 
-#include "../common.hh"
-
 #include <cmath>
 #include <stdexcept>
 
 namespace zarr = acquire::sink::zarr;
 
-namespace {
-void
-worker_thread(zarr::ChonkWriter::ThreadContext* ctx)
-{
-    using namespace std::chrono_literals;
-
-    TRACE("Worker thread starting.");
-    CHECK(ctx);
-
-    while (true) {
-        std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
-
-        if (ctx->should_stop) {
-            break;
-        }
-
-        if (auto job = ctx->writer->pop_from_job_queue(); job.has_value()) {
-            CHECK(file_write(
-              job->file, job->offset, job->buf, job->buf + job->buf_size));
-
-            lock.unlock();
-
-            // do work
-        } else {
-            lock.unlock();
-            std::this_thread::sleep_for(1ms);
-        }
-    }
-
-    TRACE("Worker thread exiting.");
-}
-} // namespace
-
-zarr::ChonkWriter::ChonkWriter(const ImageDims& frame_dims,
+zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root)
-  : chunking_encoder_{ frame_dims, tile_dims }
-  , frame_dims_{ frame_dims }
-  , tile_dims_{ tile_dims }
-  , data_root_{ data_root }
-  , frames_per_chunk_{ frames_per_chunk }
-  , frames_written_{ 0 }
-  , threads_(std::thread::hardware_concurrency())
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root)
+  , chunking_encoder_{ frame_dims, tile_dims }
 {
-    CHECK(tile_dims_.cols > 0);
-    CHECK(tile_dims_.rows > 0);
-    EXPECT(tile_dims_ <= frame_dims_,
-           "Expected tile dimensions to be less than or equal to frame "
-           "dimensions.");
-
-    tile_rows_ = std::ceil((float)frame_dims.rows / (float)tile_dims.rows);
-    tile_cols_ = std::ceil((float)frame_dims.cols / (float)tile_dims.cols);
-
-    CHECK(frames_per_chunk_ > 0);
-    CHECK(!data_root_.empty());
-
-    if (!fs::is_directory(data_root)) {
-        std::error_code ec;
-        EXPECT(fs::create_directories(data_root_, ec),
-               "Failed to create data root directory: %s",
-               ec.message().c_str());
-    }
-
-    // spin up threads
-    for (auto& ctx : threads_) {
-        ctx.writer = this;
-        ctx.should_stop = false;
-        ctx.thread = std::thread(worker_thread, &ctx);
-    }
-}
-
-zarr::ChonkWriter::~ChonkWriter()
-{
-    for (auto& ctx : threads_) {
-        ctx.should_stop = true;
-        ctx.cv.notify_one();
-        ctx.thread.join();
-    }
-
-    close_files_();
 }
 
 bool
-zarr::ChonkWriter::write(const VideoFrame* frame)
+zarr::ChunkWriter::write(const VideoFrame* frame)
 {
     using namespace std::chrono_literals;
 
+    if (!validate_frame(frame)) {
+        // log is written in validate_frame
+        return false;
+    }
+
     try {
-        CHECK(frame);
-
-        // validate the incoming frame shape against the stored frame dims
-        EXPECT(frame_dims_.cols == frame->shape.dims.width,
-               "Expected frame to have %d columns. Got %d.",
-               frame_dims_.cols,
-               frame->shape.dims.width);
-        EXPECT(frame_dims_.rows == frame->shape.dims.height,
-               "Expected frame to have %d rows. Got %d.",
-               frame_dims_.rows,
-               frame->shape.dims.height);
-
         const auto bytes_of_type = common::bytes_of_type(frame->shape.type);
         const auto bytes_per_tile =
           tile_dims_.cols * tile_dims_.rows * bytes_of_type;
@@ -171,58 +87,9 @@ zarr::ChonkWriter::write(const VideoFrame* frame)
     return false;
 }
 
-std::optional<zarr::ChonkWriter::JobContext>
-zarr::ChonkWriter::pop_from_job_queue() noexcept
-{
-    std::scoped_lock lock(mutex_);
-    if (jobs_.empty()) {
-        return std::nullopt;
-    }
-
-    auto job = jobs_.front();
-    jobs_.pop();
-    return job;
-}
-
-uint32_t
-zarr::ChonkWriter::frames_written() const noexcept
-{
-    return frames_written_;
-}
-
 void
-zarr::ChonkWriter::make_files_()
+zarr::ChunkWriter::flush() noexcept
 {
-    const auto t = frames_written_ / frames_per_chunk_;
-    for (auto y = 0; y < tile_rows_; ++y) {
-        for (auto x = 0; x < tile_cols_; ++x) {
-            const auto filename = data_root_ / std::to_string(t) /
-                                  std::to_string(y) / std::to_string(x);
-            fs::create_directories(filename.parent_path());
-            files_.emplace_back();
-            CHECK(file_create(&files_.back(),
-                              filename.string().c_str(),
-                              filename.string().size()));
-        }
-    }
-}
-
-void
-zarr::ChonkWriter::close_files_()
-{
-    for (auto& file : files_) {
-        file_close(&file);
-    }
-    files_.clear();
-}
-
-void
-zarr::ChonkWriter::rollover_()
-{
-    TRACE("Rolling over");
-
-    close_files_();
-    make_files_();
 }
 
 #ifndef NO_UNIT_TESTS
@@ -242,7 +109,7 @@ unit_test__chunk_writer_write()
         fs::path data_dir = "data";
         zarr::ImageDims frame_dims{ 16, 16 };
         zarr::ImageDims tile_dims{ 8, 8 };
-        zarr::ChonkWriter writer{ frame_dims, tile_dims, 8, data_dir.string() };
+        zarr::ChunkWriter writer{ frame_dims, tile_dims, 8, data_dir.string() };
 
         std::vector<uint16_t> frame_data(16 * 16);
         for (auto i = 0; i < 16 * 16; ++i) {
