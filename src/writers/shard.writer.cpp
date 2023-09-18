@@ -5,38 +5,6 @@
 namespace zarr = acquire::sink::zarr;
 
 namespace {
-void
-worker_thread(zarr::ShardWriter::ThreadContext* ctx)
-{
-    using namespace std::chrono_literals;
-
-    TRACE("Worker thread starting.");
-    CHECK(ctx);
-
-    while (true) {
-        std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
-
-        if (ctx->should_stop) {
-            break;
-        }
-
-        if (auto job = ctx->writer->pop_from_job_queue(); job.has_value()) {
-            CHECK(file_write(
-              job->file, job->offset, job->buf, job->buf + job->buf_size));
-
-            lock.unlock();
-
-            // do work
-        } else {
-            lock.unlock();
-            std::this_thread::sleep_for(1ms);
-        }
-    }
-
-    TRACE("Worker thread exiting.");
-}
-
 zarr::ImageDims
 make_shard_dims(const zarr::ImageDims& frame_dims,
                 const zarr::ImageDims& tile_dims)
@@ -56,11 +24,11 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
 }
 
 bool
-zarr::ShardWriter::write(VideoFrame* frame) noexcept
+zarr::ShardWriter::write(const VideoFrame* frame) noexcept
 {
     using namespace std::chrono_literals;
 
-    if (!validate_frame(frame)) {
+    if (!validate_frame_(frame)) {
         // log is written in validate_frame
         return false;
     }
@@ -101,17 +69,14 @@ zarr::ShardWriter::write(VideoFrame* frame) noexcept
                 jobs_.emplace(buf_.data() + i * bytes_per_tile,
                               bytes_per_tile,
                               &files_.at(i),
-                              bytes_of_tiled_frame * frames_written_);
+                              bytes_per_tile * frames_written_);
             }
         }
 
         // wait for all writers to finish
-        while (true) {
-            std::this_thread::sleep_for(5ms);
+        while (!jobs_.empty()) {
+            std::this_thread::sleep_for(2ms);
             std::scoped_lock lock(mutex_);
-            if (jobs_.empty()) {
-                break;
-            }
         }
 
         if (++frames_written_ % frames_per_chunk_ == 0) {

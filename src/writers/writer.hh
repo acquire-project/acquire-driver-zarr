@@ -26,7 +26,6 @@ struct Writer
     struct ThreadContext
     {
         std::thread thread;
-        Writer* writer;
         std::mutex mutex;
         std::condition_variable cv;
         bool should_stop;
@@ -40,12 +39,14 @@ struct Writer
         uint64_t offset;
     };
 
-    Writer() = default;
+    Writer() = delete;
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root);
     virtual ~Writer();
+
+    [[nodiscard]] virtual bool write(const VideoFrame* frame) noexcept = 0;
 
     std::optional<JobContext> pop_from_job_queue() noexcept;
 
@@ -58,6 +59,7 @@ struct Writer
     /// Tiling of the frame. The product is the number of tiles in a frame.
     uint16_t tile_cols_;
     uint16_t tile_rows_;
+    SampleType pixel_type_;
 
     fs::path data_root_;
     std::vector<file> files_;
@@ -69,7 +71,11 @@ struct Writer
     std::queue<JobContext> jobs_;
     std::mutex mutex_;
 
-    [[nodiscard]] bool validate_frame(const VideoFrame* frame) const noexcept;
+    void worker_thread_(ThreadContext* ctx);
+
+    [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;
+
+    void finalize_chunks_();
     virtual void flush() noexcept = 0;
 
     /// Files

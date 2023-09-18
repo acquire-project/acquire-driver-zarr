@@ -15,11 +15,11 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
 }
 
 bool
-zarr::ChunkWriter::write(const VideoFrame* frame)
+zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
 {
     using namespace std::chrono_literals;
 
-    if (!validate_frame(frame)) {
+    if (!validate_frame_(frame)) {
         // log is written in validate_frame
         return false;
     }
@@ -52,7 +52,13 @@ zarr::ChunkWriter::write(const VideoFrame* frame)
             make_files_();
         }
 
-        // write out each chunk
+        // rollover if necessary
+        const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
+        if (frames_written_ > 0 && frames_this_chunk == 0) {
+            rollover_();
+        }
+
+        // write out to each chunk
         {
             std::scoped_lock lock(mutex_);
 
@@ -60,23 +66,16 @@ zarr::ChunkWriter::write(const VideoFrame* frame)
                 jobs_.emplace(buf_.data() + i * bytes_per_tile,
                               bytes_per_tile,
                               &files_.at(i),
-                              bytes_of_tiled_frame * frames_written_);
+                              bytes_per_tile * frames_this_chunk);
             }
         }
 
         // wait for all writers to finish
-        while (true) {
-            std::this_thread::sleep_for(5ms);
-            std::scoped_lock lock(mutex_);
-            if (jobs_.empty()) {
-                break;
-            }
+        while (!jobs_.empty()) {
+            std::this_thread::sleep_for(2ms);
         }
 
-        if (++frames_written_ % frames_per_chunk_ == 0) {
-            rollover_();
-        }
-
+        ++frames_written_;
         return true;
     } catch (const std::exception& exc) {
         LOGE("Failed to write frame: %s", exc.what());

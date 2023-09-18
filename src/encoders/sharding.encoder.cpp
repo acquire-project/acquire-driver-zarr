@@ -59,7 +59,7 @@ zarr::ShardingEncoder::~ShardingEncoder()
 size_t
 zarr::ShardingEncoder::encode(uint8_t* bytes_out,
                               size_t nbytes_out,
-                              uint8_t* bytes_in,
+                              const uint8_t* bytes_in,
                               size_t nbytes_in) const
 {
     CHECK(bytes_in);

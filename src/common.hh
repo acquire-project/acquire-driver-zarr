@@ -30,8 +30,8 @@ bytes_per_tile(const ImageDims& tile_shape, const SampleType& type);
 
 size_t
 frames_per_chunk(const ImageDims& tile_shape,
-                const SampleType& type,
-                uint64_t max_bytes_per_chunk);
+                 SampleType type,
+                 uint64_t max_bytes_per_chunk);
 
 size_t
 bytes_per_chunk(const ImageDims& tile_shape,
@@ -44,6 +44,12 @@ bytes_per_chunk(const ImageDims& tile_shape,
 /// \return A representation of the SampleType \par t expected by a Zarr reader.
 const char*
 sample_type_to_dtype(SampleType t);
+
+/// \brief Get a string representation of the SampleType enum.
+/// \param t An enumerated sample type.
+/// \return A human-readable representation of the SampleType \par t.
+const char*
+sample_type_to_string(SampleType t) noexcept;
 
 /// \brief Write a string to a file.
 /// @param path The path of the file to write.

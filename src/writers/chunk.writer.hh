@@ -31,14 +31,14 @@ struct ChunkWriter final : public Writer
                 const std::string& data_root);
     ~ChunkWriter() = default;
 
-    [[nodiscard]] bool write(const VideoFrame* frame);
+    [[nodiscard]] bool write(const VideoFrame* frame) noexcept override;
 
   private:
     ChunkingEncoder chunking_encoder_;
 
     std::vector<uint8_t> buf_;
 
-    void flush() noexcept;
+    void flush() noexcept override;
 };
 } // namespace acquire::sink::zarr
 

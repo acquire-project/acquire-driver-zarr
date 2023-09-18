@@ -1,40 +1,8 @@
 #include "writer.hh"
 
+#include <functional>
+
 namespace zarr = acquire::sink::zarr;
-
-namespace {
-void
-worker_thread(zarr::Writer::ThreadContext* ctx)
-{
-    using namespace std::chrono_literals;
-
-    TRACE("Worker thread starting.");
-    CHECK(ctx);
-
-    while (true) {
-        std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
-
-        if (ctx->should_stop) {
-            break;
-        }
-
-        if (auto job = ctx->writer->pop_from_job_queue(); job.has_value()) {
-            CHECK(file_write(
-              job->file, job->offset, job->buf, job->buf + job->buf_size));
-
-            lock.unlock();
-
-            // do work
-        } else {
-            lock.unlock();
-            std::this_thread::sleep_for(1ms);
-        }
-    }
-
-    TRACE("Worker thread exiting.");
-}
-} // namespace
 
 zarr::Writer::Writer(const ImageDims& frame_dims,
                      const ImageDims& tile_dims,
@@ -46,6 +14,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , frames_per_chunk_{ frames_per_chunk }
   , frames_written_{ 0 }
   , threads_(std::thread::hardware_concurrency())
+  , pixel_type_{ SampleTypeCount }
 {
     CHECK(tile_dims_.cols > 0);
     CHECK(tile_dims_.rows > 0);
@@ -55,6 +24,11 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
 
     tile_rows_ = std::ceil((float)frame_dims.rows / (float)tile_dims.rows);
     tile_cols_ = std::ceil((float)frame_dims.cols / (float)tile_dims.cols);
+
+    // pare down the number of threads if we have too many
+    while (threads_.size() > tile_rows_ * tile_cols_) {
+        threads_.pop_back();
+    }
 
     CHECK(frames_per_chunk_ > 0);
     CHECK(!data_root_.empty());
@@ -68,20 +42,21 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
 
     // spin up threads
     for (auto& ctx : threads_) {
-        ctx.writer = this;
         ctx.should_stop = false;
-        ctx.thread = std::thread(worker_thread, &ctx);
+        ctx.thread =
+          std::thread(std::bind(&Writer::worker_thread_, this, &ctx));
     }
 }
 
 zarr::Writer::~Writer()
 {
+    finalize_chunks_();
+
     for (auto& ctx : threads_) {
         ctx.should_stop = true;
         ctx.cv.notify_one();
         ctx.thread.join();
     }
-
     close_files_();
 }
 
@@ -105,10 +80,19 @@ zarr::Writer::frames_written() const noexcept
 }
 
 bool
-zarr::Writer::validate_frame(const VideoFrame* frame) const noexcept
+zarr::Writer::validate_frame_(const VideoFrame* frame) noexcept
 {
     try {
         CHECK(frame);
+
+        if (pixel_type_ == SampleTypeCount) {
+            pixel_type_ = frame->shape.type;
+        } else {
+            EXPECT(pixel_type_ == frame->shape.type,
+                   "Expected frame to have pixel type %s. Got %s.",
+                   common::sample_type_to_string(pixel_type_),
+                   common::sample_type_to_string(frame->shape.type));
+        }
 
         // validate the incoming frame shape against the stored frame dims
         EXPECT(frame_dims_.cols == frame->shape.dims.width,
@@ -127,6 +111,48 @@ zarr::Writer::validate_frame(const VideoFrame* frame) const noexcept
         LOGE("Invalid frame: (unknown)");
     }
     return false;
+}
+
+void
+zarr::Writer::finalize_chunks_()
+{
+    using namespace std::chrono_literals;
+
+    // wait for all writers to finish
+    while (!jobs_.empty()) {
+        std::this_thread::sleep_for(2ms);
+    }
+
+    const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
+
+    // don't write zeros if we have written less than a full chunk or if we have
+    // written a full chunk
+    if (frames_written_ < frames_per_chunk_ || frames_this_chunk == 0) {
+        return;
+    }
+
+    const auto bytes_per_tile =
+      tile_dims_.cols * tile_dims_.rows * common::bytes_of_type(pixel_type_);
+    const auto frames_to_write = frames_per_chunk_ - frames_this_chunk;
+
+    std::vector<uint8_t> buf(frames_to_write * bytes_per_tile, 0);
+
+    {
+        std::scoped_lock lock(mutex_);
+        for (auto& file : files_) {
+            for (auto i = 0; i < frames_to_write; ++i) {
+                CHECK(file_write(&file,
+                                 bytes_per_tile * frames_this_chunk,
+                                 buf.data(),
+                                 buf.data() + buf.size()));
+            }
+        }
+    }
+
+    // wait for all writers to finish
+    while (!jobs_.empty()) {
+        std::this_thread::sleep_for(2ms);
+    }
 }
 
 void
@@ -162,4 +188,33 @@ zarr::Writer::rollover_()
 
     close_files_();
     make_files_();
+}
+
+void
+zarr::Writer::worker_thread_(ThreadContext* ctx)
+{
+    using namespace std::chrono_literals;
+
+    TRACE("Worker thread starting.");
+    CHECK(ctx);
+
+    while (true) {
+        std::unique_lock lock(ctx->mutex);
+        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
+
+        if (ctx->should_stop) {
+            break;
+        }
+
+        if (auto job = pop_from_job_queue(); job.has_value()) {
+            CHECK(file_write(
+              job->file, job->offset, job->buf, job->buf + job->buf_size));
+            lock.unlock();
+        } else {
+            lock.unlock();
+            std::this_thread::sleep_for(1ms);
+        }
+    }
+
+    TRACE("Worker thread exiting.");
 }

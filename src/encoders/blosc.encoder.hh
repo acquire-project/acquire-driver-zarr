@@ -9,6 +9,8 @@
 
 #include "blosc.h"
 
+#include <thread>
+
 namespace {
 enum class CodecId : uint8_t
 {

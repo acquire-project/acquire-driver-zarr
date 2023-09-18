@@ -22,7 +22,7 @@ struct ShardingEncoder final
     /// Encoder
     size_t encode(uint8_t* bytes_out,
                   size_t nbytes_out,
-                  uint8_t* bytes_in,
+                  const uint8_t* bytes_in,
                   size_t nbytes_in) const;
 
   private:

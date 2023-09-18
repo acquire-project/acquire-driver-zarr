@@ -10,8 +10,6 @@ add_library(${tgt} MODULE
         common.hh
         common.cpp
         encoders/encoder.hh
-        encoders/raw.encoder.hh
-        encoders/raw.encoder.cpp
         encoders/blosc.encoder.hh
         encoders/chunking.encoder.hh
         encoders/chunking.encoder.cpp

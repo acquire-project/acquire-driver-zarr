@@ -32,7 +32,7 @@ common::bytes_per_tile(const ImageDims& tile_shape, const SampleType& type)
 
 size_t
 common::frames_per_chunk(const ImageDims& tile_shape,
-                         const SampleType& type,
+                         SampleType type,
                          uint64_t max_bytes_per_chunk)
 {
     auto bpt = (float)bytes_per_tile(tile_shape, type);
@@ -61,6 +61,18 @@ common::sample_type_to_dtype(SampleType t)
         return table[t];
     } else {
         throw std::runtime_error("Invalid sample type.");
+    }
+}
+
+const char*
+common::sample_type_to_string(SampleType t) noexcept
+{
+    static const char* table[] = { "u8",  "u16", "i8",  "i16",
+                                   "f32", "u16", "u16", "u16" };
+    if (t < countof(table)) {
+        return table[t];
+    } else {
+        return "unrecognized pixel type";
     }
 }
 

@@ -31,7 +31,7 @@ struct ShardWriter final : public Writer
                 const std::string& data_root);
     ~ShardWriter() = default;
 
-    [[nodiscard]] bool write(VideoFrame* frame) noexcept;
+    [[nodiscard]] bool write(const VideoFrame* frame) noexcept override;
 
   private:
     ShardingEncoder sharding_encoder_;
