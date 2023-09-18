@@ -7,6 +7,7 @@
 
 #include "writer.hh"
 #include "../encoders/chunking.encoder.hh"
+#include "../encoders/blosc.encoder.hh"
 
 #include "platform.h"
 #include "device/props/components.h"
@@ -38,7 +39,9 @@ struct ChunkWriter final : public Writer
 
     std::vector<uint8_t> buf_;
 
-    void flush() noexcept override;
+    virtual void write_bytes_(const uint8_t* buf,
+                              size_t buf_size) noexcept override;
+    void flush_() noexcept override;
 };
 } // namespace acquire::sink::zarr
 

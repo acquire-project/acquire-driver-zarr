@@ -47,6 +47,8 @@ zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
                bytes_of_tiled_frame,
                bytes_encoded);
 
+        write_bytes_(buf_.data(), bytes_encoded);
+
         // create chunk files if necessary
         if (files_.empty()) {
             make_files_();
@@ -56,23 +58,6 @@ zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
         const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
         if (frames_written_ > 0 && frames_this_chunk == 0) {
             rollover_();
-        }
-
-        // write out to each chunk
-        {
-            std::scoped_lock lock(mutex_);
-
-            for (auto i = 0; i < files_.size(); ++i) {
-                jobs_.emplace(buf_.data() + i * bytes_per_tile,
-                              bytes_per_tile,
-                              &files_.at(i),
-                              bytes_per_tile * frames_this_chunk);
-            }
-        }
-
-        // wait for all writers to finish
-        while (!jobs_.empty()) {
-            std::this_thread::sleep_for(2ms);
         }
 
         ++frames_written_;
@@ -87,8 +72,32 @@ zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
 }
 
 void
-zarr::ChunkWriter::flush() noexcept
+zarr::ChunkWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
 {
+
+}
+
+void
+zarr::ChunkWriter::flush_() noexcept
+{
+    using namespace std::chrono_literals;
+
+    // write out to each chunk
+    {
+        std::scoped_lock lock(mutex_);
+
+        for (auto i = 0; i < files_.size(); ++i) {
+            jobs_.emplace(buf_.data() + i * bytes_per_tile,
+                          bytes_per_tile,
+                          &files_.at(i),
+                          bytes_per_tile * frames_this_chunk);
+        }
+    }
+
+    // wait for all writers to finish
+    while (!jobs_.empty()) {
+        std::this_thread::sleep_for(2ms);
+    }
 }
 
 #ifndef NO_UNIT_TESTS

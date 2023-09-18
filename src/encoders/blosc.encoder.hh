@@ -39,25 +39,35 @@ compression_codec_as_string<CodecId::Lz4>()
 
 namespace acquire::sink::zarr {
 template<CodecId CodecId, int CLevel, int Shuffle>
-struct BloscEncoder_ final
+struct BloscEncoder final
 {
   public:
-    BloscEncoder_() = default;
-    ~BloscEncoder_() = default;
+    BloscEncoder() = default;
+    explicit BloscEncoder(SampleType sample_type);
+    ~BloscEncoder() = default;
 
     /// Encoder
     size_t encode(uint8_t* bytes_out,
                   size_t nbytes_out,
                   uint8_t* bytes_in,
                   size_t nbytes_in) const;
+
+  private:
+    SampleType sample_type_;
 };
 
 template<CodecId CodecId, int CLevel, int Shuffle>
+BloscEncoder<CodecId, CLevel, Shuffle>::BloscEncoder(SampleType sample_type)
+  : sample_type_{ sample_type }
+{
+}
+
+template<CodecId CodecId, int CLevel, int Shuffle>
 size_t
-BloscEncoder_<CodecId, CLevel, Shuffle>::encode(uint8_t* bytes_out,
-                                                size_t nbytes_out,
-                                                uint8_t* bytes_in,
-                                                size_t nbytes_in) const
+BloscEncoder<CodecId, CLevel, Shuffle>::encode(uint8_t* bytes_out,
+                                               size_t nbytes_out,
+                                               uint8_t* bytes_in,
+                                               size_t nbytes_in) const
 {
     CHECK(bytes_out);
     CHECK(bytes_in);

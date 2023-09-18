@@ -76,7 +76,8 @@ struct Writer
     [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;
 
     void finalize_chunks_();
-    virtual void flush() noexcept = 0;
+    virtual void write_bytes_(const uint8_t* buf, size_t buf_size) noexcept = 0;
+    virtual void flush_() noexcept = 0;
 
     /// Files
     void make_files_();

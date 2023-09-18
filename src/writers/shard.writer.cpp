@@ -94,6 +94,6 @@ zarr::ShardWriter::write(const VideoFrame* frame) noexcept
 }
 
 void
-zarr::ShardWriter::flush() noexcept
+zarr::ShardWriter::flush_() noexcept
 {
 }

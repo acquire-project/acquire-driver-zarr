@@ -40,7 +40,7 @@ struct ShardWriter final : public Writer
 
     std::vector<uint8_t> buf_;
 
-    void flush() noexcept;
+    void flush_() noexcept;
 };
 } // namespace acquire::sink::zarr
 
