@@ -1,4 +1,5 @@
 #include "czar.v2.hh"
+#include "writers/chunk.writer.hh"
 
 #include "json.hpp"
 
@@ -10,7 +11,7 @@ struct Storage*
 compressed_zarr_v2_init()
 {
     try {
-        zarr::CompressionParams params(
+        zarr::BloscCompressionParams params(
           zarr::compression_codec_as_string<CodecId>(), 1, 1);
         return new zarr::CzarV2(std::move(params));
     } catch (const std::exception& exc) {
@@ -23,7 +24,7 @@ compressed_zarr_v2_init()
 } // end ::{anonymous} namespace
 
 /// CzarV2
-zarr::CzarV2::CzarV2(CompressionParams&& compression_params)
+zarr::CzarV2::CzarV2(BloscCompressionParams&& compression_params)
   : Czar(std::move(compression_params))
 {
 }
@@ -45,6 +46,34 @@ zarr::CzarV2::get_meta(StoragePropertyMetadata* meta) const
           .supported = 1,
         }
     };
+}
+
+void
+zarr::CzarV2::allocate_writers_()
+{
+    ImageDims& image_shape = image_tile_shapes_.at(0).first;
+    ImageDims& tile_shape = image_tile_shapes_.at(0).second;
+
+    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape, pixel_type_);
+
+    writers_.clear();
+    if (compression_params_.has_value()) {
+        writers_.push_back(std::make_shared<ChunkWriter>(
+          image_shape,
+          tile_shape,
+          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+          (get_data_directory_() / "0").string(),
+          compression_params_.value()));
+    } else {
+        writers_.push_back(std::make_shared<ChunkWriter>(
+          image_shape,
+          tile_shape,
+          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+          (get_data_directory_() / "0").string()));
+    }
+
+    if (enable_multiscale_) {
+    }
 }
 
 void
@@ -211,12 +240,6 @@ fs::path
 zarr::CzarV2::get_data_directory_() const
 {
     return dataset_root_;
-}
-
-std::string
-zarr::CzarV2::get_chunk_dir_prefix_() const
-{
-    return "";
 }
 
 extern "C"

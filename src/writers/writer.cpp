@@ -15,7 +15,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , frames_per_chunk_{ frames_per_chunk }
   , frames_written_{ 0 }
   , bytes_to_flush_{ 0 }
-  , t_{ 0 }
+  , current_chunk_{ 0 }
   , threads_(std::thread::hardware_concurrency())
   , pixel_type_{ SampleTypeCount }
 {
@@ -25,11 +25,11 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
            "Expected tile dimensions to be less than or equal to frame "
            "dimensions.");
 
-    tile_rows_ = std::ceil((float)frame_dims.rows / (float)tile_dims.rows);
-    tile_cols_ = std::ceil((float)frame_dims.cols / (float)tile_dims.cols);
+    tiles_per_frame_y_ = std::ceil((float)frame_dims.rows / (float)tile_dims.rows);
+    tiles_per_frame_x_ = std::ceil((float)frame_dims.cols / (float)tile_dims.cols);
 
     // pare down the number of threads if we have too many
-    while (threads_.size() > tile_rows_ * tile_cols_) {
+    while (threads_.size() > tiles_per_frame_y_ * tiles_per_frame_x_) {
         threads_.pop_back();
     }
 
@@ -49,6 +49,16 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
         ctx.thread =
           std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
     }
+}
+
+zarr::Writer::Writer(const ImageDims& frame_dims,
+                     const ImageDims& tile_dims,
+                     uint32_t frames_per_chunk,
+                     const std::string& data_root,
+                     const BloscCompressionParams& compression_params)
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root)
+{
+    blosc_compression_params_ = compression_params;
 }
 
 zarr::Writer::~Writer()
@@ -132,22 +142,6 @@ zarr::Writer::finalize_chunks_() noexcept
 }
 
 void
-zarr::Writer::make_files_()
-{
-    for (auto y = 0; y < tile_rows_; ++y) {
-        for (auto x = 0; x < tile_cols_; ++x) {
-            const auto filename = data_root_ / std::to_string(t_) / "0" /
-                                  std::to_string(y) / std::to_string(x);
-            fs::create_directories(filename.parent_path());
-            files_.emplace_back();
-            CHECK(file_create(&files_.back(),
-                              filename.string().c_str(),
-                              filename.string().size()));
-        }
-    }
-}
-
-void
 zarr::Writer::close_files_()
 {
     using namespace std::chrono_literals;
@@ -167,7 +161,7 @@ zarr::Writer::rollover_()
     TRACE("Rolling over");
 
     close_files_();
-    ++t_;
+    ++current_chunk_;
 }
 
 std::optional<zarr::Writer::JobContext>
@@ -184,12 +178,15 @@ zarr::Writer::pop_from_job_queue() noexcept
 }
 
 void
-zarr::Writer::worker_thread_(ThreadContext* ctx)
+zarr::Writer::worker_thread_(ThreadContext* ctx) noexcept
 {
     using namespace std::chrono_literals;
 
     TRACE("Worker thread starting.");
-    CHECK(ctx);
+    if (nullptr == ctx) {
+        LOGE("Null context passed to worker thread.");
+        return;
+    }
 
     while (true) {
         std::unique_lock lock(ctx->mutex);
@@ -200,8 +197,10 @@ zarr::Writer::worker_thread_(ThreadContext* ctx)
         }
 
         if (auto job = pop_from_job_queue(); job.has_value()) {
-            CHECK(file_write(
-              job->fh, job->offset, job->buf, job->buf + job->buf_size));
+            if (!file_write(
+                  job->fh, job->offset, job->buf, job->buf + job->buf_size)) {
+                LOGE("Failed to write to file.");
+            }
             lock.unlock();
         } else {
             lock.unlock();

@@ -1,6 +1,9 @@
 #include "czar.v3.hh"
+#include "writers/shard.writer.hh"
 
 #include "json.hpp"
+
+#include <cmath>
 
 namespace zarr = acquire::sink::zarr;
 
@@ -10,7 +13,7 @@ struct Storage*
 compressed_zarr_v3_init()
 {
     try {
-        zarr::CompressionParams params(
+        zarr::BloscCompressionParams params(
           zarr::compression_codec_as_string<CodecId>(), 1, 1);
         return new zarr::CzarV3(std::move(params));
     } catch (const std::exception& exc) {
@@ -20,12 +23,98 @@ compressed_zarr_v3_init()
     }
     return nullptr;
 }
+
+uint32_t
+smallest_prime_factor(uint32_t n)
+{
+    if (n < 2) {
+        return 1;
+    } else if (n % 2 == 0) {
+        return 2;
+    }
+
+    // collect additional primes
+    std::vector<uint32_t> primes = { 3, 5, 7, 11, 13, 17, 19, 23 };
+    for (auto i = 27; i * i <= n; i += 2) {
+        bool is_prime = true;
+        for (auto p : primes) {
+            if (i % p == 0) {
+                is_prime = false;
+                break;
+            }
+            if (is_prime) {
+                primes.push_back(i);
+            }
+        }
+    }
+
+    for (auto p : primes) {
+        if (n % p == 0) {
+            return p;
+        }
+    }
+
+    return n;
+}
+
+zarr::ImageDims
+make_shard_dims(const zarr::ImageDims& frame_dims,
+                const zarr::ImageDims& tile_dims)
+{
+    zarr::ImageDims shard_dims = {
+        .cols = frame_dims.cols,
+        .rows = frame_dims.rows,
+    };
+
+    const auto h_rat = (float)frame_dims.rows / (float)tile_dims.rows;
+    auto shard_rows = (uint32_t)std::ceil(h_rat * tile_dims.rows);
+    if (shard_rows > frame_dims.rows) {
+        auto n_shards_rows = smallest_prime_factor(shard_rows / tile_dims.rows);
+        shard_dims.rows = n_shards_rows * tile_dims.rows;
+    }
+
+    const auto w_rat = (float)frame_dims.cols / (float)tile_dims.cols;
+    auto shard_cols = (uint32_t)std::ceil(w_rat * tile_dims.cols);
+    if (shard_cols > frame_dims.cols) {
+        auto n_shards_cols = smallest_prime_factor(shard_cols / tile_dims.cols);
+        shard_dims.cols = n_shards_cols * tile_dims.cols;
+    }
+
+    return shard_dims;
+}
 } // end ::{anonymous} namespace
 
-/// CzarV3
-zarr::CzarV3::CzarV3(CompressionParams&& compression_params)
+zarr::CzarV3::CzarV3(BloscCompressionParams&& compression_params)
   : Czar(std::move(compression_params))
 {
+}
+
+void
+zarr::CzarV3::allocate_writers_()
+{
+    ImageDims& frame_dims = image_tile_shapes_.at(0).first;
+    ImageDims& tile_dims = image_tile_shapes_.at(0).second;
+    ImageDims shard_dims = make_shard_dims(frame_dims, tile_dims);
+
+    uint64_t bytes_per_tile = common::bytes_per_tile(tile_dims, pixel_type_);
+
+    writers_.clear();
+    if (compression_params_.has_value()) {
+        writers_.push_back(std::make_shared<ShardWriter>(
+          frame_dims,
+          shard_dims,
+          tile_dims,
+          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+          (get_data_directory_() / "0").string(),
+          compression_params_.value()));
+    } else {
+        writers_.push_back(std::make_shared<ShardWriter>(
+          frame_dims,
+          shard_dims,
+          tile_dims,
+          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+          (get_data_directory_() / "0").string()));
+    }
 }
 
 void
@@ -97,9 +186,9 @@ zarr::CzarV3::write_array_metadata_(size_t level,
             { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
             { "configuration",
               { { "blocksize", 0 },
-                { "clevel", params.clevel_ },
-                { "cname", params.codec_id_ },
-                { "shuffle", params.shuffle_ } } },
+                { "clevel", params.clevel },
+                { "cname", params.codec_id },
+                { "shuffle", params.shuffle } } },
         };
     }
 
@@ -156,12 +245,6 @@ fs::path
 zarr::CzarV3::get_data_directory_() const
 {
     return dataset_root_ / "data" / "root";
-}
-
-std::string
-zarr::CzarV3::get_chunk_dir_prefix_() const
-{
-    return "c";
 }
 
 extern "C"

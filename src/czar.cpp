@@ -217,39 +217,6 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
 }
 } // end ::{anonymous} namespace
 
-/// CompressionParams
-zarr::CompressionParams::CompressionParams()
-  : clevel_{ 1 }
-  , shuffle_{ 1 }
-{
-}
-
-zarr::CompressionParams::CompressionParams(const std::string& codec_id,
-                                           int clevel,
-                                           int shuffle)
-  : codec_id_{ codec_id }
-  , clevel_{ clevel }
-  , shuffle_{ shuffle }
-{
-}
-
-void
-zarr::to_json(json& j, const zarr::CompressionParams& bc)
-{
-    j = json{ { "id", std::string(bc.id_) },
-              { "cname", bc.codec_id_ },
-              { "clevel", bc.clevel_ },
-              { "shuffle", bc.shuffle_ } };
-}
-
-void
-zarr::from_json(const json& j, zarr::CompressionParams& bc)
-{
-    j.at("cname").get_to(bc.codec_id_);
-    j.at("clevel").get_to(bc.clevel_);
-    j.at("shuffle").get_to(bc.shuffle_);
-}
-
 /// StorageInterface
 zarr::StorageInterface::StorageInterface()
   : Storage{
@@ -266,7 +233,7 @@ zarr::StorageInterface::StorageInterface()
 {
 }
 
-zarr::Czar::Czar(CompressionParams&& compression_params)
+zarr::Czar::Czar(BloscCompressionParams&& compression_params)
 {
     compression_params_ = std::move(compression_params);
 }
@@ -346,7 +313,7 @@ zarr::Czar::stop() noexcept
     write_all_array_metadata_(); // must precede close of chunk file
     write_group_metadata_();     // write multiscales metadata, if applicable
 
-    for (auto& writer: writers_) {
+    for (auto& writer : writers_) {
         writer->finalize();
     }
     writers_.clear();
@@ -448,25 +415,6 @@ zarr::Czar::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
         .cols = props.tile.width,
         .rows = props.tile.height,
     };
-}
-
-void
-zarr::Czar::allocate_writers_()
-{
-    ImageDims& image_shape = image_tile_shapes_.at(0).first;
-    ImageDims& tile_shape = image_tile_shapes_.at(0).second;
-
-    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape, pixel_type_);
-
-    writers_.clear();
-    writers_.push_back(std::make_shared<ChunkWriter>(
-      image_shape,
-      tile_shape,
-      (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-      (get_data_directory_() / "0").string() ));
-
-    if (enable_multiscale_) {
-    }
 }
 
 void

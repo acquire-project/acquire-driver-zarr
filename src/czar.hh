@@ -8,8 +8,9 @@
 #include "device/kit/storage.h"
 
 #include "prelude.h"
-#include "json.hpp"
-#include "writers/chunk.writer.hh"
+#include "common.hh"
+#include "writers/writer.hh"
+#include "writers/blosc.compressor.hh"
 
 #include <filesystem>
 #include <stdexcept>
@@ -19,47 +20,6 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
-enum class BloscCodecId : uint8_t
-{
-    Lz4 = 1,
-    Zstd = 5
-};
-
-template<BloscCodecId CodecId>
-constexpr const char*
-compression_codec_as_string();
-
-template<>
-constexpr const char*
-compression_codec_as_string<BloscCodecId::Zstd>()
-{
-    return "zstd";
-}
-
-template<>
-constexpr const char*
-compression_codec_as_string<BloscCodecId::Lz4>()
-{
-    return "lz4";
-}
-
-struct CompressionParams
-{
-    static constexpr char id_[] = "blosc";
-    std::string codec_id_;
-    int clevel_;
-    int shuffle_;
-
-    CompressionParams();
-    CompressionParams(const std::string& codec_id, int clevel, int shuffle);
-};
-
-void
-to_json(nlohmann::json&, const CompressionParams&);
-
-void
-from_json(const nlohmann::json&, CompressionParams&);
-
 // StorageInterface
 
 struct StorageInterface : public Storage
@@ -83,7 +43,7 @@ struct Czar : StorageInterface
 {
   public:
     Czar() = default;
-    Czar(CompressionParams&& compression_params);
+    Czar(BloscCompressionParams&& compression_params);
     ~Czar() override = default;
 
     /// StorageInterface
@@ -99,10 +59,10 @@ struct Czar : StorageInterface
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
 
-    std::vector<std::shared_ptr<ChunkWriter>> writers_;
+    std::vector<std::shared_ptr<Writer>> writers_;
 
     // static - set on construction
-    std::optional<CompressionParams> compression_params_;
+    std::optional<BloscCompressionParams> compression_params_;
 
     // changes on set
     fs::path dataset_root_;
@@ -116,7 +76,7 @@ struct Czar : StorageInterface
 
     /// Setup
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
-    void allocate_writers_();
+    virtual void allocate_writers_() = 0;
 
     /// Metadata
     void write_all_array_metadata_() const;
@@ -129,7 +89,6 @@ struct Czar : StorageInterface
 
     /// Filesystem
     virtual fs::path get_data_directory_() const = 0;
-    virtual std::string get_chunk_dir_prefix_() const = 0;
 };
 
 } // namespace acquire::sink::zarr

@@ -10,7 +10,7 @@ add_library(${tgt} MODULE
         common.hh
         common.cpp
         encoders/encoder.hh
-        encoders/blosc.encoder.hh
+#        encoders/blosc.encoder.hh
         encoders/chunking.encoder.hh
         encoders/chunking.encoder.cpp
         encoders/sharding.encoder.hh
@@ -21,6 +21,8 @@ add_library(${tgt} MODULE
         writers/chunk.writer.cpp
         writers/shard.writer.hh
         writers/shard.writer.cpp
+        writers/blosc.compressor.hh
+        writers/blosc.compressor.cpp
         czar.hh
         czar.cpp
         czar.v2.hh
