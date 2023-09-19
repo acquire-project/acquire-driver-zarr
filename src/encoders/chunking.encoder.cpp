@@ -1,18 +1,19 @@
 #include "chunking.encoder.hh"
 
 #include <cmath>
+#include <cstring>
 
 namespace zarr = acquire::sink::zarr;
 
 zarr::ChunkingEncoder::ChunkingEncoder(const ImageDims& frame_dims,
                                        const ImageDims& tile_dims)
-  : outer_{ frame_dims }
-  , inner_{ tile_dims }
+  : frame_dims_{ frame_dims }
+  , tile_dims_{ tile_dims }
 {
-    CHECK(inner_.cols > 0);
-    CHECK(inner_.rows > 0);
+    CHECK(tile_dims_.cols > 0);
+    CHECK(tile_dims_.rows > 0);
 
-    CHECK(inner_ <= outer_);
+    CHECK(tile_dims_ <= frame_dims_);
 }
 
 size_t
@@ -26,7 +27,7 @@ zarr::ChunkingEncoder::encode(uint8_t* bytes_out,
 
     CHECK(nbytes_out >= nbytes_in);
 
-    const auto npx = outer_.cols * outer_.rows;
+    const auto npx = frame_dims_.cols * frame_dims_.rows;
     EXPECT(nbytes_in % npx == 0,
            "Expected input buffer to be a multiple of the frame size.");
 
@@ -34,14 +35,14 @@ zarr::ChunkingEncoder::encode(uint8_t* bytes_out,
 
     const auto bytes_of_type = nbytes_in / npx;
 
-    const auto row_ratio = (float)outer_.rows / (float)inner_.rows;
-    const auto col_ratio = (float)outer_.cols / (float)inner_.cols;
+    const auto row_ratio = (float)frame_dims_.rows / (float)tile_dims_.rows;
+    const auto col_ratio = (float)frame_dims_.cols / (float)tile_dims_.cols;
 
     const auto tile_rows = (uint32_t)std::ceil(row_ratio);
     const auto tile_cols = (uint32_t)std::ceil(col_ratio);
 
     const auto expected_bytes_out =
-      tile_rows * tile_cols * inner_.rows * inner_.cols * bytes_of_type;
+      tile_rows * tile_cols * tile_dims_.rows * tile_dims_.cols * bytes_of_type;
     EXPECT(nbytes_out >= expected_bytes_out,
            "Expected output buffer to be at least %d bytes. Got %d.",
            expected_bytes_out,
@@ -50,25 +51,25 @@ zarr::ChunkingEncoder::encode(uint8_t* bytes_out,
     size_t bytes_written = 0;
     for (auto i = 0; i < tile_rows; ++i) {
         for (auto j = 0; j < tile_cols; ++j) {
-            for (auto k = 0; k < inner_.rows; ++k) {
-                const auto frame_row = i * inner_.rows + k;
-                if (frame_row < outer_.rows) {
-                    const auto frame_col = j * inner_.cols;
+            for (auto k = 0; k < tile_dims_.rows; ++k) {
+                const auto frame_row = i * tile_dims_.rows + k;
+                if (frame_row < frame_dims_.rows) {
+                    const auto frame_col = j * tile_dims_.cols;
 
                     const auto bytes_in_offset =
-                      bytes_of_type * (frame_row * outer_.cols + frame_col);
+                      bytes_of_type * (frame_row * frame_dims_.cols + frame_col);
 
                     const auto region_width =
-                      std::min(frame_col + inner_.cols, outer_.cols) -
+                      std::min(frame_col + tile_dims_.cols, frame_dims_.cols) -
                       frame_col;
 
                     const auto nbytes = region_width * bytes_of_type;
 
-                    std::memcpy(bytes_out + bytes_written,
-                                bytes_in + bytes_in_offset,
-                                nbytes);
+                    memcpy(bytes_out + bytes_written,
+                           bytes_in + bytes_in_offset,
+                           nbytes);
                 }
-                bytes_written += inner_.cols * bytes_of_type;
+                bytes_written += tile_dims_.cols * bytes_of_type;
             }
         }
     }

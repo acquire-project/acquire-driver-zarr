@@ -10,7 +10,8 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root)
-  , chunking_encoder_{ frame_dims, tile_dims }
+  , frame_dims_{ frame_dims }
+  , tile_dims_{ tile_dims }
 {
 }
 
@@ -25,42 +26,28 @@ zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
     }
 
     try {
-        const auto bytes_of_type = common::bytes_of_type(frame->shape.type);
+        const auto bytes_of_type = common::bytes_of_type(pixel_type_);
         const auto bytes_per_tile =
           tile_dims_.cols * tile_dims_.rows * bytes_of_type;
         const auto n_tiles = tile_rows_ * tile_cols_;
         const auto bytes_of_tiled_frame = n_tiles * bytes_per_tile;
 
-        // resize the buffer to fit the chunked frame
-        if (buf_.size() < bytes_of_tiled_frame) {
-            buf_.resize(bytes_of_tiled_frame);
+        if (buffers_.empty()) {
+            make_buffers_();
         }
 
-        // encode the frame into the buffer
-        const auto bytes_encoded =
-          chunking_encoder_.encode(buf_.data(),
-                                   bytes_of_tiled_frame,
-                                   frame->data,
-                                   frame->bytes_of_frame - sizeof(*frame));
-        EXPECT(bytes_encoded == bytes_of_tiled_frame,
-               "Expected to encode %d bytes. Got %d.",
-               bytes_of_tiled_frame,
-               bytes_encoded);
+        // write out
+        bytes_to_flush_ +=
+          write_bytes_(frame->data, frame->bytes_of_frame - sizeof(*frame));
 
-        write_bytes_(buf_.data(), bytes_encoded);
-
-        // create chunk files if necessary
-        if (files_.empty()) {
-            make_files_();
-        }
+        ++frames_written_;
 
         // rollover if necessary
         const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
         if (frames_written_ > 0 && frames_this_chunk == 0) {
+            flush_();
             rollover_();
         }
-
-        ++frames_written_;
         return true;
     } catch (const std::exception& exc) {
         LOGE("Failed to write frame: %s", exc.what());
@@ -72,25 +59,90 @@ zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
 }
 
 void
+zarr::ChunkWriter::make_buffers_() noexcept
+{
+    buffers_.resize(tile_rows_ * tile_cols_);
+
+    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_tile =
+      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+    for (auto& buf : buffers_) {
+        buf.resize(frames_per_chunk_ * bytes_per_tile);
+        std::fill(buf.begin(), buf.end(), 0);
+    }
+}
+
+size_t
 zarr::ChunkWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
 {
+    // FIXME (aliddell): assumes a single frame is written
+    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_tile =
+      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+    const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
 
+    size_t bytes_written = 0;
+
+    for (auto i = 0; i < tile_rows_; ++i) {
+        for (auto j = 0; j < tile_cols_; ++j) {
+            size_t offset = bytes_per_tile * frames_this_chunk;
+
+            uint8_t* bytes_out = buffers_.at(i * tile_cols_ + j).data();
+            for (auto k = 0; k < tile_dims_.rows; ++k) {
+                const auto frame_row = i * tile_dims_.rows + k;
+                if (frame_row < frame_dims_.rows) {
+                    const auto frame_col = j * tile_dims_.cols;
+
+                    const auto buf_offset =
+                      bytes_of_type *
+                      (frame_row * frame_dims_.cols + frame_col);
+
+                    const auto region_width =
+                      std::min(frame_col + tile_dims_.cols, frame_dims_.cols) -
+                      frame_col;
+
+                    const auto nbytes = region_width * bytes_of_type;
+
+                    memcpy(bytes_out + offset, buf + buf_offset, nbytes);
+                }
+                offset += tile_dims_.cols * bytes_of_type;
+            }
+            bytes_written += bytes_per_tile;
+        }
+    }
+
+    return bytes_written;
 }
 
 void
 zarr::ChunkWriter::flush_() noexcept
 {
+    if (frames_written_ == 0) {
+        return;
+    }
+
     using namespace std::chrono_literals;
+    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_tile =
+      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+    if (bytes_to_flush_ % bytes_per_tile != 0) {
+        LOGE("Expected bytes to flush to be a multiple of the "
+             "number of bytes per tile.");
+    }
+    const auto bytes_per_chunk = bytes_to_flush_ / (tile_rows_ * tile_cols_);
+
+    // create chunk files if necessary
+    if (files_.empty()) {
+        make_files_();
+    }
 
     // write out to each chunk
     {
         std::scoped_lock lock(mutex_);
 
         for (auto i = 0; i < files_.size(); ++i) {
-            jobs_.emplace(buf_.data() + i * bytes_per_tile,
-                          bytes_per_tile,
-                          &files_.at(i),
-                          bytes_per_tile * frames_this_chunk);
+            jobs_.emplace(
+              buffers_.at(i).data(), bytes_per_chunk, &files_.at(i), 0);
         }
     }
 
@@ -98,6 +150,11 @@ zarr::ChunkWriter::flush_() noexcept
     while (!jobs_.empty()) {
         std::this_thread::sleep_for(2ms);
     }
+
+    for (auto& buf: buffers_) {
+        std::fill(buf.begin(), buf.end(), 0);
+    }
+    bytes_to_flush_ = 0;
 }
 
 #ifndef NO_UNIT_TESTS

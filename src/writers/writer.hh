@@ -35,7 +35,7 @@ struct Writer
     {
         uint8_t* buf;
         size_t buf_size;
-        file* file;
+        file* fh;
         uint64_t offset;
     };
 
@@ -47,8 +47,7 @@ struct Writer
     virtual ~Writer();
 
     [[nodiscard]] virtual bool write(const VideoFrame* frame) noexcept = 0;
-
-    std::optional<JobContext> pop_from_job_queue() noexcept;
+    void finalize() noexcept;
 
     uint32_t frames_written() const noexcept;
 
@@ -65,18 +64,24 @@ struct Writer
     std::vector<file> files_;
 
     uint32_t frames_per_chunk_;
+    uint64_t bytes_to_flush_;
     uint32_t frames_written_;
+    uint32_t t_;
 
+    std::vector<std::vector<uint8_t>> buffers_;
     std::vector<ThreadContext> threads_;
     std::queue<JobContext> jobs_;
     std::mutex mutex_;
 
+    std::optional<JobContext> pop_from_job_queue() noexcept;
     void worker_thread_(ThreadContext* ctx);
 
     [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;
 
-    void finalize_chunks_();
-    virtual void write_bytes_(const uint8_t* buf, size_t buf_size) noexcept = 0;
+    virtual void make_buffers_() noexcept = 0;
+
+    void finalize_chunks_() noexcept;
+    virtual size_t write_bytes_(const uint8_t* buf, size_t buf_size) noexcept = 0;
     virtual void flush_() noexcept = 0;
 
     /// Files

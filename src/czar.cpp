@@ -346,6 +346,9 @@ zarr::Czar::stop() noexcept
     write_all_array_metadata_(); // must precede close of chunk file
     write_group_metadata_();     // write multiscales metadata, if applicable
 
+    for (auto& writer: writers_) {
+        writer->finalize();
+    }
     writers_.clear();
     return 1;
 }

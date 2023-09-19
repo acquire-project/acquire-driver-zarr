@@ -26,8 +26,8 @@ struct ChunkingEncoder final
                   size_t nbytes_in) const;
 
   private:
-    ImageDims outer_;
-    ImageDims inner_;
+    ImageDims frame_dims_;
+    ImageDims tile_dims_;
 
     std::vector<uint8_t> buf_;
 };

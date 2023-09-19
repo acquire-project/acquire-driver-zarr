@@ -1,5 +1,6 @@
 #include "writer.hh"
 
+#include <cmath>
 #include <functional>
 
 namespace zarr = acquire::sink::zarr;
@@ -13,6 +14,8 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , data_root_{ data_root }
   , frames_per_chunk_{ frames_per_chunk }
   , frames_written_{ 0 }
+  , bytes_to_flush_{ 0 }
+  , t_{ 0 }
   , threads_(std::thread::hardware_concurrency())
   , pixel_type_{ SampleTypeCount }
 {
@@ -44,33 +47,29 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
     for (auto& ctx : threads_) {
         ctx.should_stop = false;
         ctx.thread =
-          std::thread(std::bind(&Writer::worker_thread_, this, &ctx));
+          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
     }
 }
 
 zarr::Writer::~Writer()
 {
-    finalize_chunks_();
-
     for (auto& ctx : threads_) {
         ctx.should_stop = true;
         ctx.cv.notify_one();
         ctx.thread.join();
     }
-    close_files_();
 }
 
-std::optional<zarr::Writer::JobContext>
-zarr::Writer::pop_from_job_queue() noexcept
+void
+zarr::Writer::finalize() noexcept
 {
-    std::scoped_lock lock(mutex_);
-    if (jobs_.empty()) {
-        return std::nullopt;
+    using namespace std::chrono_literals;
+    finalize_chunks_();
+    if (bytes_to_flush_ > 0) {
+        flush_();
     }
 
-    auto job = jobs_.front();
-    jobs_.pop();
-    return job;
+    close_files_();
 }
 
 uint32_t
@@ -114,54 +113,30 @@ zarr::Writer::validate_frame_(const VideoFrame* frame) noexcept
 }
 
 void
-zarr::Writer::finalize_chunks_()
+zarr::Writer::finalize_chunks_() noexcept
 {
     using namespace std::chrono_literals;
 
-    // wait for all writers to finish
-    while (!jobs_.empty()) {
-        std::this_thread::sleep_for(2ms);
-    }
-
     const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
 
-    // don't write zeros if we have written less than a full chunk or if we have
-    // written a full chunk
+    // don't write zeros if we have written less than one full chunk or if
+    // the last frame written was the final frame in its chunk
     if (frames_written_ < frames_per_chunk_ || frames_this_chunk == 0) {
         return;
     }
-
-    const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * common::bytes_of_type(pixel_type_);
+    const auto bytes_per_frame =
+      frame_dims_.rows * frame_dims_.cols * common::bytes_of_type(pixel_type_);
     const auto frames_to_write = frames_per_chunk_ - frames_this_chunk;
 
-    std::vector<uint8_t> buf(frames_to_write * bytes_per_tile, 0);
-
-    {
-        std::scoped_lock lock(mutex_);
-        for (auto& file : files_) {
-            for (auto i = 0; i < frames_to_write; ++i) {
-                CHECK(file_write(&file,
-                                 bytes_per_tile * frames_this_chunk,
-                                 buf.data(),
-                                 buf.data() + buf.size()));
-            }
-        }
-    }
-
-    // wait for all writers to finish
-    while (!jobs_.empty()) {
-        std::this_thread::sleep_for(2ms);
-    }
+    bytes_to_flush_ += frames_to_write * bytes_per_frame;
 }
 
 void
 zarr::Writer::make_files_()
 {
-    const auto t = frames_written_ / frames_per_chunk_;
     for (auto y = 0; y < tile_rows_; ++y) {
         for (auto x = 0; x < tile_cols_; ++x) {
-            const auto filename = data_root_ / std::to_string(t) / "0" /
+            const auto filename = data_root_ / std::to_string(t_) / "0" /
                                   std::to_string(y) / std::to_string(x);
             fs::create_directories(filename.parent_path());
             files_.emplace_back();
@@ -175,6 +150,11 @@ zarr::Writer::make_files_()
 void
 zarr::Writer::close_files_()
 {
+    using namespace std::chrono_literals;
+    while (!jobs_.empty()) {
+        std::this_thread::sleep_for(2ms);
+    }
+
     for (auto& file : files_) {
         file_close(&file);
     }
@@ -187,7 +167,20 @@ zarr::Writer::rollover_()
     TRACE("Rolling over");
 
     close_files_();
-    make_files_();
+    ++t_;
+}
+
+std::optional<zarr::Writer::JobContext>
+zarr::Writer::pop_from_job_queue() noexcept
+{
+    std::scoped_lock lock(mutex_);
+    if (jobs_.empty()) {
+        return std::nullopt;
+    }
+
+    auto job = jobs_.front();
+    jobs_.pop();
+    return job;
 }
 
 void
@@ -208,7 +201,7 @@ zarr::Writer::worker_thread_(ThreadContext* ctx)
 
         if (auto job = pop_from_job_queue(); job.has_value()) {
             CHECK(file_write(
-              job->file, job->offset, job->buf, job->buf + job->buf_size));
+              job->fh, job->offset, job->buf, job->buf + job->buf_size));
             lock.unlock();
         } else {
             lock.unlock();

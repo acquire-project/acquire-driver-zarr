@@ -30,17 +30,16 @@ struct ChunkWriter final : public Writer
                 const ImageDims& tile_dims,
                 uint32_t frames_per_chunk,
                 const std::string& data_root);
-    ~ChunkWriter() = default;
+    ~ChunkWriter() override = default;
 
     [[nodiscard]] bool write(const VideoFrame* frame) noexcept override;
 
   private:
-    ChunkingEncoder chunking_encoder_;
+    ImageDims frame_dims_;
+    ImageDims tile_dims_;
 
-    std::vector<uint8_t> buf_;
-
-    virtual void write_bytes_(const uint8_t* buf,
-                              size_t buf_size) noexcept override;
+    void make_buffers_() noexcept override;
+    size_t write_bytes_(const uint8_t* buf, size_t buf_size) noexcept override;
     void flush_() noexcept override;
 };
 } // namespace acquire::sink::zarr
