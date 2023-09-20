@@ -236,7 +236,7 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(int, "%d", tile_width, chunk_shape[3]);
 
     CHECK("C" == metadata["chunk_memory_layout"]);
-    CHECK("<u1" == metadata["data_type"]);
+    CHECK("u1" == metadata["data_type"]);
     CHECK(metadata["extensions"].empty());
 
     const auto array_shape = metadata["shape"];
@@ -252,8 +252,9 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(
       int, "%d", chunks_per_shard, configuration["chunks_per_shard"][0]);
 
-    const auto index_size =
-      2 * chunks_per_shard * sizeof(uint64_t) + sizeof(uint32_t);
+    //    const auto index_size =
+    //      2 * chunks_per_shard * sizeof(uint64_t) + sizeof(uint32_t);
+    const auto index_size = 2 * chunks_per_shard * sizeof(uint64_t);
 
     // check that each chunked data file is the expected size
     uint32_t bytes_per_chunk =

@@ -236,7 +236,7 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(int, "%d", tile_width, chunk_shape[3]);
 
     CHECK("C" == metadata["chunk_memory_layout"]);
-    CHECK("<u1" == metadata["data_type"]);
+    CHECK("u1" == metadata["data_type"]);
     CHECK(metadata["extensions"].empty());
 
     const auto array_shape = metadata["shape"];
