@@ -1,3 +1,4 @@
+#include <stdexcept>
 #include "writer.hh"
 
 #include <cmath>
@@ -25,8 +26,10 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
            "Expected tile dimensions to be less than or equal to frame "
            "dimensions.");
 
-    tiles_per_frame_y_ = std::ceil((float)frame_dims.rows / (float)tile_dims.rows);
-    tiles_per_frame_x_ = std::ceil((float)frame_dims.cols / (float)tile_dims.cols);
+    tiles_per_frame_y_ =
+      std::ceil((float)frame_dims.rows / (float)tile_dims.rows);
+    tiles_per_frame_x_ =
+      std::ceil((float)frame_dims.cols / (float)tile_dims.cols);
 
     // pare down the number of threads if we have too many
     while (threads_.size() > tiles_per_frame_y_ * tiles_per_frame_x_) {
@@ -139,6 +142,55 @@ zarr::Writer::finalize_chunks_() noexcept
     const auto frames_to_write = frames_per_chunk_ - frames_this_chunk;
 
     bytes_to_flush_ += frames_to_write * bytes_per_frame;
+}
+
+std::vector<size_t>
+zarr::Writer::compress_buffers_() noexcept
+{
+    const auto bytes_per_chunk = bytes_to_flush_ / tiles_per_frame_();
+    std::vector<size_t> buf_sizes;
+    if (!blosc_compression_params_.has_value()) {
+        for (auto& buf : chunk_buffers_) {
+            buf_sizes.push_back(std::min(bytes_per_chunk, buf.size()));
+        }
+        return buf_sizes;
+    }
+
+    TRACE("Compressing");
+
+    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_tile =
+      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+    std::vector<uint8_t> tmp(bytes_per_tile + BLOSC_MAX_OVERHEAD);
+
+    std::scoped_lock lock(mutex_);
+    for (auto& buf : chunk_buffers_) {
+        const auto nbytes =
+          blosc_compress_ctx(blosc_compression_params_.value().clevel,
+                             blosc_compression_params_.value().shuffle,
+                             bytes_of_type,
+                             bytes_per_chunk,
+                             buf.data(),
+                             tmp.data(),
+                             bytes_per_chunk + BLOSC_MAX_OVERHEAD,
+                             blosc_compression_params_.value().codec_id.c_str(),
+                             0 /* blocksize - 0:automatic */,
+                             (int)std::thread::hardware_concurrency());
+
+        if (nbytes > buf.size()) {
+            buf.resize(nbytes);
+        }
+        memcpy(buf.data(), tmp.data(), nbytes);
+        buf_sizes.push_back(nbytes);
+    }
+
+    return buf_sizes;
+}
+
+uint32_t
+zarr::Writer::tiles_per_frame_() const
+{
+    return (uint32_t)tiles_per_frame_x_ * (uint32_t)tiles_per_frame_y_;
 }
 
 void

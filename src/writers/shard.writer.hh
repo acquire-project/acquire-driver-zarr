@@ -37,7 +37,7 @@ struct ShardWriter final : public Writer
                 uint32_t frames_per_chunk,
                 const std::string& data_root,
                 const BloscCompressionParams& compression_params);
-    ~ShardWriter() = default;
+    ~ShardWriter() override = default;
 
     [[nodiscard]] bool write(const VideoFrame* frame) noexcept override;
 
@@ -46,11 +46,15 @@ struct ShardWriter final : public Writer
     uint16_t shards_per_frame_x_;
     uint16_t shards_per_frame_y_;
 
+    std::vector<std::vector<uint8_t>> shard_buffers_;
+
+    uint16_t chunks_per_shard_() const;
+    uint16_t shards_per_frame_() const;
+
     void make_buffers_() noexcept override;
     size_t write_bytes_(const uint8_t* buf, size_t buf_size) noexcept override;
-    void compress_buffers_() noexcept;
     void flush_() noexcept override;
-    void make_files_() override;
+    [[nodiscard]] bool make_files_() noexcept override;
 };
 } // namespace acquire::sink::zarr
 

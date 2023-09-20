@@ -77,7 +77,7 @@ struct Writer
     std::vector<file> files_;
 
     /// Multithreading
-    std::vector<std::vector<uint8_t>> buffers_;
+    std::vector<std::vector<uint8_t>> chunk_buffers_;
     std::vector<ThreadContext> threads_;
     std::queue<JobContext> jobs_;
     std::mutex mutex_;
@@ -95,12 +95,15 @@ struct Writer
     virtual void make_buffers_() noexcept = 0;
 
     void finalize_chunks_() noexcept;
+    std::vector<size_t> compress_buffers_() noexcept;
     virtual size_t write_bytes_(const uint8_t* buf,
                                 size_t buf_size) noexcept = 0;
     virtual void flush_() noexcept = 0;
 
+    uint32_t tiles_per_frame_() const;
+
     /// Files
-    virtual void make_files_() = 0;
+    [[nodiscard]] virtual bool make_files_() noexcept = 0;
     void close_files_();
     void rollover_();
 };

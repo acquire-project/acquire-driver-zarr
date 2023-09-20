@@ -42,9 +42,8 @@ struct ChunkWriter final : public Writer
   private:
     void make_buffers_() noexcept override;
     size_t write_bytes_(const uint8_t* buf, size_t buf_size) noexcept override;
-    void compress_buffers_() noexcept;
     void flush_() noexcept override;
-    void make_files_() override;
+    [[nodiscard]] bool make_files_() noexcept override;
 };
 } // namespace acquire::sink::zarr
 
