@@ -55,8 +55,8 @@ const char*
 common::sample_type_to_dtype(SampleType t)
 
 {
-    static const char* table[] = { "<u1", "<u2", "<i1", "<i2",
-                                   "<f4", "<u2", "<u2", "<u2" };
+    static const char* table[] = { "u1", "u2", "i1", "i2",
+                                   "f4", "u2", "u2", "u2" };
     if (t < countof(table)) {
         return table[t];
     } else {

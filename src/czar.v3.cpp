@@ -207,7 +207,7 @@ zarr::CzarV3::write_array_metadata_(size_t level,
           "https://purl.org/zarr/spec/storage_transformers/sharding/1.0" },
         { "configuration",
           { { "chunks_per_shard",
-              { chunks_per_shard_x * chunks_per_shard_y } } } }
+              { chunks_per_shard_x * chunks_per_shard_y } } } } // FIXME (aliddell): this is wrong
     };
 
     auto path = (dataset_root_ / "meta" / "root" /
