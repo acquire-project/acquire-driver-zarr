@@ -15,6 +15,8 @@ struct CzarV3 final : public Czar
     void get_meta(StoragePropertyMetadata* meta) const override;
 
   private:
+    ImageDims shard_dims_;
+
     /// Setup
     void allocate_writers_() override;
 

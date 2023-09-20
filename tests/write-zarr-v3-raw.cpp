@@ -146,9 +146,9 @@ acquire(AcquireRuntime* runtime)
         do {
             struct clock throttle;
             clock_init(&throttle);
-//            EXPECT(clock_cmp_now(&clock) < 0,
-//                   "Timeout at %f ms",
-//                   clock_toc_ms(&clock) + time_limit_ms);
+            EXPECT(clock_cmp_now(&clock) < 0,
+                   "Timeout at %f ms",
+                   clock_toc_ms(&clock) + time_limit_ms);
             OK(acquire_map_read(runtime, 0, &beg, &end));
             for (cur = beg; cur < end; cur = next(cur)) {
                 LOG("stream %d counting frame w id %d", 0, cur->frame_id);
@@ -225,11 +225,11 @@ validate(AcquireRuntime* runtime)
     f = std::ifstream(metadata_path);
     metadata = json::parse(f);
 
-    auto chunk_grid = metadata["chunk_grid"];
+    const auto chunk_grid = metadata["chunk_grid"];
     CHECK("/" == chunk_grid["separator"]);
     CHECK("regular" == chunk_grid["type"]);
 
-    auto chunk_shape = chunk_grid["chunk_shape"];
+    const auto chunk_shape = chunk_grid["chunk_shape"];
     ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunk_shape[0]);
     ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
     ASSERT_EQ(int, "%d", tile_height, chunk_shape[2]);
@@ -239,11 +239,21 @@ validate(AcquireRuntime* runtime)
     CHECK("<u1" == metadata["data_type"]);
     CHECK(metadata["extensions"].empty());
 
-    auto array_shape = metadata["shape"];
+    const auto array_shape = metadata["shape"];
     ASSERT_EQ(int, "%d", max_frame_count, array_shape[0]);
     ASSERT_EQ(int, "%d", 1, array_shape[1]);
     ASSERT_EQ(int, "%d", frame_height, array_shape[2]);
     ASSERT_EQ(int, "%d", frame_width, array_shape[3]);
+
+    // sharding
+    const auto storage_transformers = metadata["storage_transformers"];
+    const auto configuration = storage_transformers[0]["configuration"];
+    const auto chunks_per_shard = 12;
+    ASSERT_EQ(
+      int, "%d", chunks_per_shard, configuration["chunks_per_shard"][0]);
+
+    const auto index_size =
+      2 * chunks_per_shard * sizeof(uint64_t) + sizeof(uint32_t);
 
     // check that each chunked data file is the expected size
     uint32_t bytes_per_chunk =
@@ -251,15 +261,15 @@ validate(AcquireRuntime* runtime)
       chunk_shape[2].get<uint32_t>() * chunk_shape[3].get<uint32_t>();
     for (auto t = 0; t < std::ceil(max_frame_count / expected_frames_per_chunk);
          ++t) {
-        for (auto y = 0; y < 3; ++y) {
-            for (auto x = 0; x < 4; ++x) {
-                fs::path path = test_path / "data" / "root" / "0" /
-                                ("c" + std::to_string(t)) / "0" /
-                                std::to_string(y) / std::to_string(x);
-                CHECK(fs::is_regular_file(path));
-                ASSERT_EQ(int, "%d", bytes_per_chunk, fs::file_size(path));
-            }
-        }
+        fs::path path = test_path / "data" / "root" / "0" /
+                        ("c" + std::to_string(t)) / "0" / "0" / "0";
+
+        CHECK(fs::is_regular_file(path));
+
+        auto file_size = fs::file_size(path);
+
+        ASSERT_EQ(
+          int, "%d", chunks_per_shard* bytes_per_chunk + index_size, file_size);
     }
 }
 

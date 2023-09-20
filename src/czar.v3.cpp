@@ -92,9 +92,9 @@ zarr::CzarV3::CzarV3(BloscCompressionParams&& compression_params)
 void
 zarr::CzarV3::allocate_writers_()
 {
-    ImageDims& frame_dims = image_tile_shapes_.at(0).first;
-    ImageDims& tile_dims = image_tile_shapes_.at(0).second;
-    ImageDims shard_dims = make_shard_dims(frame_dims, tile_dims);
+    const ImageDims& frame_dims = image_tile_shapes_.at(0).first;
+    const ImageDims& tile_dims = image_tile_shapes_.at(0).second;
+    shard_dims_ = make_shard_dims(frame_dims, tile_dims);
 
     uint64_t bytes_per_tile = common::bytes_per_tile(tile_dims, pixel_type_);
 
@@ -102,7 +102,7 @@ zarr::CzarV3::allocate_writers_()
     if (compression_params_.has_value()) {
         writers_.push_back(std::make_shared<ShardWriter>(
           frame_dims,
-          shard_dims,
+          shard_dims_,
           tile_dims,
           (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
           (get_data_directory_() / "0").string(),
@@ -110,7 +110,7 @@ zarr::CzarV3::allocate_writers_()
     } else {
         writers_.push_back(std::make_shared<ShardWriter>(
           frame_dims,
-          shard_dims,
+          shard_dims_,
           tile_dims,
           (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
           (get_data_directory_() / "0").string()));
@@ -191,6 +191,24 @@ zarr::CzarV3::write_array_metadata_(size_t level,
                 { "shuffle", params.shuffle } } },
         };
     }
+
+    // sharding storage transformer
+    // TODO (aliddell): keep an eye on ZEP 2 and update this when finalized
+    const ImageDims& tile_dims = image_tile_shapes_.at(0).second;
+    const auto chunks_per_shard_x = shard_dims_.cols / tile_dims.cols;
+    const auto chunks_per_shard_y = shard_dims_.rows / tile_dims.rows;
+    metadata["storage_transformers"] = json::array();
+    metadata["storage_transformers"][0] = {
+        {
+          "type",
+          "indexed",
+        },
+        { "extension",
+          "https://purl.org/zarr/spec/storage_transformers/sharding/1.0" },
+        { "configuration",
+          { { "chunks_per_shard",
+              { chunks_per_shard_x * chunks_per_shard_y } } } }
+    };
 
     auto path = (dataset_root_ / "meta" / "root" /
                  (std::to_string(level) + ".array.json"))

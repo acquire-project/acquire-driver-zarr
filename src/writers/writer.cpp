@@ -31,11 +31,6 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
     tiles_per_frame_x_ =
       std::ceil((float)frame_dims.cols / (float)tile_dims.cols);
 
-    // pare down the number of threads if we have too many
-    while (threads_.size() > tiles_per_frame_y_ * tiles_per_frame_x_) {
-        threads_.pop_back();
-    }
-
     CHECK(frames_per_chunk_ > 0);
     CHECK(!data_root_.empty());
 
@@ -44,13 +39,6 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
         EXPECT(fs::create_directories(data_root_, ec),
                "Failed to create data root directory: %s",
                ec.message().c_str());
-    }
-
-    // spin up threads
-    for (auto& ctx : threads_) {
-        ctx.should_stop = false;
-        ctx.thread =
-          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
     }
 }
 

@@ -19,6 +19,18 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
       std::ceil((float)frame_dims.cols / (float)shard_dims.cols);
     shards_per_frame_y_ =
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
+
+    // pare down the number of threads if we have too many
+    while (threads_.size() > shards_per_frame_()) {
+        threads_.pop_back();
+    }
+
+    // spin up threads
+    for (auto& ctx : threads_) {
+        ctx.should_stop = false;
+        ctx.thread =
+          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
+    }
 }
 
 zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
@@ -38,6 +50,18 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
       std::ceil((float)frame_dims.cols / (float)shard_dims.cols);
     shards_per_frame_y_ =
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
+
+    // pare down the number of threads if we have too many
+    while (threads_.size() > shards_per_frame_()) {
+        threads_.pop_back();
+    }
+
+    // spin up threads
+    for (auto& ctx : threads_) {
+        ctx.should_stop = false;
+        ctx.thread =
+          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
+    }
 }
 
 bool
@@ -80,9 +104,9 @@ zarr::ShardWriter::write(const VideoFrame* frame) noexcept
 uint16_t
 zarr::ShardWriter::chunks_per_shard_() const
 {
-    const uint16_t tiles_per_shard_x = shard_dims_.cols / tile_dims_.cols;
-    const uint16_t tiles_per_shard_y = shard_dims_.rows / tile_dims_.rows;
-    return tiles_per_shard_x * tiles_per_shard_y;
+    const uint16_t chunks_per_shard_x = shard_dims_.cols / tile_dims_.cols;
+    const uint16_t chunks_per_shard_y = shard_dims_.rows / tile_dims_.rows;
+    return chunks_per_shard_x * chunks_per_shard_y;
 }
 
 uint16_t

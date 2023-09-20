@@ -83,8 +83,6 @@ main()
     const std::vector<testcase> tests{
 #define CASE(e) { .name = #e, .test = (int (*)())lib_load(&lib, #e) }
 //        CASE(unit_test__average_frame),
-//        CASE(unit_test__chunking_encoder_encode),
-//        CASE(unit_test__sharding_encoder_encode),
         CASE(unit_test__chunk_writer_write),
 #undef CASE
     };

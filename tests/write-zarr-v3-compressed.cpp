@@ -72,9 +72,9 @@ reporter(int is_error,
     } while (0)
 
 const static uint32_t frame_width = 1920;
-const static uint32_t tile_width = 480;
+const static uint32_t tile_width = frame_width / 4;
 const static uint32_t frame_height = 1080;
-const static uint32_t tile_height = 360;
+const static uint32_t tile_height = frame_height / 3;
 const static uint32_t expected_frames_per_chunk = 97;
 const static uint32_t max_frame_count = 200;
 
@@ -225,11 +225,11 @@ validate(AcquireRuntime* runtime)
     f = std::ifstream(metadata_path);
     metadata = json::parse(f);
 
-    auto chunk_grid = metadata["chunk_grid"];
+    const auto chunk_grid = metadata["chunk_grid"];
     CHECK("/" == chunk_grid["separator"]);
     CHECK("regular" == chunk_grid["type"]);
 
-    auto chunk_shape = chunk_grid["chunk_shape"];
+    const auto chunk_shape = chunk_grid["chunk_shape"];
     ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunk_shape[0]);
     ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
     ASSERT_EQ(int, "%d", tile_height, chunk_shape[2]);
@@ -239,13 +239,13 @@ validate(AcquireRuntime* runtime)
     CHECK("<u1" == metadata["data_type"]);
     CHECK(metadata["extensions"].empty());
 
-    auto array_shape = metadata["shape"];
+    const auto array_shape = metadata["shape"];
     ASSERT_EQ(int, "%d", max_frame_count, array_shape[0]);
     ASSERT_EQ(int, "%d", 1, array_shape[1]);
     ASSERT_EQ(int, "%d", frame_height, array_shape[2]);
     ASSERT_EQ(int, "%d", frame_width, array_shape[3]);
 
-    auto compressor = metadata["compressor"];
+    const auto compressor = metadata["compressor"];
     CHECK("https://purl.org/zarr/spec/codec/blosc/1.0" == compressor["codec"]);
 
     auto configuration = compressor["configuration"];
@@ -254,24 +254,26 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(int, "%d", 1, configuration["shuffle"]);
     CHECK("zstd" == configuration["cname"]);
 
+    // sharding
+    const auto storage_transformers = metadata["storage_transformers"];
+    configuration = storage_transformers[0]["configuration"];
+    const auto chunks_per_shard = 12;
+    ASSERT_EQ(
+      int, "%d", chunks_per_shard, configuration["chunks_per_shard"][0]);
+
     // check that each chunked data file is the expected size
     uint32_t bytes_per_chunk =
       chunk_shape[0].get<uint32_t>() * chunk_shape[1].get<uint32_t>() *
       chunk_shape[2].get<uint32_t>() * chunk_shape[3].get<uint32_t>();
     for (auto t = 0; t < std::ceil(max_frame_count / expected_frames_per_chunk);
          ++t) {
-        for (auto y = 0; y < 3; ++y) {
-            for (auto x = 0; x < 4; ++x) {
-                fs::path path = test_path / "data" / "root" / "0" /
-                                ("c" + std::to_string(t)) / "0" /
-                                std::to_string(y) / std::to_string(x);
-                CHECK(fs::is_regular_file(path));
+        fs::path path = test_path / "data" / "root" / "0" /
+                        ("c" + std::to_string(t)) / "0" / "0" / "0";
+        CHECK(fs::is_regular_file(path));
 
-                auto file_size = fs::file_size(path);
-                ASSERT_GT(int, "%d", bytes_per_chunk, file_size);
-                ASSERT_GT(int, "%d", file_size, 0);
-            }
-        }
+        auto file_size = fs::file_size(path);
+        ASSERT_GT(int, "%d", file_size, 0);
+        ASSERT_GT(int, "%d", chunks_per_shard * bytes_per_chunk, file_size);
     }
 }
 

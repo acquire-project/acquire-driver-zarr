@@ -306,18 +306,28 @@ zarr::Czar::start()
 int
 zarr::Czar::stop() noexcept
 {
+    int is_ok = 1;
     if (DeviceState_Running == state) {
         state = DeviceState_Armed;
+        is_ok = 0;
+
+        try {
+            write_all_array_metadata_(); // must precede close of chunk file
+            write_group_metadata_();
+
+            for (auto& writer : writers_) {
+                writer->finalize();
+            }
+            writers_.clear();
+            is_ok = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
     }
 
-    write_all_array_metadata_(); // must precede close of chunk file
-    write_group_metadata_();     // write multiscales metadata, if applicable
-
-    for (auto& writer : writers_) {
-        writer->finalize();
-    }
-    writers_.clear();
-    return 1;
+    return is_ok;
 }
 
 size_t

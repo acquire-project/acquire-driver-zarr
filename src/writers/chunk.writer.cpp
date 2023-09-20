@@ -11,6 +11,17 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const std::string& data_root)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root)
 {
+    // pare down the number of threads if we have too many
+    while (threads_.size() > tiles_per_frame_()) {
+        threads_.pop_back();
+    }
+
+    // spin up threads
+    for (auto& ctx : threads_) {
+        ctx.should_stop = false;
+        ctx.thread =
+          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
+    }
 }
 
 zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
@@ -24,6 +35,17 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
            data_root,
            compression_params)
 {
+    // pare down the number of threads if we have too many
+    while (threads_.size() > tiles_per_frame_()) {
+        threads_.pop_back();
+    }
+
+    // spin up threads
+    for (auto& ctx : threads_) {
+        ctx.should_stop = false;
+        ctx.thread =
+          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
+    }
 }
 
 bool
@@ -157,7 +179,6 @@ zarr::ChunkWriter::flush_() noexcept
     }
 
     // reset buffers
-
     const auto bytes_per_chunk =
       tile_dims_.cols * tile_dims_.rows * bytes_of_type * frames_per_chunk_;
     for (auto& buf : chunk_buffers_) {
@@ -193,13 +214,14 @@ zarr::ChunkWriter::make_files_() noexcept
 
 #ifndef NO_UNIT_TESTS
 
-#include <fstream>
-
 #ifdef _WIN32
 #define acquire_export __declspec(dllexport)
 #else
 #define acquire_export
 #endif
+
+#include <fstream>
+#include <iostream>
 
 extern "C" acquire_export int
 unit_test__chunk_writer_write()
@@ -232,7 +254,8 @@ unit_test__chunk_writer_write()
                frame_data.data(),
                frame.bytes_of_frame - sizeof(VideoFrame));
 
-        CHECK(writer.write((VideoFrame*)frame_ptr));
+        for (auto i = 0; i < 100; ++i)
+            CHECK(writer.write((VideoFrame*)frame_ptr));
         delete frame_ptr;
 
         writer.finalize();
@@ -244,40 +267,104 @@ unit_test__chunk_writer_write()
         std::ifstream fh(data_dir / "0" / "0" / "0" / "0", std::ios::binary);
         fh.read((char*)buf.data(), buf.size() * 2);
         for (auto i = 0; i < 8; ++i) {
-            CHECK(buf.at(i) == i);
-            CHECK(buf.at(i + 8) == i + 16);
-            CHECK(buf.at(i + 16) == i + 32);
-            CHECK(buf.at(i + 24) == i + 48);
+            EXPECT(buf.at(i) == i,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i,
+                   i,
+                   buf.at(i));
+            EXPECT(buf.at(i + 8) == i + 16,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 8,
+                   i + 16,
+                   buf.at(i + 8));
+            EXPECT(buf.at(i + 16) == i + 32,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 16,
+                   i + 32,
+                   buf.at(i + 16));
+            EXPECT(buf.at(i + 24) == i + 48,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 24,
+                   i + 48,
+                   buf.at(i + 24));
         }
 
         CHECK(fs::is_regular_file(data_dir / "0" / "0" / "0" / "1"));
         fh = std::ifstream(data_dir / "0" / "0" / "0" / "1", std::ios::binary);
         fh.read((char*)buf.data(), buf.size() * 2);
         for (auto i = 0; i < 8; ++i) {
-            CHECK(buf.at(i) == i + 8);
-            CHECK(buf.at(i + 8) == i + 24);
-            CHECK(buf.at(i + 16) == i + 40);
-            CHECK(buf.at(i + 24) == i + 56);
+            EXPECT(buf.at(i) == i + 8,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i,
+                   i + 8,
+                   buf.at(i));
+            EXPECT(buf.at(i + 8) == i + 24,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 8,
+                   i + 24,
+                   buf.at(i + 8));
+            EXPECT(buf.at(i + 16) == i + 40,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 16,
+                   i + 40,
+                   buf.at(i + 16));
+            EXPECT(buf.at(i + 24) == i + 56,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 24,
+                   i + 56,
+                   buf.at(i + 24));
         }
 
         CHECK(fs::is_regular_file(data_dir / "0" / "0" / "1" / "0"));
         fh = std::ifstream(data_dir / "0" / "0" / "1" / "0", std::ios::binary);
         fh.read((char*)buf.data(), buf.size() * 2);
         for (auto i = 0; i < 8; ++i) {
-            CHECK(buf.at(i) == i + 128);
-            CHECK(buf.at(i + 8) == i + 144);
-            CHECK(buf.at(i + 16) == i + 160);
-            CHECK(buf.at(i + 24) == i + 176);
+            EXPECT(buf.at(i) == i + 128,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i,
+                   i + 128,
+                   buf.at(i));
+            EXPECT(buf.at(i + 8) == i + 144,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 8,
+                   i + 144,
+                   buf.at(i + 8));
+            EXPECT(buf.at(i + 16) == i + 160,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 16,
+                   i + 160,
+                   buf.at(i + 16));
+            EXPECT(buf.at(i + 24) == i + 176,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 24,
+                   i + 176,
+                   buf.at(i + 24));
         }
 
         CHECK(fs::is_regular_file(data_dir / "0" / "0" / "1" / "1"));
         fh = std::ifstream(data_dir / "0" / "0" / "1" / "1", std::ios::binary);
         fh.read((char*)buf.data(), buf.size() * 2);
         for (auto i = 0; i < 8; ++i) {
-            CHECK(buf.at(i) == i + 136);
-            CHECK(buf.at(i + 8) == i + 152);
-            CHECK(buf.at(i + 16) == i + 168);
-            CHECK(buf.at(i + 24) == i + 184);
+            EXPECT(buf.at(i) == i + 136,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i,
+                   i + 136,
+                   buf.at(i));
+            EXPECT(buf.at(i + 8) == i + 152,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 8,
+                   i + 152,
+                   buf.at(i + 8));
+            EXPECT(buf.at(i + 16) == i + 168,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 16,
+                   i + 168,
+                   buf.at(i + 16));
+            EXPECT(buf.at(i + 24) == i + 184,
+                   "Expected buf.at(%d) == %d, but actually %d",
+                   i + 24,
+                   i + 184,
+                   buf.at(i + 24));
         }
 
         fh.close();
@@ -291,6 +378,8 @@ unit_test__chunk_writer_write()
 
         return 1;
     } catch (const std::exception& e) {
+        const std::string err_msg{ e.what() };
+        std::cout << err_msg << std::endl;
         LOGE("Error: %s", e.what());
     } catch (...) {
         LOGE("Unknown error");
