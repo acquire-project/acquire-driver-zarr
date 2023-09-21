@@ -1,8 +1,6 @@
 #include "shard.writer.hh"
 #include "writer.hh"
 
-#include "crc32c.h"
-
 #include <stdexcept>
 
 namespace zarr = acquire::sink::zarr;
@@ -132,9 +130,8 @@ zarr::ShardWriter::make_buffers_() noexcept
 
     shard_buffers_.resize(shards_per_frame_());
     for (auto& buf : shard_buffers_) {
-        buf.resize(chunks_per_shard_() * bytes_per_tile // data
-                   + 2 * chunks_per_shard_() * 8 // uint64 offsets + extents
-//                   + 4 /* crc32c checksum */);
+        buf.resize(chunks_per_shard_() * bytes_per_tile         // data
+                   + 2 * chunks_per_shard_() * sizeof(uint64_t) // indices
         );
     }
 }
@@ -238,11 +235,6 @@ zarr::ShardWriter::flush_() noexcept
                chunk_indices.data(),
                chunk_indices.size() * 8);
         offset += chunk_indices.size() * 8;
-        uint32_t checksum = crc32c::Crc32c((uint8_t*)chunk_indices.data(),
-                                           chunk_indices.size() * 8);
-//        memcpy(shard.data() + offset, &checksum, 4);
-
-//        shard_sizes.push_back(offset + 4);
         shard_sizes.push_back(offset);
     }
 

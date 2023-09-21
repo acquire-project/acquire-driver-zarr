@@ -38,7 +38,6 @@ add_library(${tgt} MODULE
 #        zarr.blosc.hh
 #        zarr.blosc.cpp
         zarr.driver.c
-        3rdParty/crc32c/inc/crc32c.h
 )
 target_enable_simd(${tgt})
 target_link_libraries(${tgt} PRIVATE
@@ -47,7 +46,6 @@ target_link_libraries(${tgt} PRIVATE
         acquire-device-kit
         acquire-device-properties
         cblosc
-        crc32c
         json
 )
 set_target_properties(${tgt} PROPERTIES
