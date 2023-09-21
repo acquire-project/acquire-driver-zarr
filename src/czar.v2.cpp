@@ -51,28 +51,26 @@ zarr::CzarV2::get_meta(StoragePropertyMetadata* meta) const
 void
 zarr::CzarV2::allocate_writers_()
 {
-    ImageDims& image_shape = image_tile_shapes_.at(0).first;
-    ImageDims& tile_shape = image_tile_shapes_.at(0).second;
-
-    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape, pixel_type_);
-
     writers_.clear();
-    if (compression_params_.has_value()) {
-        writers_.push_back(std::make_shared<ChunkWriter>(
-          image_shape,
-          tile_shape,
-          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-          (get_data_directory_() / "0").string(),
-          compression_params_.value()));
-    } else {
-        writers_.push_back(std::make_shared<ChunkWriter>(
-          image_shape,
-          tile_shape,
-          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-          (get_data_directory_() / "0").string()));
-    }
-
-    if (enable_multiscale_) {
+    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
+        const auto& image_shape = image_tile_shapes_.at(i).first;
+        const auto& tile_shape = image_tile_shapes_.at(i).second;
+        uint64_t bytes_per_tile =
+          common::bytes_per_tile(tile_shape, pixel_type_);
+        if (compression_params_.has_value()) {
+            writers_.push_back(std::make_shared<ChunkWriter>(
+              image_shape,
+              tile_shape,
+              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              (get_data_directory_() / std::to_string(i)).string(),
+              compression_params_.value()));
+        } else {
+            writers_.push_back(std::make_shared<ChunkWriter>(
+              image_shape,
+              tile_shape,
+              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              (get_data_directory_() / std::to_string(i)).string()));
+        }
     }
 }
 
@@ -182,55 +180,55 @@ zarr::CzarV2::write_group_metadata_() const
     };
 
     // spatial multiscale metadata
-    //    if (writers_.empty() || !frame_scaler_.has_value()) {
-    zgroup_attrs["multiscales"][0]["datasets"] = {
-        {
-          { "path", "0" },
-          { "coordinateTransformations",
+    if (writers_.empty()) {
+        zgroup_attrs["multiscales"][0]["datasets"] = {
             {
-              {
-                { "type", "scale" },
-                { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
-              },
-            } },
-        },
-    };
-    //    } else {
-    //        for (auto i = 0; i < writers_.size(); ++i) {
-    //            zgroup_attrs["multiscales"][0]["datasets"].push_back({
-    //              { "path", std::to_string(i) },
-    //              { "coordinateTransformations",
-    //                {
-    //                  {
-    //                    { "type", "scale" },
-    //                    {
-    //                      "scale",
-    //                      {
-    //                        std::pow(2, i), // t
-    //                                        // TODO (aliddell): c?
-    //                        1,              // z
-    //                        std::pow(2, i) * pixel_scale_um_.y, // y
-    //                        std::pow(2, i) * pixel_scale_um_.x  // x
-    //                      },
-    //                    },
-    //                  },
-    //                } },
-    //            });
-    //        }
-    //
-    //        // downsampling metadata
-    //        zgroup_attrs["multiscales"][0]["type"] = "local_mean";
-    //        zgroup_attrs["multiscales"][0]["metadata"] = {
-    //            { "description",
-    //              "The fields in the metadata describe how to reproduce this "
-    //              "multiscaling in scikit-image. The method and its parameters
-    //              are " "given here." },
-    //            { "method", "skimage.transform.downscale_local_mean" },
-    //            { "version", "0.21.0" },
-    //            { "args", "[2]" },
-    //            { "kwargs", { "cval", 0 } },
-    //        };
-    //    }
+              { "path", "0" },
+              { "coordinateTransformations",
+                {
+                  {
+                    { "type", "scale" },
+                    { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
+                  },
+                } },
+            },
+        };
+    } else {
+        for (auto i = 0; i < writers_.size(); ++i) {
+            zgroup_attrs["multiscales"][0]["datasets"].push_back({
+              { "path", std::to_string(i) },
+              { "coordinateTransformations",
+                {
+                  {
+                    { "type", "scale" },
+                    {
+                      "scale",
+                      {
+                        std::pow(2, i), // t
+                                        // TODO (aliddell): c?
+                        1,              // z
+                        std::pow(2, i) * pixel_scale_um_.y, // y
+                        std::pow(2, i) * pixel_scale_um_.x  // x
+                      },
+                    },
+                  },
+                } },
+            });
+        }
+
+        // downsampling metadata
+        zgroup_attrs["multiscales"][0]["type"] = "local_mean";
+        zgroup_attrs["multiscales"][0]["metadata"] = {
+            { "description",
+              "The fields in the metadata describe how to reproduce this "
+              "multiscaling in scikit-image. The method and its parameters are "
+              "given here." },
+            { "method", "skimage.transform.downscale_local_mean" },
+            { "version", "0.21.0" },
+            { "args", "[2]" },
+            { "kwargs", { "cval", 0 } },
+        };
+    }
 
     std::string zattrs_path = (dataset_root_ / ".zattrs").string();
     common::write_string(zattrs_path, zgroup_attrs.dump(4));

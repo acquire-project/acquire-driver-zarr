@@ -196,7 +196,7 @@ zarr::CzarV3::write_array_metadata_(size_t level,
     }
 
     // sharding storage transformer
-    // TODO (aliddell): keep an eye on ZEP 2 and update this when finalized
+    // TODO (aliddell): https://github.com/zarr-developers/zarr-python/issues/877
     metadata["storage_transformers"] = json::array();
     metadata["storage_transformers"][0] = json::object({
       { "type", "indexed" },

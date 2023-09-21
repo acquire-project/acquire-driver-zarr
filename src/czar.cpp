@@ -215,6 +215,99 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
         LOGE("Exception: (unknown)");
     }
 }
+
+void
+make_scaling_parameters(
+  std::vector<std::pair<zarr::ImageDims, zarr::ImageDims>>& shapes)
+{
+    CHECK(shapes.size() == 1);
+    const auto& base_image_shape = shapes.at(0).first;
+    const auto& base_tile_shape = shapes.at(0).second;
+
+    const int downscale = 2;
+
+    uint32_t w = base_image_shape.cols;
+    uint32_t h = base_image_shape.rows;
+
+    while (w > base_tile_shape.cols || h > base_tile_shape.rows) {
+        w = (w + (w % downscale)) / downscale;
+        h = (h + (h % downscale)) / downscale;
+
+        zarr::ImageDims im_shape = base_image_shape;
+        im_shape.cols = w;
+        im_shape.rows = h;
+
+        zarr::ImageDims tile_shape = base_tile_shape;
+        if (tile_shape.cols > w)
+            tile_shape.cols = w;
+
+        if (tile_shape.rows > h)
+            tile_shape.rows = h;
+
+        shapes.emplace_back(im_shape, tile_shape);
+    }
+}
+
+template<typename T>
+VideoFrame*
+scale_image(const VideoFrame* src)
+{
+    CHECK(src);
+    const int downscale = 2;
+    constexpr size_t bytes_of_type = sizeof(T);
+    const auto factor = 0.25f;
+
+    const auto width = src->shape.dims.width;
+    const auto w_pad = width + (width % downscale);
+
+    const auto height = src->shape.dims.height;
+    const auto h_pad = height + (height % downscale);
+
+    auto* dst = (VideoFrame*)malloc(sizeof(VideoFrame) +
+                                    w_pad * h_pad * factor * sizeof(T));
+    memcpy(dst, src, sizeof(VideoFrame));
+
+    dst->shape.dims.width = w_pad / downscale;
+    dst->shape.dims.height = h_pad / downscale;
+    dst->shape.strides.height =
+      dst->shape.strides.width * dst->shape.dims.width;
+    dst->shape.strides.planes =
+      dst->shape.strides.height * dst->shape.dims.height;
+
+    dst->bytes_of_frame =
+      dst->shape.dims.planes * dst->shape.strides.planes * sizeof(T) +
+      sizeof(*dst);
+
+    const auto* src_img = (T*)src->data;
+    auto* dst_img = (T*)dst->data;
+    std::fill(dst_img, dst_img + dst->bytes_of_frame - sizeof(*dst), 0);
+
+    size_t dst_idx = 0;
+    for (auto row = 0; row < height; row += downscale) {
+        const bool pad_height = (row == height - 1 && height != h_pad);
+
+        for (auto col = 0; col < width; col += downscale) {
+            const bool pad_width = (col == width - 1 && width != w_pad);
+
+            size_t idx = row * width + col;
+            dst_img[dst_idx++] =
+              (T)(factor *
+                  ((float)src_img[idx] +
+                   (float)src_img[idx + (1 - (int)pad_width)] +
+                   (float)src_img[idx + width * (1 - (int)pad_height)] +
+                   (float)src_img[idx + width * (1 - (int)pad_height) +
+                                  (1 - (int)pad_width)]));
+        }
+    }
+
+    return dst;
+}
+
+template<typename T>
+void
+average_two_frames(VideoFrame* dst, VideoFrame* src)
+{
+}
 } // end ::{anonymous} namespace
 
 /// StorageInterface
@@ -262,7 +355,9 @@ zarr::Czar::set(const StorageProperties* props)
     set_chunking(props->chunking, meta.chunking);
 
     if (props->enable_multiscale && !meta.multiscale.supported) {
-        LOGE("OME-Zarr multiscale not yet supported by this version of Zarr.");
+        // TODO (aliddell): https://github.com/ome/ngff/pull/206
+        LOGE("OME-Zarr multiscale not yet supported in Zarr v3. "
+             "Multiscale arrays will not be written.");
     }
     enable_multiscale_ = meta.multiscale.supported && props->enable_multiscale;
 }
@@ -347,9 +442,37 @@ zarr::Czar::append(const VideoFrame* frames, size_t nbytes)
     };
 
     for (cur = frames; cur < end; cur = next()) {
-        for (auto& writer : writers_) {
-            CHECK(writer->write(cur));
+        //        for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
+        VideoFrame* dst;
+        switch (cur->shape.type) {
+            case SampleType_u10:
+            case SampleType_u12:
+            case SampleType_u14:
+            case SampleType_u16:
+                dst = scale_image<uint16_t>(cur);
+                break;
+            case SampleType_i8:
+                dst = scale_image<int8_t>(cur);
+                break;
+            case SampleType_i16:
+                dst = scale_image<int16_t>(cur);
+                break;
+            case SampleType_f32:
+                dst = scale_image<float>(cur);
+                break;
+            case SampleType_u8:
+                dst = scale_image<uint8_t>(cur);
+                break;
+            default:
+                LOGE("Unsupported pixel type: %s",
+                     common::sample_type_to_string(cur->shape.type));
+                throw std::runtime_error("Unsupported pixel type.");
         }
+        //        }
+        //        for (auto& writer : writers_) {
+        //            CHECK(writer->write(cur));
+        //        }
+        CHECK(writers_.at(0)->write(cur));
     }
     return nbytes;
 }
@@ -407,6 +530,10 @@ zarr::Czar::reserve_image_shape(const ImageShape* shape)
              max_bytes_per_chunk_,
              bytes_per_tile);
         max_bytes_per_chunk_ = bytes_per_tile;
+    }
+
+    if (enable_multiscale_) {
+        make_scaling_parameters(image_tile_shapes_);
     }
 
     allocate_writers_();
