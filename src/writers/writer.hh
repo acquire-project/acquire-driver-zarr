@@ -21,6 +21,8 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
+struct Zarr;
+
 struct Writer
 {
   public:
@@ -32,25 +34,19 @@ struct Writer
         bool should_stop;
     };
 
-    struct JobContext
-    {
-        uint8_t* buf;
-        size_t buf_size;
-        file* fh;
-        uint64_t offset;
-    };
-
     Writer() = delete;
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
-           const std::string& data_root);
+           const std::string& data_root,
+           const Zarr* zarr);
 
     /// Constructor with Blosc compression params
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root,
+           const Zarr* zarr,
            const BloscCompressionParams& compression_params);
     virtual ~Writer();
 
@@ -88,6 +84,7 @@ struct Writer
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
     uint32_t current_chunk_;
+    const Zarr* zarr_;
 
     std::optional<JobT> pop_from_job_queue() noexcept;
     void worker_thread_(ThreadContext* ctx) noexcept;

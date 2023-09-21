@@ -27,13 +27,15 @@ struct ChunkWriter final : public Writer
     ChunkWriter(const ImageDims& frame_dims,
                 const ImageDims& tile_dims,
                 uint32_t frames_per_chunk,
-                const std::string& data_root);
+                const std::string& data_root,
+                const Zarr* zarr);
 
     /// Constructor with Blosc compression params
     ChunkWriter(const ImageDims& frame_dims,
                 const ImageDims& tile_dims,
                 uint32_t frames_per_chunk,
                 const std::string& data_root,
+                const Zarr* zarr,
                 const BloscCompressionParams& compression_params);
     ~ChunkWriter() override = default;
 

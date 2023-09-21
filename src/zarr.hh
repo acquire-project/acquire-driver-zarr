@@ -78,6 +78,8 @@ struct Zarr : StorageInterface
     /// changes on append
     // scaled frames, keyed by level-of-detail
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
+    mutable bool error_;
+    mutable std::string error_msg_;
 
     /// Setup
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
@@ -95,6 +97,8 @@ struct Zarr : StorageInterface
 
     /// Multiscale
     void write_multiscale_frames_(const VideoFrame* frame);
+
+    friend struct Writer;
 };
 
 } // namespace acquire::sink::zarr

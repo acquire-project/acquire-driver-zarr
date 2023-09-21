@@ -28,7 +28,8 @@ struct ShardWriter final : public Writer
                 const ImageDims& shard_dims,
                 const ImageDims& tile_dims,
                 uint32_t frames_per_chunk,
-                const std::string& data_root);
+                const std::string& data_root,
+                const Zarr* zarr);
 
     /// Constructor with Blosc compression params
     ShardWriter(const ImageDims& frame_dims,
@@ -36,6 +37,7 @@ struct ShardWriter final : public Writer
                 const ImageDims& tile_dims,
                 uint32_t frames_per_chunk,
                 const std::string& data_root,
+                const Zarr* zarr,
                 const BloscCompressionParams& compression_params);
     ~ShardWriter() override = default;
 

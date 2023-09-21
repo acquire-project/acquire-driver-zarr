@@ -107,6 +107,7 @@ zarr::ZarrV3::allocate_writers_()
           tile_dims,
           (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
           (get_data_directory_() / "0").string(),
+          this,
           compression_params_.value()));
     } else {
         writers_.push_back(std::make_shared<ShardWriter>(
@@ -114,7 +115,8 @@ zarr::ZarrV3::allocate_writers_()
           shard_dims_,
           tile_dims,
           (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-          (get_data_directory_() / "0").string()));
+          (get_data_directory_() / "0").string(),
+          this));
     }
 }
 

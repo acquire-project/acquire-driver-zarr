@@ -1,5 +1,6 @@
 #include <stdexcept>
 #include "writer.hh"
+#include "../zarr.hh"
 
 #include <cmath>
 #include <functional>
@@ -9,7 +10,8 @@ namespace zarr = acquire::sink::zarr;
 zarr::Writer::Writer(const ImageDims& frame_dims,
                      const ImageDims& tile_dims,
                      uint32_t frames_per_chunk,
-                     const std::string& data_root)
+                     const std::string& data_root,
+                     const Zarr* zarr)
   : frame_dims_{ frame_dims }
   , tile_dims_{ tile_dims }
   , data_root_{ data_root }
@@ -19,6 +21,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , current_chunk_{ 0 }
   , threads_(std::thread::hardware_concurrency())
   , pixel_type_{ SampleTypeCount }
+  , zarr_{ zarr }
 {
     CHECK(tile_dims_.cols > 0);
     CHECK(tile_dims_.rows > 0);
@@ -46,8 +49,9 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
                      const ImageDims& tile_dims,
                      uint32_t frames_per_chunk,
                      const std::string& data_root,
+                     const Zarr* zarr,
                      const BloscCompressionParams& compression_params)
-  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root)
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
 {
     blosc_compression_params_ = compression_params;
 }
@@ -236,7 +240,8 @@ zarr::Writer::worker_thread_(ThreadContext* ctx) noexcept
 
         if (auto job = pop_from_job_queue(); job.has_value()) {
             if (!job.value()()) {
-                LOGE("Job failed.");
+                zarr_->error_ = true;
+                zarr_->error_msg_ = "Job failed";
             }
             lock.unlock();
         } else {

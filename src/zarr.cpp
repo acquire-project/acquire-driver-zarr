@@ -400,6 +400,8 @@ zarr::Zarr::start()
     write_group_metadata_();
     write_all_array_metadata_();
     write_external_metadata_();
+
+    error_ = false;
 }
 
 int
@@ -433,6 +435,8 @@ zarr::Zarr::stop() noexcept
 size_t
 zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 {
+    EXPECT(!error_, "%s", error_msg_.c_str());
+
     if (0 == nbytes) {
         return nbytes;
     }

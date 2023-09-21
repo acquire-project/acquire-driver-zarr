@@ -9,8 +9,9 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
                                const ImageDims& shard_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
-                               const std::string& data_root)
-  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root)
+                               const std::string& data_root,
+                               const Zarr* zarr)
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
   , shard_dims_{ shard_dims }
 {
     shards_per_frame_x_ =
@@ -36,11 +37,13 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
+                               const Zarr* zarr,
                                const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
            frames_per_chunk,
            data_root,
+           zarr,
            compression_params)
   , shard_dims_{ shard_dims }
 {

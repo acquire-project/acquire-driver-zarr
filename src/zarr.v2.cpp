@@ -63,13 +63,15 @@ zarr::ZarrV2::allocate_writers_()
               tile_shape,
               (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
               (get_data_directory_() / std::to_string(i)).string(),
+              this,
               compression_params_.value()));
         } else {
             writers_.push_back(std::make_shared<ChunkWriter>(
               image_shape,
               tile_shape,
               (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-              (get_data_directory_() / std::to_string(i)).string()));
+              (get_data_directory_() / std::to_string(i)).string(),
+              this));
         }
     }
 }

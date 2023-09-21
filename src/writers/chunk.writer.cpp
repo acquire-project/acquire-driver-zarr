@@ -8,8 +8,9 @@ namespace zarr = acquire::sink::zarr;
 zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
-                               const std::string& data_root)
-  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root)
+                               const std::string& data_root,
+                               const Zarr* zarr)
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
 {
     // pare down the number of threads if we have too many
     while (threads_.size() > tiles_per_frame_()) {
@@ -28,11 +29,13 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
+                               const Zarr* zarr,
                                const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
            frames_per_chunk,
            data_root,
+           zarr,
            compression_params)
 {
     // pare down the number of threads if we have too many
