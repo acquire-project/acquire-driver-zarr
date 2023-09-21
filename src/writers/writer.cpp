@@ -147,9 +147,7 @@ zarr::Writer::compress_buffers_() noexcept
     TRACE("Compressing");
 
     const auto bytes_of_type = common::bytes_of_type(pixel_type_);
-    const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
-    std::vector<uint8_t> tmp(bytes_per_tile + BLOSC_MAX_OVERHEAD);
+    std::vector<uint8_t> tmp(bytes_per_chunk + BLOSC_MAX_OVERHEAD);
 
     std::scoped_lock lock(mutex_);
     for (auto& buf : chunk_buffers_) {

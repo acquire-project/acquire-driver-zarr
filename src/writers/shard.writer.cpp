@@ -210,7 +210,7 @@ zarr::ShardWriter::flush_() noexcept
         size_t shard_size = 0;
         std::vector<uint64_t> chunk_indices;
 
-        const size_t index_size = 2 * chunks_per_shard * 8 + 4;
+        const size_t index_size = 2 * chunks_per_shard * sizeof(uint64_t);
 
         for (auto j = 0; j < chunks_per_shard; ++j) {
             chunk_indices.push_back(shard_size); // chunk index
