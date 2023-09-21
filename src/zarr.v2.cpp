@@ -57,14 +57,14 @@ zarr::ZarrV2::allocate_writers_()
         const auto& tile_shape = image_tile_shapes_.at(i).second;
         uint64_t bytes_per_tile =
           common::bytes_per_tile(tile_shape, pixel_type_);
-        if (compression_params_.has_value()) {
+        if (blosc_compression_params_.has_value()) {
             writers_.push_back(std::make_shared<ChunkWriter>(
               image_shape,
               tile_shape,
               (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
               (get_data_directory_() / std::to_string(i)).string(),
               this,
-              compression_params_.value()));
+              blosc_compression_params_.value()));
         } else {
             writers_.push_back(std::make_shared<ChunkWriter>(
               image_shape,
@@ -120,8 +120,8 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
         { "dimension_separator", "/" },
     };
 
-    if (compression_params_.has_value()) {
-        zarray_attrs["compressor"] = compression_params_.value();
+    if (blosc_compression_params_.has_value()) {
+        zarray_attrs["compressor"] = blosc_compression_params_.value();
     } else {
         zarray_attrs["compressor"] = nullptr;
     }

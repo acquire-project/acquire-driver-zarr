@@ -100,7 +100,7 @@ zarr::ZarrV3::allocate_writers_()
     uint64_t bytes_per_tile = common::bytes_per_tile(tile_dims, pixel_type_);
 
     writers_.clear();
-    if (compression_params_.has_value()) {
+    if (blosc_compression_params_.has_value()) {
         writers_.push_back(std::make_shared<ShardWriter>(
           frame_dims,
           shard_dims_,
@@ -108,7 +108,7 @@ zarr::ZarrV3::allocate_writers_()
           (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
           (get_data_directory_() / "0").string(),
           this,
-          compression_params_.value()));
+          blosc_compression_params_.value()));
     } else {
         writers_.push_back(std::make_shared<ShardWriter>(
           frame_dims,
@@ -184,8 +184,8 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
       image_dims.cols, // x
     });
 
-    if (compression_params_.has_value()) {
-        auto params = compression_params_.value();
+    if (blosc_compression_params_.has_value()) {
+        auto params = blosc_compression_params_.value();
         metadata["compressor"] = json::object({
           { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
           { "configuration",

@@ -530,7 +530,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 
 zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 {
-    compression_params_ = std::move(compression_params);
+    blosc_compression_params_ = std::move(compression_params);
 }
 
 void

@@ -61,7 +61,7 @@ struct Zarr : StorageInterface
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
 
     /// static - set on construction
-    std::optional<BloscCompressionParams> compression_params_;
+    std::optional<BloscCompressionParams> blosc_compression_params_;
 
     /// changes on set
     fs::path dataset_root_;
