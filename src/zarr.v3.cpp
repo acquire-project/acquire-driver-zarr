@@ -1,4 +1,4 @@
-#include "czar.v3.hh"
+#include "zarr.v3.hh"
 #include "writers/shard.writer.hh"
 
 #include "json.hpp"
@@ -15,7 +15,7 @@ compressed_zarr_v3_init()
     try {
         zarr::BloscCompressionParams params(
           zarr::compression_codec_as_string<CodecId>(), 1, 1);
-        return new zarr::CzarV3(std::move(params));
+        return new zarr::ZarrV3(std::move(params));
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
     } catch (...) {
@@ -84,14 +84,14 @@ make_shard_dims(const zarr::ImageDims& frame_dims,
 }
 } // end ::{anonymous} namespace
 
-zarr::CzarV3::CzarV3(BloscCompressionParams&& compression_params)
-  : Czar(std::move(compression_params))
+zarr::ZarrV3::ZarrV3(BloscCompressionParams&& compression_params)
+  : Zarr(std::move(compression_params))
   , shard_dims_{}
 {
 }
 
 void
-zarr::CzarV3::allocate_writers_()
+zarr::ZarrV3::allocate_writers_()
 {
     const ImageDims& frame_dims = image_tile_shapes_.at(0).first;
     const ImageDims& tile_dims = image_tile_shapes_.at(0).second;
@@ -119,7 +119,7 @@ zarr::CzarV3::allocate_writers_()
 }
 
 void
-zarr::CzarV3::get_meta(StoragePropertyMetadata* meta) const
+zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
 {
     CHECK(meta);
     *meta = {
@@ -138,9 +138,7 @@ zarr::CzarV3::get_meta(StoragePropertyMetadata* meta) const
 }
 
 void
-zarr::CzarV3::write_array_metadata_(size_t level,
-                                    const ImageDims& image_shape,
-                                    const ImageDims& tile_shape) const
+zarr::ZarrV3::write_array_metadata_(size_t level) const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -149,11 +147,14 @@ zarr::CzarV3::write_array_metadata_(size_t level,
         return;
     }
 
+    const ImageDims& image_dims = image_tile_shapes_.at(level).first;
+    const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
+
     const uint64_t frame_count = writers_.at(level)->frames_written();
     const auto frames_per_chunk =
       std::min(frame_count,
                (uint64_t)common::frames_per_chunk(
-                 tile_shape, pixel_type_, max_bytes_per_chunk_));
+                 tile_dims, pixel_type_, max_bytes_per_chunk_));
 
     json metadata;
     metadata["attributes"] = json::object();
@@ -163,8 +164,8 @@ zarr::CzarV3::write_array_metadata_(size_t level,
           frames_per_chunk, // t
                             // TODO (aliddell): c?
           1,                // z
-          tile_shape.rows,  // y
-          tile_shape.cols,  // x
+          tile_dims.rows,   // y
+          tile_dims.cols,   // x
         }) },
       { "separator", "/" },
       { "type", "regular" },
@@ -174,11 +175,11 @@ zarr::CzarV3::write_array_metadata_(size_t level,
     metadata["extensions"] = json::array();
     metadata["fill_value"] = 0;
     metadata["shape"] = json::array({
-      frame_count,      // t
-                        // TODO (aliddell): c?
-      1,                // z
-      image_shape.rows, // y
-      image_shape.cols, // x
+      frame_count,     // t
+                       // TODO (aliddell): c?
+      1,               // z
+      image_dims.rows, // y
+      image_dims.cols, // x
     });
 
     if (compression_params_.has_value()) {
@@ -196,7 +197,8 @@ zarr::CzarV3::write_array_metadata_(size_t level,
     }
 
     // sharding storage transformer
-    // TODO (aliddell): https://github.com/zarr-developers/zarr-python/issues/877
+    // TODO (aliddell):
+    // https://github.com/zarr-developers/zarr-python/issues/877
     metadata["storage_transformers"] = json::array();
     metadata["storage_transformers"][0] = json::object({
       { "type", "indexed" },
@@ -206,11 +208,11 @@ zarr::CzarV3::write_array_metadata_(size_t level,
         json::object({
           { "chunks_per_shard",
             json::array({
-              1,                                  // t
-                                                  // TODO (aliddell): c?
-              1,                                  // z
-              shard_dims_.rows / tile_shape.rows, // y
-              shard_dims_.cols / tile_shape.cols, // x
+              1,                                 // t
+                                                 // TODO (aliddell): c?
+              1,                                 // z
+              shard_dims_.rows / tile_dims.rows, // y
+              shard_dims_.cols / tile_dims.cols, // x
             }) },
         }) },
     });
@@ -225,14 +227,14 @@ zarr::CzarV3::write_array_metadata_(size_t level,
 /// @details This is a no-op for CzarV3. Instead, external metadata is
 /// stored in the group metadata.
 void
-zarr::CzarV3::write_external_metadata_() const
+zarr::ZarrV3::write_external_metadata_() const
 {
     // no-op
 }
 
 /// @brief Write the metadata for the dataset.
 void
-zarr::CzarV3::write_base_metadata_() const
+zarr::ZarrV3::write_base_metadata_() const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -252,7 +254,7 @@ zarr::CzarV3::write_base_metadata_() const
 /// @details Zarr v3 stores group metadata in
 /// /meta/{group_name}.group.json. We will call the group "root".
 void
-zarr::CzarV3::write_group_metadata_() const
+zarr::ZarrV3::write_group_metadata_() const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -265,7 +267,7 @@ zarr::CzarV3::write_group_metadata_() const
 }
 
 fs::path
-zarr::CzarV3::get_data_directory_() const
+zarr::ZarrV3::get_data_directory_() const
 {
     return dataset_root_ / "data" / "root";
 }
@@ -275,7 +277,7 @@ extern "C"
     struct Storage* zarr_v3_init()
     {
         try {
-            return new zarr::CzarV3();
+            return new zarr::ZarrV3();
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
         } catch (...) {

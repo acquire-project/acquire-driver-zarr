@@ -1,4 +1,4 @@
-#include "czar.v2.hh"
+#include "zarr.v2.hh"
 #include "writers/chunk.writer.hh"
 
 #include "json.hpp"
@@ -13,7 +13,7 @@ compressed_zarr_v2_init()
     try {
         zarr::BloscCompressionParams params(
           zarr::compression_codec_as_string<CodecId>(), 1, 1);
-        return new zarr::CzarV2(std::move(params));
+        return new zarr::ZarrV2(std::move(params));
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
     } catch (...) {
@@ -24,13 +24,13 @@ compressed_zarr_v2_init()
 } // end ::{anonymous} namespace
 
 /// CzarV2
-zarr::CzarV2::CzarV2(BloscCompressionParams&& compression_params)
-  : Czar(std::move(compression_params))
+zarr::ZarrV2::ZarrV2(BloscCompressionParams&& compression_params)
+  : Zarr(std::move(compression_params))
 {
 }
 
 void
-zarr::CzarV2::get_meta(StoragePropertyMetadata* meta) const
+zarr::ZarrV2::get_meta(StoragePropertyMetadata* meta) const
 {
     CHECK(meta);
     *meta = {
@@ -49,7 +49,7 @@ zarr::CzarV2::get_meta(StoragePropertyMetadata* meta) const
 }
 
 void
-zarr::CzarV2::allocate_writers_()
+zarr::ZarrV2::allocate_writers_()
 {
     writers_.clear();
     for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
@@ -75,9 +75,7 @@ zarr::CzarV2::allocate_writers_()
 }
 
 void
-zarr::CzarV2::write_array_metadata_(size_t level,
-                                    const ImageDims& image_shape,
-                                    const ImageDims& tile_shape) const
+zarr::ZarrV2::write_array_metadata_(size_t level) const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -86,29 +84,32 @@ zarr::CzarV2::write_array_metadata_(size_t level,
         return;
     }
 
+    const ImageDims& image_dims = image_tile_shapes_.at(level).first;
+    const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
+
     const auto frame_count = (uint64_t)writers_.at(level)->frames_written();
     const auto frames_per_chunk =
       std::min(frame_count,
                (uint64_t)common::frames_per_chunk(
-                 tile_shape, pixel_type_, max_bytes_per_chunk_));
+                 tile_dims, pixel_type_, max_bytes_per_chunk_));
 
     json zarray_attrs = {
         { "zarr_format", 2 },
         { "shape",
           {
-            frame_count,      // t
-                              // TODO (aliddell): c?
-            1,                // z
-            image_shape.rows, // y
-            image_shape.cols, // x
+            frame_count,     // t
+                             // TODO (aliddell): c?
+            1,               // z
+            image_dims.rows, // y
+            image_dims.cols, // x
           } },
         { "chunks",
           {
             frames_per_chunk, // t
                               // TODO (aliddell): c?
             1,                // z
-            tile_shape.rows,  // y
-            tile_shape.cols,  // x
+            tile_dims.rows,   // y
+            tile_dims.cols,   // x
           } },
         { "dtype", common::sample_type_to_dtype(pixel_type_) },
         { "fill_value", 0 },
@@ -129,7 +130,7 @@ zarr::CzarV2::write_array_metadata_(size_t level,
 }
 
 void
-zarr::CzarV2::write_external_metadata_() const
+zarr::ZarrV2::write_external_metadata_() const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -139,7 +140,7 @@ zarr::CzarV2::write_external_metadata_() const
 }
 
 void
-zarr::CzarV2::write_base_metadata_() const
+zarr::ZarrV2::write_base_metadata_() const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -150,7 +151,7 @@ zarr::CzarV2::write_base_metadata_() const
 }
 
 void
-zarr::CzarV2::write_group_metadata_() const
+zarr::ZarrV2::write_group_metadata_() const
 {
     namespace fs = std::filesystem;
     using json = nlohmann::json;
@@ -235,7 +236,7 @@ zarr::CzarV2::write_group_metadata_() const
 }
 
 fs::path
-zarr::CzarV2::get_data_directory_() const
+zarr::ZarrV2::get_data_directory_() const
 {
     return dataset_root_;
 }
@@ -245,7 +246,7 @@ extern "C"
     struct Storage* zarr_v2_init()
     {
         try {
-            return new zarr::CzarV2();
+            return new zarr::ZarrV2();
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
         } catch (...) {

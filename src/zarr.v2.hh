@@ -1,15 +1,15 @@
-#ifndef H_ACQUIRE_STORAGE_CZAR_V2_V0
-#define H_ACQUIRE_STORAGE_CZAR_V2_V0
+#ifndef H_ACQUIRE_STORAGE_ZARR_V2_V0
+#define H_ACQUIRE_STORAGE_ZARR_V2_V0
 
-#include "czar.hh"
+#include "zarr.hh"
 
 namespace acquire::sink::zarr {
-struct CzarV2 final : public Czar
+struct ZarrV2 final : public Zarr
 {
   public:
-    CzarV2() = default;
-    CzarV2(BloscCompressionParams&& compression_params);
-    ~CzarV2() override = default;
+    ZarrV2() = default;
+    ZarrV2(BloscCompressionParams&& compression_params);
+    ~ZarrV2() override = default;
 
     /// StorageInterface
     void get_meta(StoragePropertyMetadata* meta) const override;
@@ -19,9 +19,7 @@ struct CzarV2 final : public Czar
     void allocate_writers_() override;
 
     /// Metadata
-    void write_array_metadata_(size_t level,
-                               const ImageDims& image_shape,
-                               const ImageDims& tile_shape) const override;
+    void write_array_metadata_(size_t level) const override;
     void write_external_metadata_() const override;
     void write_base_metadata_() const override;
     void write_group_metadata_() const override;
@@ -31,4 +29,4 @@ struct CzarV2 final : public Czar
 };
 } // namespace acquire::sink::zarr
 
-#endif // H_ACQUIRE_STORAGE_CZAR_V2_V0
+#endif // H_ACQUIRE_STORAGE_ZARR_V2_V0

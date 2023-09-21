@@ -17,26 +17,12 @@ add_library(${tgt} MODULE
         writers/shard.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
-        czar.hh
-        czar.cpp
-        czar.v2.hh
-        czar.v2.cpp
-        czar.v3.hh
-        czar.v3.cpp
-#        tiled.frame.hh
-#        tiled.frame.cpp
-#        chunk.writer.hh
-#        chunk.writer.cpp
-#        frame.scaler.hh
-#        frame.scaler.cpp
-#        zarr.hh
-#        zarr.cpp
-#        zarr.encoder.hh
-#        zarr.encoder.cpp
-#        zarr.raw.hh
-#        zarr.raw.cpp
-#        zarr.blosc.hh
-#        zarr.blosc.cpp
+        zarr.hh
+        zarr.cpp
+        zarr.v2.hh
+        zarr.v2.cpp
+        zarr.v3.hh
+        zarr.v3.cpp
         zarr.driver.c
 )
 target_enable_simd(${tgt})
