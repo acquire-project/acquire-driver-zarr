@@ -239,11 +239,14 @@ zarr::Writer::worker_thread_(ThreadContext* ctx) noexcept
         }
 
         if (auto job = pop_from_job_queue(); job.has_value()) {
+            ctx->ready = false;
             if (!job.value()()) {
                 zarr_->error_ = true;
                 zarr_->error_msg_ = "Job failed";
             }
+            ctx->ready = true;
             lock.unlock();
+            ctx->cv.notify_one();
         } else {
             lock.unlock();
             std::this_thread::sleep_for(1ms);

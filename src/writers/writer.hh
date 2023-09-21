@@ -32,6 +32,7 @@ struct Writer
         std::mutex mutex;
         std::condition_variable cv;
         bool should_stop;
+        bool ready;
     };
 
     Writer() = delete;

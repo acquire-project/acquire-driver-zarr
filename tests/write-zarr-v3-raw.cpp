@@ -71,12 +71,12 @@ reporter(int is_error,
           a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
     } while (0)
 
-const static uint32_t frame_width = 1920;
+const static uint32_t frame_width = 1080;
 const static uint32_t tile_width = frame_width / 4;
-const static uint32_t frame_height = 1080;
+const static uint32_t frame_height = 960;
 const static uint32_t tile_height = frame_height / 3;
-const static uint32_t expected_frames_per_chunk = 97;
-const static uint32_t max_frame_count = 200;
+const static uint32_t expected_frames_per_chunk = 48;
+const static uint32_t max_frame_count = 48;
 
 void
 setup(AcquireRuntime* runtime)
@@ -91,7 +91,7 @@ setup(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*empty.*"),
+                                SIZED("simulated.*radial.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -117,7 +117,7 @@ setup(AcquireRuntime* runtime)
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
     // we may drop frames with lower exposure
-//    props.video[0].camera.settings.exposure_time_us = 1e5;
+    props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = max_frame_count;
 
     OK(acquire_configure(runtime, &props));

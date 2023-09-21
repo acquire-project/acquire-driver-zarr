@@ -12,13 +12,9 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const Zarr* zarr)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
 {
-    // pare down the number of threads if we have too many
-    while (threads_.size() > tiles_per_frame_()) {
-        threads_.pop_back();
-    }
-
     // spin up threads
     for (auto& ctx : threads_) {
+        ctx.ready = true;
         ctx.should_stop = false;
         ctx.thread =
           std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
@@ -38,13 +34,9 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
            zarr,
            compression_params)
 {
-    // pare down the number of threads if we have too many
-    while (threads_.size() > tiles_per_frame_()) {
-        threads_.pop_back();
-    }
-
     // spin up threads
     for (auto& ctx : threads_) {
+        ctx.ready = true;
         ctx.should_stop = false;
         ctx.thread =
           std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
@@ -182,7 +174,11 @@ zarr::ChunkWriter::flush_() noexcept
 
     // wait for all writers to finish
     while (!jobs_.empty()) {
-        std::this_thread::sleep_for(2ms);
+        std::this_thread::sleep_for(500us);
+    }
+    for (auto& ctx : threads_) {
+        std::unique_lock lock(ctx.mutex);
+        ctx.cv.wait(lock, [&ctx] { return ctx.ready; });
     }
 
     // reset buffers

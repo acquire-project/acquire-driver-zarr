@@ -2,6 +2,7 @@
 #include "writer.hh"
 
 #include <stdexcept>
+#include <iostream>
 
 namespace zarr = acquire::sink::zarr;
 
@@ -19,13 +20,9 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
     shards_per_frame_y_ =
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
 
-    // pare down the number of threads if we have too many
-    while (threads_.size() > shards_per_frame_()) {
-        threads_.pop_back();
-    }
-
     // spin up threads
     for (auto& ctx : threads_) {
+        ctx.ready = true;
         ctx.should_stop = false;
         ctx.thread =
           std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
@@ -52,13 +49,9 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
     shards_per_frame_y_ =
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
 
-    // pare down the number of threads if we have too many
-    while (threads_.size() > shards_per_frame_()) {
-        threads_.pop_back();
-    }
-
     // spin up threads
     for (auto& ctx : threads_) {
+        ctx.ready = true;
         ctx.should_stop = false;
         ctx.thread =
           std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
@@ -125,6 +118,7 @@ zarr::ShardWriter::make_buffers_() noexcept
     const auto bytes_of_type = common::bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
       tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+    const auto bytes_per_chunk = bytes_per_tile * frames_per_chunk_;
 
     for (auto& buf : chunk_buffers_) {
         buf.resize(frames_per_chunk_ * bytes_per_tile);
@@ -133,7 +127,7 @@ zarr::ShardWriter::make_buffers_() noexcept
 
     shard_buffers_.resize(shards_per_frame_());
     for (auto& buf : shard_buffers_) {
-        buf.resize(chunks_per_shard_() * bytes_per_tile         // data
+        buf.resize(chunks_per_shard_() * bytes_per_chunk        // data
                    + 2 * chunks_per_shard_() * sizeof(uint64_t) // indices
         );
     }
@@ -205,6 +199,7 @@ zarr::ShardWriter::flush_() noexcept
 
     // compress buffers
     auto chunk_sizes = compress_buffers_();
+    const size_t index_size = 2 * chunks_per_shard * sizeof(uint64_t);
 
     // concatenate chunks into shards
     std::vector<size_t> shard_sizes;
@@ -212,8 +207,6 @@ zarr::ShardWriter::flush_() noexcept
         auto& shard = shard_buffers_.at(i);
         size_t shard_size = 0;
         std::vector<uint64_t> chunk_indices;
-
-        const size_t index_size = 2 * chunks_per_shard * sizeof(uint64_t);
 
         for (auto j = 0; j < chunks_per_shard; ++j) {
             chunk_indices.push_back(shard_size); // chunk index
@@ -245,18 +238,22 @@ zarr::ShardWriter::flush_() noexcept
     {
         std::scoped_lock lock(mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
-            auto& buf = shard_buffers_.at(i);
+            const auto& shard = shard_buffers_.at(i);
             jobs_.push([fh = &files_.at(i),
-                        data = buf.data(),
+                        shard = shard.data(),
                         size = shard_sizes.at(i)]() -> bool {
-                return (bool)file_write(fh, 0, data, data + size);
+                return (bool)file_write(fh, 0, shard, shard + size);
             });
         }
     }
 
     // wait for all writers to finish
     while (!jobs_.empty()) {
-        std::this_thread::sleep_for(2ms);
+        std::this_thread::sleep_for(500us);
+    }
+    for (auto& ctx : threads_) {
+        std::unique_lock lock(ctx.mutex);
+        ctx.cv.wait(lock, [&ctx] { return ctx.ready; });
     }
 
     // reset buffers
@@ -273,8 +270,8 @@ zarr::ShardWriter::flush_() noexcept
     const auto bytes_per_shard = bytes_per_chunk * chunks_per_shard;
     for (auto& buf : shard_buffers_) {
         // absurd edge case we need to account for
-        if (buf.size() > bytes_per_shard) {
-            buf.resize(bytes_per_shard);
+        if (buf.size() > bytes_per_shard + index_size) {
+            buf.resize(bytes_per_shard + index_size);
         }
 
         std::fill(buf.begin(), buf.end(), 0);
