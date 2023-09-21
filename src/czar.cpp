@@ -217,12 +217,11 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
 }
 
 void
-make_scaling_parameters(
-  std::vector<std::pair<zarr::ImageDims, zarr::ImageDims>>& shapes)
+make_scales(std::vector<std::pair<zarr::ImageDims, zarr::ImageDims>>& shapes)
 {
     CHECK(shapes.size() == 1);
-    const auto& base_image_shape = shapes.at(0).first;
-    const auto& base_tile_shape = shapes.at(0).second;
+    const auto base_image_shape = shapes.at(0).first;
+    const auto base_tile_shape = shapes.at(0).second;
 
     const int downscale = 2;
 
@@ -280,7 +279,7 @@ scale_image(const VideoFrame* src)
 
     const auto* src_img = (T*)src->data;
     auto* dst_img = (T*)dst->data;
-    std::fill(dst_img, dst_img + dst->bytes_of_frame - sizeof(*dst), 0);
+    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
 
     size_t dst_idx = 0;
     for (auto row = 0; row < height; row += downscale) {
@@ -303,10 +302,20 @@ scale_image(const VideoFrame* src)
     return dst;
 }
 
+/// @brief Average both `dst` and `src` into `dst`.
 template<typename T>
 void
-average_two_frames(VideoFrame* dst, VideoFrame* src)
+average_two_frames(VideoFrame* dst, const VideoFrame* src)
 {
+    CHECK(dst);
+    CHECK(src);
+    CHECK(dst->bytes_of_frame == src->bytes_of_frame);
+
+    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
+    const auto num_pixels = bytes_of_image / sizeof(T);
+    for (auto i = 0; i < num_pixels; ++i) {
+        dst->data[i] = (T)(((float)dst->data[i] + (float)src->data[i]) / 2.0f);
+    }
 }
 } // end ::{anonymous} namespace
 
@@ -442,37 +451,72 @@ zarr::Czar::append(const VideoFrame* frames, size_t nbytes)
     };
 
     for (cur = frames; cur < end; cur = next()) {
-        //        for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
-        VideoFrame* dst;
-        switch (cur->shape.type) {
-            case SampleType_u10:
-            case SampleType_u12:
-            case SampleType_u14:
-            case SampleType_u16:
-                dst = scale_image<uint16_t>(cur);
-                break;
-            case SampleType_i8:
-                dst = scale_image<int8_t>(cur);
-                break;
-            case SampleType_i16:
-                dst = scale_image<int16_t>(cur);
-                break;
-            case SampleType_f32:
-                dst = scale_image<float>(cur);
-                break;
-            case SampleType_u8:
-                dst = scale_image<uint8_t>(cur);
-                break;
-            default:
-                LOGE("Unsupported pixel type: %s",
-                     common::sample_type_to_string(cur->shape.type));
-                throw std::runtime_error("Unsupported pixel type.");
-        }
-        //        }
-        //        for (auto& writer : writers_) {
-        //            CHECK(writer->write(cur));
-        //        }
         CHECK(writers_.at(0)->write(cur));
+
+        // multiscale
+        if (writers_.size() > 1) {
+            const VideoFrame* src = cur;
+            VideoFrame* dst;
+
+            std::function<VideoFrame*(const VideoFrame*)> scale;
+            std::function<void(VideoFrame*, const VideoFrame*)> average2;
+            switch (cur->shape.type) {
+                case SampleType_u10:
+                case SampleType_u12:
+                case SampleType_u14:
+                case SampleType_u16:
+                    scale = ::scale_image<uint16_t>;
+                    average2 = ::average_two_frames<uint16_t>;
+                    break;
+                case SampleType_i8:
+                    scale = ::scale_image<int8_t>;
+                    average2 = ::average_two_frames<int8_t>;
+                    break;
+                case SampleType_i16:
+                    scale = ::scale_image<int16_t>;
+                    average2 = ::average_two_frames<int16_t>;
+                    break;
+                case SampleType_f32:
+                    scale = ::scale_image<float>;
+                    average2 = ::average_two_frames<float>;
+                    break;
+                case SampleType_u8:
+                    scale = ::scale_image<uint8_t>;
+                    average2 = ::average_two_frames<uint8_t>;
+                    break;
+                default:
+                    char err_msg[64];
+                    snprintf(err_msg,
+                             sizeof(err_msg),
+                             "Unsupported pixel type: %s",
+                             common::sample_type_to_string(cur->shape.type));
+                    throw std::runtime_error(err_msg);
+            }
+
+            for (auto i = 1; i < writers_.size(); ++i) {
+                dst = scale(src);
+                if (lod_frame_accumulator_.at(i).has_value()) {
+                    // average
+                    average2(dst, lod_frame_accumulator_.at(i).value());
+
+                    CHECK(writers_.at(i)->write(dst));
+
+                    // clean up this level of detail
+                    free(lod_frame_accumulator_.at(i).value());
+                    lod_frame_accumulator_.at(i).reset();
+
+                    // setup for next iteration
+                    if (i + 1 < writers_.size()) {
+                        src = dst;
+                    } else {
+                        free(dst);
+                    }
+                } else {
+                    lod_frame_accumulator_.at(i) = dst;
+                    break;
+                }
+            }
+        }
     }
     return nbytes;
 }
@@ -533,10 +577,15 @@ zarr::Czar::reserve_image_shape(const ImageShape* shape)
     }
 
     if (enable_multiscale_) {
-        make_scaling_parameters(image_tile_shapes_);
+        make_scales(image_tile_shapes_);
     }
 
     allocate_writers_();
+
+    // multiscale
+    for (auto i = 1; i < writers_.size(); ++i) {
+        lod_frame_accumulator_.insert_or_assign(i, std::nullopt);
+    }
 }
 
 /// Czar

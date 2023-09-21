@@ -13,6 +13,7 @@
 #include "writers/blosc.compressor.hh"
 
 #include <filesystem>
+#include <map>
 #include <stdexcept>
 #include <utility> // std::pair
 #include <vector>
@@ -59,8 +60,6 @@ struct Czar : StorageInterface
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
 
-    std::vector<std::shared_ptr<Writer>> writers_;
-
     // static - set on construction
     std::optional<BloscCompressionParams> compression_params_;
 
@@ -71,8 +70,13 @@ struct Czar : StorageInterface
     uint64_t max_bytes_per_chunk_;
     bool enable_multiscale_;
 
+    // changes on reserve_image_shape
     std::vector<std::pair<ImageDims, ImageDims>> image_tile_shapes_;
     SampleType pixel_type_;
+    std::vector<std::shared_ptr<Writer>> writers_;
+
+    // changes on append
+    std::unordered_map<int, std::optional<VideoFrame*>> lod_frame_accumulator_;
 
     /// Setup
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
