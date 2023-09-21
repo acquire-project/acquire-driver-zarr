@@ -72,9 +72,9 @@ reporter(int is_error,
     } while (0)
 
 const static uint32_t frame_width = 1920;
-const static uint32_t tile_width = 480;
+const static uint32_t tile_width = frame_width / 4;
 const static uint32_t frame_height = 1080;
-const static uint32_t tile_height = 360;
+const static uint32_t tile_height = frame_height / 3;
 const static uint32_t expected_frames_per_chunk = 97;
 const static uint32_t max_frame_count = 200;
 
@@ -91,7 +91,7 @@ setup(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*radial.*"),
+                                SIZED("simulated.*random.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -117,7 +117,7 @@ setup(AcquireRuntime* runtime)
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
     // we may drop frames with lower exposure
-    props.video[0].camera.settings.exposure_time_us = 2e5;
+    props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = max_frame_count;
 
     OK(acquire_configure(runtime, &props));
@@ -146,9 +146,9 @@ acquire(AcquireRuntime* runtime)
         do {
             struct clock throttle;
             clock_init(&throttle);
-//            EXPECT(clock_cmp_now(&clock) < 0,
-//                   "Timeout at %f ms",
-//                   clock_toc_ms(&clock) + time_limit_ms);
+            //            EXPECT(clock_cmp_now(&clock) < 0,
+            //                   "Timeout at %f ms",
+            //                   clock_toc_ms(&clock) + time_limit_ms);
             OK(acquire_map_read(runtime, 0, &beg, &end));
             for (cur = beg; cur < end; cur = next(cur)) {
                 LOG("stream %d counting frame w id %d", 0, cur->frame_id);
@@ -164,10 +164,8 @@ acquire(AcquireRuntime* runtime)
             }
             clock_sleep_ms(&throttle, 100.0f);
 
-            LOG("stream %d expected_frames_per_chunk %d time %f",
-                0,
-                nframes,
-                clock_toc_ms(&clock));
+            LOG(
+              "stream %d nframes %d time %f", 0, nframes, clock_toc_ms(&clock));
         } while (DeviceState_Running == acquire_get_state(runtime) &&
                  nframes < max_frame_count);
 
@@ -248,16 +246,19 @@ validate(AcquireRuntime* runtime)
     // sharding
     const auto storage_transformers = metadata["storage_transformers"];
     const auto configuration = storage_transformers[0]["configuration"];
-    const auto chunks_per_shard = 12;
-    ASSERT_EQ(
-      int, "%d", chunks_per_shard, configuration["chunks_per_shard"][0]);
+    const auto& cps = configuration["chunks_per_shard"];
+    ASSERT_EQ(int, "%d", 1, cps[0]);
+    ASSERT_EQ(int, "%d", 1, cps[1]);
+    ASSERT_EQ(int, "%d", 3, cps[2]);
+    ASSERT_EQ(int, "%d", 4, cps[3]);
+    const size_t chunks_per_shard = cps[0].get<size_t>() *
+                                    cps[1].get<size_t>() *
+                                    cps[2].get<size_t>() * cps[3].get<size_t>();
 
-    //    const auto index_size =
-    //      2 * chunks_per_shard * sizeof(uint64_t) + sizeof(uint32_t);
     const auto index_size = 2 * chunks_per_shard * sizeof(uint64_t);
 
     // check that each chunked data file is the expected size
-    uint32_t bytes_per_chunk =
+    const uint32_t bytes_per_chunk =
       chunk_shape[0].get<uint32_t>() * chunk_shape[1].get<uint32_t>() *
       chunk_shape[2].get<uint32_t>() * chunk_shape[3].get<uint32_t>();
     for (auto t = 0; t < std::ceil(max_frame_count / expected_frames_per_chunk);

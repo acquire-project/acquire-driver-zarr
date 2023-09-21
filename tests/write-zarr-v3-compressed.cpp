@@ -91,7 +91,7 @@ setup(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*empty.*"),
+                                SIZED("simulated.*radial.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -117,7 +117,7 @@ setup(AcquireRuntime* runtime)
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
     // we may drop frames with lower exposure
-    props.video[0].camera.settings.exposure_time_us = 1e4;
+    props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = max_frame_count;
 
     OK(acquire_configure(runtime, &props));
@@ -164,10 +164,8 @@ acquire(AcquireRuntime* runtime)
             }
             clock_sleep_ms(&throttle, 100.0f);
 
-            LOG("stream %d expected_frames_per_chunk %d time %f",
-                0,
-                nframes,
-                clock_toc_ms(&clock));
+            LOG(
+              "stream %d nframes %d time %f", 0, nframes, clock_toc_ms(&clock));
         } while (DeviceState_Running == acquire_get_state(runtime) &&
                  nframes < max_frame_count);
 
@@ -257,9 +255,14 @@ validate(AcquireRuntime* runtime)
     // sharding
     const auto storage_transformers = metadata["storage_transformers"];
     configuration = storage_transformers[0]["configuration"];
-    const auto chunks_per_shard = 12;
-    ASSERT_EQ(
-      int, "%d", chunks_per_shard, configuration["chunks_per_shard"][0]);
+    const auto& cps = configuration["chunks_per_shard"];
+    ASSERT_EQ(int, "%d", 1, cps[0]);
+    ASSERT_EQ(int, "%d", 1, cps[1]);
+    ASSERT_EQ(int, "%d", 3, cps[2]);
+    ASSERT_EQ(int, "%d", 4, cps[3]);
+    const size_t chunks_per_shard = cps[0].get<size_t>() *
+                                    cps[1].get<size_t>() *
+                                    cps[2].get<size_t>() * cps[3].get<size_t>();
 
     // check that each chunked data file is the expected size
     uint32_t bytes_per_chunk =
@@ -273,7 +276,7 @@ validate(AcquireRuntime* runtime)
 
         auto file_size = fs::file_size(path);
         ASSERT_GT(int, "%d", file_size, 0);
-        ASSERT_GT(int, "%d", chunks_per_shard * bytes_per_chunk, file_size);
+        ASSERT_GT(int, "%d", chunks_per_shard* bytes_per_chunk, file_size);
     }
 }
 

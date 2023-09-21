@@ -10,7 +10,7 @@ elseif(APPLE)
     set(libd ${lib})
 elseif(LINUX)
     set(lib "${pwd}/lib/linux-amd64/libblosc.a")
-    set(libd ${lib})
+    set(libd "${pwd}/lib/linux-amd64/libblosc-debug.a")
 endif()
 
 message(STATUS "C-Blosc: ${pwd}")

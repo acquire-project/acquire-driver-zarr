@@ -42,9 +42,9 @@ smallest_prime_factor(uint32_t n)
                 is_prime = false;
                 break;
             }
-            if (is_prime) {
-                primes.push_back(i);
-            }
+        }
+        if (is_prime) {
+            primes.push_back(i);
         }
     }
 
@@ -86,6 +86,7 @@ make_shard_dims(const zarr::ImageDims& frame_dims,
 
 zarr::CzarV3::CzarV3(BloscCompressionParams&& compression_params)
   : Czar(std::move(compression_params))
+  , shard_dims_{}
 {
 }
 
@@ -182,33 +183,37 @@ zarr::CzarV3::write_array_metadata_(size_t level,
 
     if (compression_params_.has_value()) {
         auto params = compression_params_.value();
-        metadata["compressor"] = {
-            { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
-            { "configuration",
-              { { "blocksize", 0 },
-                { "clevel", params.clevel },
-                { "cname", params.codec_id },
-                { "shuffle", params.shuffle } } },
-        };
+        metadata["compressor"] = json::object({
+          { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
+          { "configuration",
+            json::object({
+              { "blocksize", 0 },
+              { "clevel", params.clevel },
+              { "cname", params.codec_id },
+              { "shuffle", params.shuffle },
+            }) },
+        });
     }
 
     // sharding storage transformer
     // TODO (aliddell): keep an eye on ZEP 2 and update this when finalized
-    const ImageDims& tile_dims = image_tile_shapes_.at(0).second;
-    const auto chunks_per_shard_x = shard_dims_.cols / tile_dims.cols;
-    const auto chunks_per_shard_y = shard_dims_.rows / tile_dims.rows;
     metadata["storage_transformers"] = json::array();
-    metadata["storage_transformers"][0] = {
-        {
-          "type",
-          "indexed",
-        },
-        { "extension",
-          "https://purl.org/zarr/spec/storage_transformers/sharding/1.0" },
-        { "configuration",
-          { { "chunks_per_shard",
-              { chunks_per_shard_x * chunks_per_shard_y } } } } // FIXME (aliddell): this is wrong
-    };
+    metadata["storage_transformers"][0] = json::object({
+      { "type", "indexed" },
+      { "extension",
+        "https://purl.org/zarr/spec/storage_transformers/sharding/1.0" },
+      { "configuration",
+        json::object({
+          { "chunks_per_shard",
+            json::array({
+              1,                                  // t
+                                                  // TODO (aliddell): c?
+              1,                                  // z
+              shard_dims_.rows / tile_shape.rows, // y
+              shard_dims_.cols / tile_shape.cols, // x
+            }) },
+        }) },
+    });
 
     auto path = (dataset_root_ / "meta" / "root" /
                  (std::to_string(level) + ".array.json"))
