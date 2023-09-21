@@ -60,6 +60,8 @@ struct Writer
     uint32_t frames_written() const noexcept;
 
   protected:
+    using JobT = std::function<bool()>;
+
     /// Tiling/chunking
     ImageDims frame_dims_;
     ImageDims tile_dims_;
@@ -79,7 +81,7 @@ struct Writer
     /// Multithreading
     std::vector<std::vector<uint8_t>> chunk_buffers_;
     std::vector<ThreadContext> threads_;
-    std::queue<JobContext> jobs_;
+    std::queue<JobT> jobs_;
     std::mutex mutex_;
 
     /// Bookkeeping
@@ -87,7 +89,7 @@ struct Writer
     uint32_t frames_written_;
     uint32_t current_chunk_;
 
-    std::optional<JobContext> pop_from_job_queue() noexcept;
+    std::optional<JobT> pop_from_job_queue() noexcept;
     void worker_thread_(ThreadContext* ctx) noexcept;
 
     [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;

@@ -135,7 +135,7 @@ zarr::Writer::finalize_chunks_() noexcept
 std::vector<size_t>
 zarr::Writer::compress_buffers_() noexcept
 {
-    const auto bytes_per_chunk = bytes_to_flush_ / tiles_per_frame_();
+    const size_t bytes_per_chunk = bytes_to_flush_ / tiles_per_frame_();
     std::vector<size_t> buf_sizes;
     if (!blosc_compression_params_.has_value()) {
         for (auto& buf : chunk_buffers_) {
@@ -202,7 +202,7 @@ zarr::Writer::rollover_()
     ++current_chunk_;
 }
 
-std::optional<zarr::Writer::JobContext>
+std::optional<zarr::Writer::JobT>
 zarr::Writer::pop_from_job_queue() noexcept
 {
     std::scoped_lock lock(mutex_);
@@ -235,9 +235,8 @@ zarr::Writer::worker_thread_(ThreadContext* ctx) noexcept
         }
 
         if (auto job = pop_from_job_queue(); job.has_value()) {
-            if (!file_write(
-                  job->fh, job->offset, job->buf, job->buf + job->buf_size)) {
-                LOGE("Failed to write to file.");
+            if (!job.value()()) {
+                LOGE("Job failed.");
             }
             lock.unlock();
         } else {

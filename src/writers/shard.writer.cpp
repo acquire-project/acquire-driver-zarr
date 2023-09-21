@@ -243,7 +243,11 @@ zarr::ShardWriter::flush_() noexcept
         std::scoped_lock lock(mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             auto& buf = shard_buffers_.at(i);
-            jobs_.emplace(buf.data(), shard_sizes.at(i), &files_.at(i), 0);
+            jobs_.push([fh = &files_.at(i),
+                        data = buf.data(),
+                        size = shard_sizes.at(i)]() -> bool {
+                return (bool)file_write(fh, 0, data, data + size);
+            });
         }
     }
 
