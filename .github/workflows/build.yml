@@ -27,7 +27,7 @@ jobs:
           submodules: true
 
       - name: CMake
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
       - name: Build
         run: |
