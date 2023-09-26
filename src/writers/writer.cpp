@@ -110,9 +110,13 @@ zarr::Writer::validate_frame_(const VideoFrame* frame) noexcept
 
         return true;
     } catch (const std::exception& exc) {
-        LOGE("Invalid frame: %s", exc.what());
+        char buf[128];
+        snprintf(buf, sizeof(buf), "Invalid frame: %s", exc.what());
+        zarr_->set_error(buf);
     } catch (...) {
-        LOGE("Invalid frame: (unknown)");
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Invalid frame (unknown)");
+        zarr_->set_error(buf);
     }
     return false;
 }
@@ -240,9 +244,9 @@ zarr::Writer::worker_thread_(ThreadContext* ctx) noexcept
 
         if (auto job = pop_from_job_queue(); job.has_value()) {
             ctx->ready = false;
-            if (!job.value()()) {
-                zarr_->error_ = true;
-                zarr_->error_msg_ = "Job failed";
+            std::string err_msg;
+            if (!job.value()(err_msg)) {
+                zarr_->set_error(err_msg);
             }
             ctx->ready = true;
             lock.unlock();

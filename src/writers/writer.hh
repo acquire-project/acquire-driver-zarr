@@ -57,7 +57,7 @@ struct Writer
     uint32_t frames_written() const noexcept;
 
   protected:
-    using JobT = std::function<bool()>;
+    using JobT = std::function<bool(std::string&)>;
 
     /// Tiling/chunking
     ImageDims frame_dims_;

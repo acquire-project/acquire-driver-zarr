@@ -55,6 +55,9 @@ struct Zarr : StorageInterface
     size_t append(const VideoFrame* frames, size_t nbytes) override;
     void reserve_image_shape(const ImageShape* shape) override;
 
+    /// Error state
+    void set_error(const std::string& msg) const noexcept;
+
   protected:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
@@ -78,6 +81,8 @@ struct Zarr : StorageInterface
     /// changes on append
     // scaled frames, keyed by level-of-detail
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
+
+    /// Error state
     mutable bool error_;
     mutable std::string error_msg_;
 
@@ -97,8 +102,6 @@ struct Zarr : StorageInterface
 
     /// Multiscale
     void write_multiscale_frames_(const VideoFrame* frame);
-
-    friend struct Writer;
 };
 
 } // namespace acquire::sink::zarr

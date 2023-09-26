@@ -23,7 +23,7 @@ compressed_zarr_v2_init()
 }
 } // end ::{anonymous} namespace
 
-/// CzarV2
+/// ZarrV2
 zarr::ZarrV2::ZarrV2(BloscCompressionParams&& compression_params)
   : Zarr(std::move(compression_params))
 {

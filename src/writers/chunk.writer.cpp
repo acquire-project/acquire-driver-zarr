@@ -1,4 +1,5 @@
 #include "chunk.writer.hh"
+#include "../zarr.hh"
 
 #include <cmath>
 #include <stdexcept>
@@ -72,9 +73,13 @@ zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
         }
         return true;
     } catch (const std::exception& exc) {
-        LOGE("Failed to write frame: %s", exc.what());
+        char buf[128];
+        snprintf(buf, sizeof(buf), "Failed to write frame: %s", exc.what());
+        zarr_->set_error(buf);
     } catch (...) {
-        LOGE("Failed to write frame (unknown)");
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Failed to write frame (unknown)");
+        zarr_->set_error(buf);
     }
 
     return false;
@@ -154,7 +159,7 @@ zarr::ChunkWriter::flush_() noexcept
 
     // create chunk files if necessary
     if (files_.empty() && !make_files_()) {
-        LOGE("Failed to flush.");
+        zarr_->set_error("Failed to flush.");
         return;
     }
 
@@ -166,8 +171,21 @@ zarr::ChunkWriter::flush_() noexcept
             auto& buf = chunk_buffers_.at(i);
             jobs_.push([fh = &files_.at(i),
                         data = buf.data(),
-                        size = buf_sizes.at(i)]() -> bool {
-                return (bool)file_write(fh, 0, data, data + size);
+                        size = buf_sizes.at(i)](std::string& err) -> bool {
+                bool success = false;
+                try {
+                    success = file_write(fh, 0, data, data + size);
+                } catch (const std::exception& exc) {
+                    char buf[128];
+                    snprintf(buf,
+                             sizeof(buf),
+                             "Failed to write chunk: %s",
+                             exc.what());
+                    err = buf;
+                } catch (...) {
+                    err = "Unknown error";
+                }
+                return success;
             });
         }
     }

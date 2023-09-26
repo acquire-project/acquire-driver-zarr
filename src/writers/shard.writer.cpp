@@ -1,5 +1,5 @@
 #include "shard.writer.hh"
-#include "writer.hh"
+#include "../zarr.hh"
 
 #include <stdexcept>
 #include <iostream>
@@ -193,7 +193,7 @@ zarr::ShardWriter::flush_() noexcept
 
     // create shard files if necessary
     if (files_.empty() && !make_files_()) {
-        LOGE("Failed to flush.");
+        zarr_->set_error("Failed to flush.");
         return;
     }
 
@@ -241,8 +241,21 @@ zarr::ShardWriter::flush_() noexcept
             const auto& shard = shard_buffers_.at(i);
             jobs_.push([fh = &files_.at(i),
                         shard = shard.data(),
-                        size = shard_sizes.at(i)]() -> bool {
-                return (bool)file_write(fh, 0, shard, shard + size);
+                        size = shard_sizes.at(i)](std::string& err) -> bool {
+                bool success = false;
+                try {
+                    success = file_write(fh, 0, shard, shard + size);
+                } catch (const std::exception& exc) {
+                    char buf[128];
+                    snprintf(buf,
+                             sizeof(buf),
+                             "Failed to write shard: %s",
+                             exc.what());
+                    err = buf;
+                } catch (...) {
+                    err = "Unknown error";
+                }
+                return success;
             });
         }
     }

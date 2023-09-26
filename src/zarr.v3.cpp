@@ -226,7 +226,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
 }
 
 /// @brief Write the external metadata.
-/// @details This is a no-op for CzarV3. Instead, external metadata is
+/// @details This is a no-op for ZarrV3. Instead, external metadata is
 /// stored in the group metadata.
 void
 zarr::ZarrV3::write_external_metadata_() const

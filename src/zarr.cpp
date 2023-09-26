@@ -449,7 +449,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     };
 
     for (cur = frames; cur < end; cur = next()) {
-        CHECK(writers_.at(0)->write(cur));
+        EXPECT(writers_.at(0)->write(cur), "%s", error_msg_.c_str());
 
         // multiscale
         if (writers_.size() > 1) {
@@ -526,7 +526,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     }
 }
 
-/// Czar
+/// Zarr
 
 zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 {
@@ -545,6 +545,13 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
         .cols = props.tile.width,
         .rows = props.tile.height,
     };
+}
+
+void
+zarr::Zarr::set_error(const std::string& msg) const noexcept
+{
+    error_ = true;
+    error_msg_ = msg;
 }
 
 void
