@@ -185,7 +185,7 @@ zarr::ChunkWriter::flush_() noexcept
         }
     }
 
-    // wait for all writers to finish
+    // wait for all threads to finish
     while (!std::all_of(buffers_ready_,
                         buffers_ready_ + chunk_buffers_.size(),
                         [](const auto& b) { return b; })) {
@@ -209,13 +209,13 @@ zarr::ChunkWriter::flush_() noexcept
 bool
 zarr::ChunkWriter::make_files_() noexcept
 {
+    const auto base = data_root_ / std::to_string(current_chunk_) / "0";
+    fs::create_directories(base);
     for (auto y = 0; y < tiles_per_frame_y_; ++y) {
+        const auto dirname = base / std::to_string(y);
+        fs::create_directories(dirname);
         for (auto x = 0; x < tiles_per_frame_x_; ++x) {
-            const auto filename = data_root_ / std::to_string(current_chunk_) /
-                                  "0" / std::to_string(y) / std::to_string(x);
-            fs::create_directories(
-              filename
-                .parent_path()); // FIXME (aliddell): pull up to above loop
+            const auto filename = dirname / std::to_string(x);
             files_.emplace_back();
             if (!file_create(&files_.back(),
                              filename.string().c_str(),

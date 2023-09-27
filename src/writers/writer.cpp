@@ -20,6 +20,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , bytes_to_flush_{ 0 }
   , current_chunk_{ 0 }
   , pixel_type_{ SampleTypeCount }
+  , buffers_ready_{ nullptr }
   , zarr_{ zarr }
 {
     CHECK(tile_dims_.cols > 0);
@@ -57,6 +58,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
 
 zarr::Writer::~Writer()
 {
+    delete[] buffers_ready_;
 }
 
 void

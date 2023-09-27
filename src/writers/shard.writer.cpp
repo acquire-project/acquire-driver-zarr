@@ -244,7 +244,7 @@ zarr::ShardWriter::flush_() noexcept
                                exc.what());
                       err = buf;
                   } catch (...) {
-                      err = "Unknown error";
+                      err = "Failed to write shard (unknown)";
                   }
                   *finished = true;
 
@@ -253,7 +253,7 @@ zarr::ShardWriter::flush_() noexcept
         }
     }
 
-    // wait for all writers to finish
+    // wait for all threads to finish
     while (!std::all_of(buffers_ready_,
                         buffers_ready_ + chunk_buffers_.size(),
                         [](const auto& b) { return b; })) {
@@ -286,14 +286,13 @@ zarr::ShardWriter::flush_() noexcept
 bool
 zarr::ShardWriter::make_files_() noexcept
 {
+    const auto base = data_root_ / ("c" + std::to_string(current_chunk_)) / "0";
+    fs::create_directories(base);
     for (auto y = 0; y < shards_per_frame_y_; ++y) {
+        const auto dirname = base / std::to_string(y);
+        fs::create_directories(dirname);
         for (auto x = 0; x < shards_per_frame_x_; ++x) {
-            const auto filename = data_root_ /
-                                  ("c" + std::to_string(current_chunk_)) / "0" /
-                                  std::to_string(y) / std::to_string(x);
-            fs::create_directories(
-              filename
-                .parent_path()); // FIXME (aliddell): pull up to above loop
+            const auto filename = dirname / std::to_string(y);
             files_.emplace_back();
             if (!file_create(&files_.back(),
                              filename.string().c_str(),
