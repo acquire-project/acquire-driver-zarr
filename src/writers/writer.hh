@@ -26,28 +26,19 @@ struct Zarr;
 struct Writer
 {
   public:
-    struct ThreadContext
-    {
-        std::thread thread;
-        std::mutex mutex;
-        std::condition_variable cv;
-        bool should_stop;
-        bool ready;
-    };
-
     Writer() = delete;
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root,
-           const Zarr* zarr);
+           Zarr* zarr);
 
     /// Constructor with Blosc compression params
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root,
-           const Zarr* zarr,
+           Zarr* zarr,
            const BloscCompressionParams& compression_params);
     virtual ~Writer();
 
@@ -57,8 +48,6 @@ struct Writer
     uint32_t frames_written() const noexcept;
 
   protected:
-    using JobT = std::function<bool(std::string&)>;
-
     /// Tiling/chunking
     ImageDims frame_dims_;
     ImageDims tile_dims_;
@@ -77,18 +66,14 @@ struct Writer
 
     /// Multithreading
     std::vector<std::vector<uint8_t>> chunk_buffers_;
-    std::vector<ThreadContext> threads_;
-    std::queue<JobT> jobs_;
+    bool *buffers_ready_;
     std::mutex mutex_;
 
     /// Bookkeeping
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
     uint32_t current_chunk_;
-    const Zarr* zarr_;
-
-    std::optional<JobT> pop_from_job_queue() noexcept;
-    void worker_thread_(ThreadContext* ctx) noexcept;
+    Zarr* zarr_;
 
     [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;
 

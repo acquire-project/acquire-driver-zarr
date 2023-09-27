@@ -11,7 +11,7 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               const Zarr* zarr)
+                               Zarr* zarr)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
   , shard_dims_{ shard_dims }
 {
@@ -19,14 +19,6 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
       std::ceil((float)frame_dims.cols / (float)shard_dims.cols);
     shards_per_frame_y_ =
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
-
-    // spin up threads
-    for (auto& ctx : threads_) {
-        ctx.ready = true;
-        ctx.should_stop = false;
-        ctx.thread =
-          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
-    }
 }
 
 zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
@@ -34,7 +26,7 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               const Zarr* zarr,
+                               Zarr* zarr,
                                const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
@@ -48,14 +40,6 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
       std::ceil((float)frame_dims.cols / (float)shard_dims.cols);
     shards_per_frame_y_ =
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
-
-    // spin up threads
-    for (auto& ctx : threads_) {
-        ctx.ready = true;
-        ctx.should_stop = false;
-        ctx.thread =
-          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
-    }
 }
 
 bool
@@ -112,8 +96,8 @@ zarr::ShardWriter::shards_per_frame_() const
 void
 zarr::ShardWriter::make_buffers_() noexcept
 {
-    const auto n_tiles = tiles_per_frame_();
-    chunk_buffers_.resize(n_tiles);
+    const auto nchunks = tiles_per_frame_();
+    chunk_buffers_.resize(nchunks);
 
     const auto bytes_of_type = common::bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
@@ -125,7 +109,11 @@ zarr::ShardWriter::make_buffers_() noexcept
         std::fill(buf.begin(), buf.end(), 0);
     }
 
-    shard_buffers_.resize(shards_per_frame_());
+    const auto nshards = shards_per_frame_();
+    shard_buffers_.resize(nshards);
+    buffers_ready_ = new bool[nshards];
+    std::fill(buffers_ready_, buffers_ready_ + nshards, true);
+
     for (auto& buf : shard_buffers_) {
         buf.resize(chunks_per_shard_() * bytes_per_chunk        // data
                    + 2 * chunks_per_shard_() * sizeof(uint64_t) // indices
@@ -235,38 +223,41 @@ zarr::ShardWriter::flush_() noexcept
     }
 
     // write out
+    std::fill(buffers_ready_, buffers_ready_ + shard_buffers_.size(), false);
     {
         std::scoped_lock lock(mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             const auto& shard = shard_buffers_.at(i);
-            jobs_.push([fh = &files_.at(i),
-                        shard = shard.data(),
-                        size = shard_sizes.at(i)](std::string& err) -> bool {
-                bool success = false;
-                try {
-                    success = file_write(fh, 0, shard, shard + size);
-                } catch (const std::exception& exc) {
-                    char buf[128];
-                    snprintf(buf,
-                             sizeof(buf),
-                             "Failed to write shard: %s",
-                             exc.what());
-                    err = buf;
-                } catch (...) {
-                    err = "Unknown error";
-                }
-                return success;
-            });
+            zarr_->push_to_job_queue(std::move(
+              [fh = &files_.at(i),
+               shard = shard.data(),
+               size = shard_sizes.at(i),
+               finished = buffers_ready_ + i](std::string& err) -> bool {
+                  bool success = false;
+                  try {
+                      success = file_write(fh, 0, shard, shard + size);
+                  } catch (const std::exception& exc) {
+                      char buf[128];
+                      snprintf(buf,
+                               sizeof(buf),
+                               "Failed to write shard: %s",
+                               exc.what());
+                      err = buf;
+                  } catch (...) {
+                      err = "Unknown error";
+                  }
+                  *finished = true;
+
+                  return success;
+              }));
         }
     }
 
     // wait for all writers to finish
-    while (!jobs_.empty()) {
+    while (!std::all_of(buffers_ready_,
+                        buffers_ready_ + chunk_buffers_.size(),
+                        [](const auto& b) { return b; })) {
         std::this_thread::sleep_for(500us);
-    }
-    for (auto& ctx : threads_) {
-        std::unique_lock lock(ctx.mutex);
-        ctx.cv.wait(lock, [&ctx] { return ctx.ready; });
     }
 
     // reset buffers
@@ -300,7 +291,9 @@ zarr::ShardWriter::make_files_() noexcept
             const auto filename = data_root_ /
                                   ("c" + std::to_string(current_chunk_)) / "0" /
                                   std::to_string(y) / std::to_string(x);
-            fs::create_directories(filename.parent_path());
+            fs::create_directories(
+              filename
+                .parent_path()); // FIXME (aliddell): pull up to above loop
             files_.emplace_back();
             if (!file_create(&files_.back(),
                              filename.string().c_str(),

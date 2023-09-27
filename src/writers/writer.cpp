@@ -11,7 +11,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
                      const ImageDims& tile_dims,
                      uint32_t frames_per_chunk,
                      const std::string& data_root,
-                     const Zarr* zarr)
+                     Zarr* zarr)
   : frame_dims_{ frame_dims }
   , tile_dims_{ tile_dims }
   , data_root_{ data_root }
@@ -19,7 +19,6 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , frames_written_{ 0 }
   , bytes_to_flush_{ 0 }
   , current_chunk_{ 0 }
-  , threads_(std::thread::hardware_concurrency())
   , pixel_type_{ SampleTypeCount }
   , zarr_{ zarr }
 {
@@ -49,7 +48,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
                      const ImageDims& tile_dims,
                      uint32_t frames_per_chunk,
                      const std::string& data_root,
-                     const Zarr* zarr,
+                     Zarr* zarr,
                      const BloscCompressionParams& compression_params)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
 {
@@ -58,11 +57,6 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
 
 zarr::Writer::~Writer()
 {
-    for (auto& ctx : threads_) {
-        ctx.should_stop = true;
-        ctx.cv.notify_one();
-        ctx.thread.join();
-    }
 }
 
 void
@@ -191,7 +185,7 @@ void
 zarr::Writer::close_files_()
 {
     using namespace std::chrono_literals;
-    while (!jobs_.empty()) {
+    while (0 < zarr_->jobs_on_queue()) {
         std::this_thread::sleep_for(2ms);
     }
 
@@ -208,54 +202,4 @@ zarr::Writer::rollover_()
 
     close_files_();
     ++current_chunk_;
-}
-
-std::optional<zarr::Writer::JobT>
-zarr::Writer::pop_from_job_queue() noexcept
-{
-    std::scoped_lock lock(mutex_);
-    if (jobs_.empty()) {
-        return std::nullopt;
-    }
-
-    auto job = jobs_.front();
-    jobs_.pop();
-    return job;
-}
-
-void
-zarr::Writer::worker_thread_(ThreadContext* ctx) noexcept
-{
-    using namespace std::chrono_literals;
-
-    TRACE("Worker thread starting.");
-    if (nullptr == ctx) {
-        LOGE("Null context passed to worker thread.");
-        return;
-    }
-
-    while (true) {
-        std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
-
-        if (ctx->should_stop) {
-            break;
-        }
-
-        if (auto job = pop_from_job_queue(); job.has_value()) {
-            ctx->ready = false;
-            std::string err_msg;
-            if (!job.value()(err_msg)) {
-                zarr_->set_error(err_msg);
-            }
-            ctx->ready = true;
-            lock.unlock();
-            ctx->cv.notify_one();
-        } else {
-            lock.unlock();
-            std::this_thread::sleep_for(1ms);
-        }
-    }
-
-    TRACE("Worker thread exiting.");
 }

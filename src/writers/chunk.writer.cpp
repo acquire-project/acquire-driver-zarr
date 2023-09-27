@@ -10,23 +10,16 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               const Zarr* zarr)
+                               Zarr* zarr)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
 {
-    // spin up threads
-    for (auto& ctx : threads_) {
-        ctx.ready = true;
-        ctx.should_stop = false;
-        ctx.thread =
-          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
-    }
 }
 
 zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               const Zarr* zarr,
+                               Zarr* zarr,
                                const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
@@ -35,13 +28,6 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
            zarr,
            compression_params)
 {
-    // spin up threads
-    for (auto& ctx : threads_) {
-        ctx.ready = true;
-        ctx.should_stop = false;
-        ctx.thread =
-          std::thread([this, capture0 = &ctx] { worker_thread_(capture0); });
-    }
 }
 
 bool
@@ -88,13 +74,17 @@ zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
 void
 zarr::ChunkWriter::make_buffers_() noexcept
 {
-    chunk_buffers_.resize(tiles_per_frame_());
+    const auto nchunks = tiles_per_frame_();
+    chunk_buffers_.resize(nchunks);
+    buffers_ready_ = new bool[nchunks];
+    std::fill(buffers_ready_, buffers_ready_ + nchunks, true);
 
     const auto bytes_of_type = common::bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
       tile_dims_.cols * tile_dims_.rows * bytes_of_type;
 
-    for (auto& buf : chunk_buffers_) {
+    for (auto i = 0; i < chunk_buffers_.size(); ++i) {
+        auto& buf = chunk_buffers_.at(i);
         buf.resize(frames_per_chunk_ * bytes_per_tile);
         std::fill(buf.begin(), buf.end(), 0);
     }
@@ -165,38 +155,41 @@ zarr::ChunkWriter::flush_() noexcept
 
     // compress buffers and write out
     auto buf_sizes = compress_buffers_();
+    std::fill(buffers_ready_, buffers_ready_ + chunk_buffers_.size(), false);
     {
         std::scoped_lock lock(mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             auto& buf = chunk_buffers_.at(i);
-            jobs_.push([fh = &files_.at(i),
-                        data = buf.data(),
-                        size = buf_sizes.at(i)](std::string& err) -> bool {
-                bool success = false;
-                try {
-                    success = file_write(fh, 0, data, data + size);
-                } catch (const std::exception& exc) {
-                    char buf[128];
-                    snprintf(buf,
-                             sizeof(buf),
-                             "Failed to write chunk: %s",
-                             exc.what());
-                    err = buf;
-                } catch (...) {
-                    err = "Unknown error";
-                }
-                return success;
-            });
+            zarr_->push_to_job_queue(std::move(
+              [fh = &files_.at(i),
+               data = buf.data(),
+               size = buf_sizes.at(i),
+               finished = buffers_ready_ + i](std::string& err) -> bool {
+                  bool success = false;
+                  try {
+                      success = file_write(fh, 0, data, data + size);
+                  } catch (const std::exception& exc) {
+                      char buf[128];
+                      snprintf(buf,
+                               sizeof(buf),
+                               "Failed to write chunk: %s",
+                               exc.what());
+                      err = buf;
+                  } catch (...) {
+                      err = "Unknown error";
+                  }
+                  *finished = true;
+
+                  return success;
+              }));
         }
     }
 
     // wait for all writers to finish
-    while (!jobs_.empty()) {
+    while (!std::all_of(buffers_ready_,
+                        buffers_ready_ + chunk_buffers_.size(),
+                        [](const auto& b) { return b; })) {
         std::this_thread::sleep_for(500us);
-    }
-    for (auto& ctx : threads_) {
-        std::unique_lock lock(ctx.mutex);
-        ctx.cv.wait(lock, [&ctx] { return ctx.ready; });
     }
 
     // reset buffers
@@ -220,7 +213,9 @@ zarr::ChunkWriter::make_files_() noexcept
         for (auto x = 0; x < tiles_per_frame_x_; ++x) {
             const auto filename = data_root_ / std::to_string(current_chunk_) /
                                   "0" / std::to_string(y) / std::to_string(x);
-            fs::create_directories(filename.parent_path());
+            fs::create_directories(
+              filename
+                .parent_path()); // FIXME (aliddell): pull up to above loop
             files_.emplace_back();
             if (!file_create(&files_.back(),
                              filename.string().c_str(),

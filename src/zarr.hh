@@ -14,6 +14,7 @@
 
 #include <filesystem>
 #include <map>
+#include <optional>
 #include <stdexcept>
 #include <utility> // std::pair
 #include <vector>
@@ -43,9 +44,19 @@ struct StorageInterface : public Storage
 struct Zarr : StorageInterface
 {
   public:
-    Zarr() = default;
+    using JobT = std::function<bool(std::string&)>;
+    struct ThreadContext
+    {
+        std::thread thread;
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool should_stop;
+        bool ready;
+    };
+
+    Zarr();
     Zarr(BloscCompressionParams&& compression_params);
-    ~Zarr() override = default;
+    ~Zarr() noexcept override;
 
     /// StorageInterface
     void set(const StorageProperties* props) override;
@@ -56,7 +67,11 @@ struct Zarr : StorageInterface
     void reserve_image_shape(const ImageShape* shape) override;
 
     /// Error state
-    void set_error(const std::string& msg) const noexcept;
+    void set_error(const std::string& msg) noexcept;
+
+    /// Multithreading
+    void push_to_job_queue(JobT&& job);
+    size_t jobs_on_queue() const;
 
   protected:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
@@ -82,9 +97,14 @@ struct Zarr : StorageInterface
     // scaled frames, keyed by level-of-detail
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
 
+    /// Multithreading
+    std::vector<ThreadContext> threads_;
+    mutable std::mutex mutex_; // for jobs_ and error_ / error_msg_
+    std::queue<JobT> jobs_;
+
     /// Error state
-    mutable bool error_;
-    mutable std::string error_msg_;
+    bool error_;
+    std::string error_msg_;
 
     /// Setup
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
@@ -102,6 +122,10 @@ struct Zarr : StorageInterface
 
     /// Multiscale
     void write_multiscale_frames_(const VideoFrame* frame);
+
+    /// Multithreading
+    std::optional<JobT> pop_from_job_queue_() noexcept;
+    void worker_thread_(ThreadContext* ctx);
 };
 
 } // namespace acquire::sink::zarr
