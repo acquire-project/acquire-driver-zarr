@@ -7,6 +7,139 @@
 
 namespace zarr = acquire::sink::zarr;
 
+/// DirectoryCreator
+zarr::FileCreator::FileCreator(Zarr* zarr)
+  : zarr_{ zarr }
+{
+}
+
+void
+zarr::FileCreator::set_base_dir(const fs::path& base_dir) noexcept
+{
+    base_dir_ = base_dir;
+    fs::create_directories(base_dir_);
+}
+
+bool
+zarr::FileCreator::create(int n_c,
+                          int n_y,
+                          int n_x,
+                          std::vector<file>& files) noexcept
+{
+    using namespace std::chrono_literals;
+
+    std::vector<std::shared_ptr<std::mutex>> mutexes;
+    for (auto i = 0; i < n_c; ++i) {
+        mutexes.push_back(std::make_shared<std::mutex>());
+    }
+
+    files.resize(n_c * n_y * n_x);
+    std::vector<int> finished(n_c * n_y, 0);
+
+    // until we support more than one channel, n_c will always be 1
+    for (auto c = 0; c < n_c; ++c) {
+        // create the channel directory
+        zarr_->push_to_job_queue(
+          [base = base_dir_, mtx = mutexes.at(c), c](std::string& err) -> bool {
+              try {
+                  std::scoped_lock lock(*mtx);
+                  const auto path = base / std::to_string(c);
+                  if (fs::exists(path)) {
+                      EXPECT(fs::is_directory(path),
+                             "%s must be a directory.",
+                             path.c_str());
+                  } else {
+                      EXPECT(fs::create_directories(path),
+                             "Failed to create directory: %s",
+                             path.c_str());
+                  }
+              } catch (const std::exception& exc) {
+                  char buf[128];
+                  snprintf(buf,
+                           sizeof(buf),
+                           "Failed to create directory: %s",
+                           exc.what());
+                  err = buf;
+                  return false;
+              } catch (...) {
+                  err = "Failed to create directory (unknown)";
+                  return false;
+              }
+              return true;
+          });
+
+        for (auto y = 0; y < n_y; ++y) {
+            zarr_->push_to_job_queue(
+              [base = base_dir_,
+               files = files.data() + c * n_y * n_x + y * n_x,
+               mtx = mutexes.at(c),
+               c,
+               y,
+               n_x,
+               done = finished.data() + c * n_y + y](std::string& err) -> bool {
+                  bool success = false;
+                  try {
+                      auto path = base / std::to_string(c);
+                      {
+                          std::unique_lock lock(*mtx);
+                          while (!fs::exists(path)) {
+                              lock.unlock();
+                              std::this_thread::sleep_for(1ms);
+                              lock.lock();
+                          }
+                      }
+
+                      path /= std::to_string(y);
+
+                      if (fs::exists(path)) {
+                          EXPECT(fs::is_directory(path),
+                                 "%s must be a directory.",
+                                 path.c_str());
+                      } else {
+                          EXPECT(fs::create_directories(path),
+                                 "Failed to create directory: %s",
+                                 path.c_str());
+                      }
+
+                      for (auto x = 0; x < n_x; ++x) {
+                          auto& file = files[x];
+                          auto file_path = path / std::to_string(x);
+
+                          EXPECT(file_create(&file,
+                                             file_path.string().c_str(),
+                                             file_path.string().size()),
+                                 "Failed to open file: '%s'",
+                                 file_path.c_str());
+                      }
+
+                      success = true;
+                  } catch (const std::exception& exc) {
+                      char buf[128];
+                      snprintf(buf,
+                               sizeof(buf),
+                               "Failed to create directory: %s",
+                               exc.what());
+                      err = buf;
+                  } catch (...) {
+                      err = "Failed to create directory (unknown)";
+                  }
+
+                  *done = 1;
+                  return success;
+              });
+        }
+    }
+
+    while (!std::all_of(
+      finished.begin(), finished.end(), [](const auto& b) { return b != 0; })) {
+        std::this_thread::sleep_for(500us);
+    }
+
+    return std::all_of(
+      finished.begin(), finished.end(), [](const auto& b) { return b == 1; });
+}
+
+/// Writer
 zarr::Writer::Writer(const ImageDims& frame_dims,
                      const ImageDims& tile_dims,
                      uint32_t frames_per_chunk,
@@ -22,6 +155,7 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , pixel_type_{ SampleTypeCount }
   , buffers_ready_{ nullptr }
   , zarr_{ zarr }
+  , file_creator_{ zarr }
 {
     CHECK(tile_dims_.cols > 0);
     CHECK(tile_dims_.rows > 0);
@@ -139,7 +273,9 @@ zarr::Writer::finalize_chunks_() noexcept
 std::vector<size_t>
 zarr::Writer::compress_buffers_() noexcept
 {
-    const size_t bytes_per_chunk = bytes_to_flush_ / tiles_per_frame_();
+    const auto nchunks = tiles_per_frame_();
+
+    const size_t bytes_per_chunk = bytes_to_flush_ / nchunks;
     std::vector<size_t> buf_sizes;
     if (!blosc_compression_params_.has_value()) {
         for (auto& buf : chunk_buffers_) {
@@ -147,31 +283,67 @@ zarr::Writer::compress_buffers_() noexcept
         }
         return buf_sizes;
     }
+    using namespace std::chrono_literals;
+
+    buf_sizes.resize(nchunks);
+    std::fill(buffers_ready_, buffers_ready_ + nchunks, false);
 
     TRACE("Compressing");
 
     const auto bytes_of_type = common::bytes_of_type(pixel_type_);
-    std::vector<uint8_t> tmp(bytes_per_chunk + BLOSC_MAX_OVERHEAD);
 
     std::scoped_lock lock(mutex_);
-    for (auto& buf : chunk_buffers_) {
-        const auto nbytes =
-          blosc_compress_ctx(blosc_compression_params_.value().clevel,
-                             blosc_compression_params_.value().shuffle,
-                             bytes_of_type,
-                             bytes_per_chunk,
-                             buf.data(),
-                             tmp.data(),
-                             bytes_per_chunk + BLOSC_MAX_OVERHEAD,
-                             blosc_compression_params_.value().codec_id.c_str(),
-                             0 /* blocksize - 0:automatic */,
-                             (int)std::thread::hardware_concurrency());
+    for (auto i = 0; i < chunk_buffers_.size(); ++i) {
+        auto& buf = chunk_buffers_.at(i);
 
-        if (nbytes > buf.size()) {
-            buf.resize(nbytes);
-        }
-        memcpy(buf.data(), tmp.data(), nbytes);
-        buf_sizes.push_back(nbytes);
+        zarr_->push_to_job_queue([params = blosc_compression_params_.value(),
+                                  buf = &buf,
+                                  bytes_of_type,
+                                  bytes_per_chunk,
+                                  finished = buffers_ready_ + i,
+                                  buf_size = buf_sizes.data() +
+                                             i](std::string& err) -> bool {
+            bool success = false;
+            try {
+                const auto tmp_size = bytes_per_chunk + BLOSC_MAX_OVERHEAD;
+                std::vector<uint8_t> tmp(tmp_size);
+                const auto nb =
+                  blosc_compress_ctx(params.clevel,
+                                     params.shuffle,
+                                     bytes_of_type,
+                                     bytes_per_chunk,
+                                     buf->data(),
+                                     tmp.data(),
+                                     tmp_size,
+                                     params.codec_id.c_str(),
+                                     0 /* blocksize - 0:automatic */,
+                                     1);
+                if (nb > buf->size()) {
+                    buf->resize(nb);
+                }
+                memcpy(buf->data(), tmp.data(), nb);
+                *buf_size = nb;
+
+                success = true;
+            } catch (const std::exception& exc) {
+                char msg[128];
+                snprintf(
+                  msg, sizeof(msg), "Failed to compress chunk: %s", exc.what());
+                err = msg;
+            } catch (...) {
+                err = "Failed to compress chunk (unknown)";
+            }
+            *finished = true;
+
+            return success;
+        });
+    }
+
+    // wait for all threads to finish
+    while (!std::all_of(buffers_ready_,
+                        buffers_ready_ + nchunks,
+                        [](const auto& b) { return b; })) {
+        std::this_thread::sleep_for(500us);
     }
 
     return buf_sizes;

@@ -98,6 +98,8 @@ zarr::ShardWriter::make_buffers_() noexcept
 {
     const auto nchunks = tiles_per_frame_();
     chunk_buffers_.resize(nchunks);
+    buffers_ready_ = new bool[nchunks];
+    std::fill(buffers_ready_, buffers_ready_ + nchunks, true);
 
     const auto bytes_of_type = common::bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
@@ -111,8 +113,6 @@ zarr::ShardWriter::make_buffers_() noexcept
 
     const auto nshards = shards_per_frame_();
     shard_buffers_.resize(nshards);
-    buffers_ready_ = new bool[nshards];
-    std::fill(buffers_ready_, buffers_ready_ + nshards, true);
 
     for (auto& buf : shard_buffers_) {
         buf.resize(chunks_per_shard_() * bytes_per_chunk        // data
@@ -255,7 +255,7 @@ zarr::ShardWriter::flush_() noexcept
 
     // wait for all threads to finish
     while (!std::all_of(buffers_ready_,
-                        buffers_ready_ + chunk_buffers_.size(),
+                        buffers_ready_ + shard_buffers_.size(),
                         [](const auto& b) { return b; })) {
         std::this_thread::sleep_for(500us);
     }
@@ -286,21 +286,7 @@ zarr::ShardWriter::flush_() noexcept
 bool
 zarr::ShardWriter::make_files_() noexcept
 {
-    const auto base = data_root_ / ("c" + std::to_string(current_chunk_)) / "0";
-    fs::create_directories(base);
-    for (auto y = 0; y < shards_per_frame_y_; ++y) {
-        const auto dirname = base / std::to_string(y);
-        fs::create_directories(dirname);
-        for (auto x = 0; x < shards_per_frame_x_; ++x) {
-            const auto filename = dirname / std::to_string(y);
-            files_.emplace_back();
-            if (!file_create(&files_.back(),
-                             filename.string().c_str(),
-                             filename.string().size())) {
-                LOGE("Failed to create file '%s'", filename.string().c_str());
-                return false;
-            }
-        }
-    }
-    return true;
+    file_creator_.set_base_dir(data_root_ / ("c" + std::to_string(current_chunk_)));
+    return file_creator_.create(
+      1, shards_per_frame_y_, shards_per_frame_x_, files_);
 }

@@ -23,6 +23,24 @@ namespace fs = std::filesystem;
 namespace acquire::sink::zarr {
 struct Zarr;
 
+struct FileCreator
+{
+    FileCreator() = delete;
+    explicit FileCreator(Zarr* zarr);
+    ~FileCreator() noexcept = default;
+
+    void set_base_dir(const fs::path& base_dir) noexcept;
+    [[nodiscard]] bool create(int n_c,
+                              int n_y,
+                              int n_x,
+                              std::vector<file>& files) noexcept;
+
+  private:
+    fs::path base_dir_;
+
+    Zarr* zarr_;
+};
+
 struct Writer
 {
   public:
@@ -61,12 +79,13 @@ struct Writer
     // std::optional<ZstdCompressionParams> zstd_compression_params_; // TODO
 
     /// Filesystem
+    FileCreator file_creator_;
     fs::path data_root_;
     std::vector<file> files_;
 
     /// Multithreading
     std::vector<std::vector<uint8_t>> chunk_buffers_;
-    bool *buffers_ready_;
+    bool* buffers_ready_;
     std::mutex mutex_;
 
     /// Bookkeeping

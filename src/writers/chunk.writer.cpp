@@ -209,21 +209,7 @@ zarr::ChunkWriter::flush_() noexcept
 bool
 zarr::ChunkWriter::make_files_() noexcept
 {
-    const auto base = data_root_ / std::to_string(current_chunk_) / "0";
-    fs::create_directories(base);
-    for (auto y = 0; y < tiles_per_frame_y_; ++y) {
-        const auto dirname = base / std::to_string(y);
-        fs::create_directories(dirname);
-        for (auto x = 0; x < tiles_per_frame_x_; ++x) {
-            const auto filename = dirname / std::to_string(x);
-            files_.emplace_back();
-            if (!file_create(&files_.back(),
-                             filename.string().c_str(),
-                             filename.string().size())) {
-                LOGE("Failed to create file '%s'", filename.string().c_str());
-                return false;
-            }
-        }
-    }
-    return true;
+    file_creator_.set_base_dir(data_root_ / std::to_string(current_chunk_));
+    return file_creator_.create(
+      1, tiles_per_frame_y_, tiles_per_frame_x_, files_);
 }

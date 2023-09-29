@@ -91,7 +91,7 @@ setup(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*radial.*"),
+                                SIZED("simulated.*empty.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -116,8 +116,6 @@ setup(AcquireRuntime* runtime)
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
-    // we may drop frames with lower exposure
-    props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = max_frame_count;
 
     OK(acquire_configure(runtime, &props));
