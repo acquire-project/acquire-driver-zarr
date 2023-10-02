@@ -134,9 +134,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
         do {
             struct clock throttle;
             clock_init(&throttle);
-//            EXPECT(clock_cmp_now(&clock) < 0,
-//                   "Timeout at %f ms",
-//                   clock_toc_ms(&clock) + time_limit_ms);
+            EXPECT(clock_cmp_now(&clock) < 0,
+                   "Timeout at %f ms",
+                   clock_toc_ms(&clock) + time_limit_ms);
             OK(acquire_map_read(runtime, 0, &beg, &end));
             for (cur = beg; cur < end; cur = next(cur)) {
                 LOG("stream %d counting frame w id %d", 0, cur->frame_id);
@@ -154,8 +154,10 @@ acquire(AcquireRuntime* runtime, const char* filename)
             }
             clock_sleep_ms(&throttle, 100.0f);
 
-            LOG(
-              "stream %d expected_frames_per_chunk %d time %f", 0, nframes, clock_toc_ms(&clock));
+            LOG("stream %d expected_frames_per_chunk %d time %f",
+                0,
+                nframes,
+                clock_toc_ms(&clock));
         } while (DeviceState_Running == acquire_get_state(runtime) &&
                  nframes < props.video[0].max_frame_count);
 
