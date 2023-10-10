@@ -197,6 +197,8 @@ zarr::Zarr::Zarr()
   , max_bytes_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , num_channels_{ 1 }
+  , num_slices_{ 1 }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     start_threads_();
@@ -209,6 +211,8 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
   , max_bytes_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , num_channels_{ 1 }
+  , num_slices_{ 1 }
   , thread_pool_(std::thread::hardware_concurrency())
 {
     compression_params_ = std::move(compression_params);
@@ -246,6 +250,9 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // hang on to this until we have the image shape
     enable_multiscale_ = (bool)props->enable_multiscale;
+
+    num_channels_ = props->num_channels;
+    num_slices_ = props->num_slices;
 }
 
 void
@@ -273,7 +280,7 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
           .supported = 1,
           .max_bytes_per_chunk = {
             .writable = 1,
-            .low = (float)(16 << 20),
+            .low = (float)(1 << 8),
             .high = (float)(1 << 30),
             .type = PropertyType_FixedPrecision },
         },
@@ -520,20 +527,24 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
       std::min(frame_count,
                (uint64_t)get_tiles_per_chunk(
                  image_shape, tile_shape, max_bytes_per_chunk_));
+    // This will initially be zero before we get a full time point - is that OK?
+    const uint64_t t_count = frame_count / (num_channels_ * num_slices_);
 
     json zarray_attrs = {
         { "zarr_format", 2 },
         { "shape",
           {
-            frame_count,
-            image_shape.dims.channels,
+            t_count,
+            num_channels_,
+            num_slices_,
             image_shape.dims.height,
             image_shape.dims.width,
           } },
         { "chunks",
           {
-            frames_per_chunk,
             1,
+            1,
+            frames_per_chunk,
             tile_shape.height,
             tile_shape.width,
           } },
@@ -577,10 +588,17 @@ zarr::Zarr::write_group_zattrs_json_() const
         {
           { "name", "t" },
           { "type", "time" },
+          // TODO: add support for frame time in some de-facto or specified units
         },
         {
           { "name", "c" },
           { "type", "channel" },
+        },
+        {
+          { "name", "z" },
+          { "type", "space" },
+          { "unit", "micrometer" },
+          // TODO: allow spatial units to be specified
         },
         {
           { "name", "y" },
@@ -603,7 +621,7 @@ zarr::Zarr::write_group_zattrs_json_() const
                 {
                   {
                     { "type", "scale" },
-                    { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
+                    { "scale", { 1, 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
                   },
                 } },
             },
@@ -619,6 +637,7 @@ zarr::Zarr::write_group_zattrs_json_() const
                     { "scale",
                       { std::pow(2, layer),
                         1,
+                        1, // TODO: want to downsample over z?
                         std::pow(2, layer) * pixel_scale_um_.y,
                         std::pow(2, layer) * pixel_scale_um_.x } },
                   },
@@ -686,6 +705,10 @@ zarr::Zarr::allocate_writers_()
         size_t tile_planes =
           std::ceil((float)img_px_p / (float)tile_shape_.planes);
 
+        // TODO: need to allocate more writers to account for append dimensions?
+        // No, we're going to use the same number of writers (based on the multi-scale
+        // levels and plane-y-x tiles), rollover z (instead of t) and always append
+        // unitary chunks to t and c.
         TRACE("Allocating %llu writers for layer %d",
               tile_cols * tile_rows * tile_planes,
               layer);

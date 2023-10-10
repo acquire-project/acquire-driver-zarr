@@ -102,6 +102,8 @@ struct Zarr final : StorageInterface
     ImageShape image_shape_;
     TileShape tile_shape_;
     bool enable_multiscale_;
+    uint8_t num_slices_;
+    uint8_t num_channels_;
 
     /// Downsampling of incoming frames.
     std::optional<FrameScaler> frame_scaler_;

@@ -80,6 +80,8 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , tiles_per_chunk_{ 0 }
   , bytes_written_{ 0 }
   , current_chunk_{ 0 }
+  , current_channel_{ 0 }
+  , current_frame_{ 0 }
   , dimension_separator_{ dimension_separator }
   , base_dir_{ base_directory }
   , current_file_{}
@@ -194,12 +196,17 @@ void
 ChunkWriter::open_chunk_file()
 {
     char file_path[512];
+    // Modified the path to include hard-coded append split of tcz.
     snprintf(file_path,
              sizeof(file_path) - 1,
-             "%d%c%d%c%d%c%d%c%d",
+             "%d%c%d%c%d%c%d%c%d%c%d%c%d",
              layer_,
              dimension_separator_,
-             current_chunk_,
+             current_frame_, // index over t
+             dimension_separator_,
+             current_channel_, // index over c
+             dimension_separator_,
+             current_chunk_, // index over z only
              dimension_separator_,
              tile_plane_,
              dimension_separator_,
