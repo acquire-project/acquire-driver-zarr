@@ -34,6 +34,8 @@ struct ChunkWriter final
                 uint32_t tile_col,
                 uint32_t tile_row,
                 uint32_t tile_plane,
+                uint8_t num_channels,
+                uint8_t num_slices,
                 uint64_t max_bytes_per_chunk,
                 char dimension_separator,
                 const std::string& base_directory);
@@ -56,6 +58,9 @@ struct ChunkWriter final
     uint64_t bytes_per_chunk_;
     uint32_t tiles_per_chunk_;
     uint64_t bytes_written_;
+
+    uint8_t num_slices_;
+    uint8_t num_channels_;
 
     std::string base_dir_;
     uint32_t layer_;

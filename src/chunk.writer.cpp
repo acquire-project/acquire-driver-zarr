@@ -72,6 +72,8 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
                          uint32_t tile_col,
                          uint32_t tile_row,
                          uint32_t tile_plane,
+                         uint8_t num_channels,
+                         uint8_t num_slices,
                          uint64_t max_bytes_per_chunk,
                          char dimension_separator,
                          const std::string& base_directory)
@@ -79,6 +81,8 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , bytes_per_chunk_{ 0 }
   , tiles_per_chunk_{ 0 }
   , bytes_written_{ 0 }
+  , num_channels_{ num_channels }
+  , num_slices_{ num_slices }
   , current_chunk_{ 0 }
   , current_channel_{ 0 }
   , current_frame_{ 0 }
@@ -195,6 +199,9 @@ ChunkWriter::write(const uint8_t* beg, const uint8_t* end)
 void
 ChunkWriter::open_chunk_file()
 {
+    const uint32_t frames_written = this->frames_written();
+    const int current_channel = frames_written / num_slices_;
+    const int current_time = current_channel / num_channels_;
     char file_path[512];
     // Modified the path to include hard-coded append split of tcz.
     snprintf(file_path,
@@ -202,9 +209,9 @@ ChunkWriter::open_chunk_file()
              "%d%c%d%c%d%c%d%c%d%c%d%c%d",
              layer_,
              dimension_separator_,
-             current_frame_, // index over t
+             current_time, // index over t
              dimension_separator_,
-             current_channel_, // index over c
+             current_channel, // index over c
              dimension_separator_,
              current_chunk_, // index over z only
              dimension_separator_,

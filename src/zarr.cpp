@@ -741,6 +741,8 @@ zarr::Zarr::allocate_writers_()
                                                     col,
                                                     row,
                                                     plane,
+                                                    num_channels_,
+                                                    num_slices_,
                                                     max_bytes_per_chunk_,
                                                     dimension_separator_,
                                                     data_dir_));

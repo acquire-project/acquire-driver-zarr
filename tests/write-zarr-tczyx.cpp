@@ -67,9 +67,9 @@ reporter(int is_error,
           a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
     } while (0)
 
-const static uint32_t frame_width = 640;
-const static uint32_t frame_height = 320;
-const static uint32_t num_slices = 8;
+const static uint32_t frame_width = 1280;
+const static uint32_t frame_height = 640;
+const static uint32_t num_slices = 16;
 const static uint32_t num_channels = 4;
 const static uint32_t num_time_points = 2;
 const static uint32_t chunk_width = 640;
@@ -108,16 +108,13 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     props.video[0].storage.settings.num_channels = num_channels;
     props.video[0].storage.settings.num_slices = num_slices;
-    props.video[0].storage.settings.chunking.tile.height = chunk_height;
-    props.video[0].storage.settings.chunking.tile.width = chunk_height;
-    props.video[0].storage.settings.chunking.tile.planes = 1;
 
     const uint32_t max_bytes_per_chunk = chunk_height * chunk_width * chunk_slice;
 
     storage_properties_set_chunking_props(
         &props.video[0].storage.settings,
-        frame_width,
-        frame_height,
+        chunk_width,
+        chunk_height,
         1,
         max_bytes_per_chunk);
 
