@@ -197,6 +197,7 @@ zarr::Zarr::Zarr()
   , max_bytes_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , max_frame_count_{ 0 }
   , num_channels_{ 1 }
   , num_slices_{ 1 }
   , thread_pool_(std::thread::hardware_concurrency())
@@ -211,6 +212,7 @@ zarr::Zarr::Zarr(CompressionParams&& compression_params)
   , max_bytes_per_chunk_{ 0 }
   , image_shape_{ 0 }
   , tile_shape_{ 0 }
+  , max_frame_count_{ 0 }
   , num_channels_{ 1 }
   , num_slices_{ 1 }
   , thread_pool_(std::thread::hardware_concurrency())
@@ -253,6 +255,7 @@ zarr::Zarr::set(const StorageProperties* props)
 
     num_channels_ = props->num_channels;
     num_slices_ = props->num_slices;
+    max_frame_count_ = props->max_frame_count;
 }
 
 void
@@ -522,19 +525,18 @@ zarr::Zarr::write_zarray_json_inner_(size_t layer,
         return;
     }
 
-    const uint64_t frame_count = writers_.at(layer).front()->frames_written();
+    const uint64_t frame_count = max_frame_count_ > 0 ? max_frame_count_ : writers_.at(layer).front()->frames_written();
     const auto frames_per_chunk =
       std::min(frame_count,
                (uint64_t)get_tiles_per_chunk(
                  image_shape, tile_shape, max_bytes_per_chunk_));
-    // This will initially be zero before we get a full time point - is that OK?
-    const uint64_t t_count = frame_count / (num_channels_ * num_slices_);
+    const uint64_t num_times = frame_count / (num_channels_ * num_slices_);
 
     json zarray_attrs = {
         { "zarr_format", 2 },
         { "shape",
           {
-            t_count,
+            num_times,
             num_channels_,
             num_slices_,
             image_shape.dims.height,

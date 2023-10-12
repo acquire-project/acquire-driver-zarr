@@ -102,6 +102,7 @@ struct Zarr final : StorageInterface
     ImageShape image_shape_;
     TileShape tile_shape_;
     bool enable_multiscale_;
+    uint64_t max_frame_count_;
     uint8_t num_slices_;
     uint8_t num_channels_;
 
