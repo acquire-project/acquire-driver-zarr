@@ -201,8 +201,10 @@ void
 ChunkWriter::open_chunk_file()
 {
     const uint32_t frames_written = this->frames_written();
-    const int current_channel = frames_written / num_slices_;
-    const int current_time = current_channel / num_channels_;
+    const int current_z = current_chunk_ % int(std::ceil(num_slices_ / tiles_per_chunk_));
+    const int channels_written = frames_written / num_slices_;
+    const int current_channel = channels_written % num_channels_;
+    const int current_time = channels_written / num_channels_;
     char file_path[512];
     // Modified the path to include hard-coded append split of tcz.
     snprintf(file_path,
@@ -214,7 +216,7 @@ ChunkWriter::open_chunk_file()
              dimension_separator_,
              current_channel, // index over c
              dimension_separator_,
-             current_chunk_, // index over z only
+             current_z, // index over z
              dimension_separator_,
              tile_row_,
              dimension_separator_,
