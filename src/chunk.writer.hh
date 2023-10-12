@@ -66,10 +66,6 @@ struct ChunkWriter final
     uint32_t layer_;
     // index over z
     int current_chunk_;
-    // index over t
-    int current_frame_;
-    // index over c
-    int current_channel_;
     char dimension_separator_;
     std::optional<struct file> current_file_;
 

@@ -85,8 +85,6 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
   , num_channels_{ num_channels }
   , num_slices_{ num_slices }
   , current_chunk_{ 0 }
-  , current_channel_{ 0 }
-  , current_frame_{ 0 }
   , dimension_separator_{ dimension_separator }
   , base_dir_{ base_directory }
   , current_file_{}
