@@ -7,6 +7,7 @@
 
 #include "device/props/components.h"
 #include "platform.h"
+#include "prelude.h"
 
 /// Check that a==b
 /// example: `ASSERT_EQ(int,"%d",42,meaning_of_life())`
@@ -101,6 +102,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
     EXPECT(bpt > 0, "Computed zero bytes per tile.", bpt);
 
     tiles_per_chunk_ = std::floor((float)max_bytes_per_chunk / bpt);
+    LOGE("tiles_per_chunk = %d", tiles_per_chunk_);
     EXPECT(tiles_per_chunk_ > 0,
            "Given %lu bytes per chunk, %lu bytes per tile.",
            max_bytes_per_chunk,
@@ -108,6 +110,7 @@ ChunkWriter::ChunkWriter(BaseEncoder* encoder,
 
     // this is guaranteed to be positive
     bytes_per_chunk_ = tiles_per_chunk_ * (size_t)bpt;
+    LOGE("bytes_per_chunk = %d", bytes_per_chunk_);
 
     EXPECT('.' == dimension_separator || '/' == dimension_separator,
            "Expecting either '.' or '/' for dimension separator, got '%c'.",
@@ -206,7 +209,7 @@ ChunkWriter::open_chunk_file()
     // Modified the path to include hard-coded append split of tcz.
     snprintf(file_path,
              sizeof(file_path) - 1,
-             "%d%c%d%c%d%c%d%c%d%c%d%c%d",
+             "%d%c%d%c%d%c%d%c%d%c%d",
              layer_,
              dimension_separator_,
              current_time, // index over t
@@ -214,8 +217,6 @@ ChunkWriter::open_chunk_file()
              current_channel, // index over c
              dimension_separator_,
              current_chunk_, // index over z only
-             dimension_separator_,
-             tile_plane_,
              dimension_separator_,
              tile_row_,
              dimension_separator_,

@@ -19,13 +19,15 @@ reporter(int is_error,
          const char* function,
          const char* msg)
 {
-    fprintf(is_error ? stderr : stdout,
+    auto stream = is_error ? stderr : stdout;
+    fprintf(stream,
             "%s%s(%d) - %s: %s\n",
             is_error ? "ERROR " : "",
             file,
             line,
             function,
             msg);
+    fflush(stream);
 }
 
 /// Helper for passing size static strings as function args.
@@ -88,7 +90,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*empty.*"),
+                                SIZED("simulated.*random.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -242,7 +244,7 @@ main()
                       chunks[2].get<int>() * chunks[3].get<int>() *
                       chunks[4].get<int>();
 
-    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0/0/0");
+    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0/0");
     CHECK(fs::is_regular_file(chunk_file_path));
     const auto chunk_file_size = fs::file_size(chunk_file_path); 
     ASSERT_EQ(int, "%d", chunk_size, chunk_file_size);
