@@ -1,6 +1,6 @@
 The library here was built as follows.
 
-Against v1.21.4 (2c2f9bd) of the c-blosc source hosted at:
+Against v1.21.5 (d306135) of the c-blosc source hosted at:
 https://github.com/Blosc/c-blosc
 
 It's a universal binary compiled for `arm64` and `x86_64`.

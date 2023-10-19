@@ -1,26 +1,26 @@
 add_subdirectory(3rdParty)
 
-if(NOT TARGET acquire-core-logger)
-        add_subdirectory(acquire-core-libs)
-endif()
+if (NOT TARGET acquire-core-logger)
+    add_subdirectory(acquire-core-libs)
+endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         prelude.h
-        tiled.frame.hh
-        tiled.frame.cpp
-        chunk.writer.hh
-        chunk.writer.cpp
-        frame.scaler.hh
-        frame.scaler.cpp
+        common.hh
+        common.cpp
+        writers/writer.hh
+        writers/writer.cpp
+        writers/chunk.writer.hh
+        writers/chunk.writer.cpp
+        writers/shard.writer.hh
+        writers/shard.writer.cpp
+        writers/blosc.compressor.hh
+        writers/blosc.compressor.cpp
         zarr.hh
         zarr.cpp
-        zarr.encoder.hh
-        zarr.encoder.cpp
-        zarr.raw.hh
-        zarr.raw.cpp
-        zarr.blosc.hh
-        zarr.blosc.cpp
+        zarr.v2.hh
+        zarr.v2.cpp
         zarr.driver.c
 )
 target_enable_simd(${tgt})
