@@ -13,6 +13,9 @@ This is an Acquire Driver that supports chunked streaming to [zarr][].
 - **Zarr**
 - **ZarrBlosc1ZstdByteShuffle**
 - **ZarrBlosc1Lz4ByteShuffle**
+- **ZarrV3**
+- **ZarrV3Blosc1ZstdByteShuffle**
+- **ZarrV3Blosc1Lz4ByteShuffle**
 
 ## Using the Zarr storage device
 
@@ -23,6 +26,10 @@ To compress while streaming, you can use one of the `ZarrBlosc1*` devices.
 Chunking is configured using `storage_properties_set_chunking_props()` when configuring your video stream.
 Multiscale storage can be enabled or disabled by calling `storage_properties_set_enable_multiscale()` when configuring
 the video stream.
+
+For the [Zarr v3] version of each device, you can use the `ZarrV3*` devices.
+**Note:** Zarr v3 is not [yet](https://github.com/ome/ngff/pull/206) supported by the Python OME-Zarr library, so you
+will not be able to read multiscale metadata from the resulting dataset.
 
 ### Configuring chunking
 
@@ -41,21 +48,21 @@ storage_properties_set_chunking_props(struct StorageProperties* out,
 ```
 
 | ![frames](https://github.com/aliddell/acquire-driver-zarr/assets/844464/3510d468-4751-4fa0-b2bf-0e29a5f3ea1c) |
-|:--:|
-| A collection of frames. |
+|:-------------------------------------------------------------------------------------------------------------:|
+|                                            A collection of frames.                                            |
 
 A _tile_ is a contiguous section, or region of interest, of a _frame_.
 
 | ![tiles](https://github.com/aliddell/acquire-driver-zarr/assets/844464/f8d16139-e0ac-44db-855f-2f5ef305c98b) |
-|:--:|
-| A collection of frames, divided into tiles. |
+|:------------------------------------------------------------------------------------------------------------:|
+|                                 A collection of frames, divided into tiles.                                  |
 
 A _chunk_ is nothing more than some number of stacked tiles from subsequent frames, with each tile in a chunk having
 the same ROI in its respective frame.
 
-|  ![chunks](https://github.com/aliddell/acquire-driver-zarr/assets/844464/653e4d82-363e-4e04-9a42-927b052fb6e7) |
-|:--:|
-| A collection of frames, divided into tiles. A single chunk has been highlighted in red. |
+| ![chunks](https://github.com/aliddell/acquire-driver-zarr/assets/844464/653e4d82-363e-4e04-9a42-927b052fb6e7) |
+|:-------------------------------------------------------------------------------------------------------------:|
+|            A collection of frames, divided into tiles. A single chunk has been highlighted in red.            |
 
 You can specify the width and height, in pixels, of each tile, and if your frame size has more than one plane, you can
 specify the number of planes you want per tile as well.
@@ -120,3 +127,5 @@ Then the sequence of levels will have dimensions 1920 x 1080, 960 x 540, 480 x 2
 [Blosc]: https://github.com/Blosc/c-blosc
 
 [Blosc docs]: https://www.blosc.org/
+
+[Zarr v3]: https://zarr-specs.readthedocs.io/en/latest/v3/core/v3.0.html
