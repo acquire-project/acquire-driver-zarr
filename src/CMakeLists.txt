@@ -13,6 +13,8 @@ add_library(${tgt} MODULE
         writers/writer.cpp
         writers/chunk.writer.hh
         writers/chunk.writer.cpp
+        writers/shard.writer.hh
+        writers/shard.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
         zarr.hh
