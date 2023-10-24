@@ -26,33 +26,6 @@ zarr::FileCreator::create(int n_c,
                           int n_x,
                           std::vector<file>& files) noexcept
 {
-    const size_t n_files = n_c * n_y * n_x;
-    files.resize(n_files);
-    if (n_files < 150) {
-        try {
-            create_serial(n_c, n_y, n_x, files);
-            return true;
-        } catch (const std::exception& exc) {
-            char buf[128];
-            snprintf(
-              buf, sizeof(buf), "Failed to create directory: %s", exc.what());
-            LOGE(buf);
-            return false;
-        } catch (...) {
-            LOGE("Failed to create directory (unknown)");
-            return false;
-        }
-    } else {
-        return create_parallel(n_c, n_y, n_x, files);
-    }
-}
-
-bool
-zarr::FileCreator::create_parallel(int n_c,
-                                   int n_y,
-                                   int n_x,
-                                   std::vector<file>& files) noexcept
-{
     using namespace std::chrono_literals;
 
     std::vector<std::shared_ptr<std::mutex>> mutexes;
@@ -137,50 +110,6 @@ zarr::FileCreator::create_parallel(int n_c,
 
     return std::all_of(
       finished.begin(), finished.end(), [](const auto& f) { return f == 1; });
-}
-
-void
-zarr::FileCreator::create_serial(int n_c,
-                                 int n_y,
-                                 int n_x,
-                                 std::vector<file>& files)
-{
-    for (auto c = 0; c < n_c; ++c) {
-        fs::path path = base_dir_ / std::to_string(c);
-        if (!fs::exists(path)) {
-            EXPECT(fs::create_directories(path),
-                   "Failed to create directory: %s",
-                   path.c_str());
-        } else {
-            EXPECT(
-              fs::is_directory(path), "%s must be a directory.", path.c_str());
-        }
-
-        for (auto y = 0; y < n_y; ++y) {
-            path = base_dir_ / std::to_string(c) / std::to_string(y);
-            if (!fs::exists(path)) {
-                EXPECT(fs::create_directories(path),
-                       "Failed to create directory: %s",
-                       path.c_str());
-            } else {
-                EXPECT(fs::is_directory(path),
-                       "%s must be a directory.",
-                       path.c_str());
-            }
-
-            for (auto x = 0; x < n_x; ++x) {
-                auto& file = files[c * n_y * n_x + y * n_x + x];
-                auto file_path = base_dir_ / std::to_string(c) /
-                                 std::to_string(y) / std::to_string(x);
-
-                EXPECT(file_create(&file,
-                                   file_path.string().c_str(),
-                                   file_path.string().size()),
-                       "Failed to open file: '%s'",
-                       file_path.c_str());
-            }
-        }
-    }
 }
 
 bool
