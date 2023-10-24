@@ -37,8 +37,18 @@ struct FileCreator
 
   private:
     fs::path base_dir_;
-
     Zarr* zarr_;
+
+    bool create_channel_dirs_(int n_c) noexcept;
+    bool create_parallel(int n_c,
+                         int n_y,
+                         int n_x,
+                         std::vector<file>& files) noexcept;
+
+    void create_serial(int n_c,
+                       int n_y,
+                       int n_x,
+                       std::vector<file>& files);
 };
 
 struct Writer
