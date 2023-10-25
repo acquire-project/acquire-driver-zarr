@@ -39,6 +39,8 @@ zarr::FileCreator::create(int n_c,
         return false;
     }
 
+    files.resize(n_c * n_y * n_x);
+
     // until we support more than one channel, n_c will always be 1
     for (auto c = 0; c < n_c; ++c) {
         for (auto y = 0; y < n_y; ++y) {
