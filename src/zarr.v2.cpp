@@ -100,16 +100,14 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
         { "shape",
           {
             frame_count,     // t
-                             // TODO (aliddell): c?
-            1,               // z
+            1,               // c
             image_dims.rows, // y
             image_dims.cols, // x
           } },
         { "chunks",
           {
             frames_per_chunk, // t
-                              // TODO (aliddell): c?
-            1,                // z
+            1,                // c
             tile_dims.rows,   // y
             tile_dims.cols,   // x
           } },
@@ -208,8 +206,7 @@ zarr::ZarrV2::write_group_metadata_() const
                       "scale",
                       {
                         std::pow(2, i), // t
-                                        // TODO (aliddell): c?
-                        1,              // z
+                        1,              // c
                         std::pow(2, i) * pixel_scale_um_.y, // y
                         std::pow(2, i) * pixel_scale_um_.x  // x
                       },

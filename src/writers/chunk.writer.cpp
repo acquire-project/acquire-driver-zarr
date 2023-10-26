@@ -79,9 +79,9 @@ zarr::ChunkWriter::make_buffers_() noexcept
     buffers_ready_ = new bool[nchunks];
     std::fill(buffers_ready_, buffers_ready_ + nchunks, true);
 
-    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+      tile_dims_.cols * tile_dims_.rows * bytes_per_px;
 
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
         auto& buf = chunk_buffers_.at(i);
@@ -93,9 +93,9 @@ zarr::ChunkWriter::make_buffers_() noexcept
 size_t
 zarr::ChunkWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
 {
-    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+      tile_dims_.cols * tile_dims_.rows * bytes_per_px;
     const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
 
     size_t bytes_written = 0;
@@ -112,17 +112,17 @@ zarr::ChunkWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
                     const auto frame_col = j * tile_dims_.cols;
 
                     const auto buf_offset =
-                      bytes_of_type *
+                      bytes_per_px *
                       (frame_row * frame_dims_.cols + frame_col);
 
                     const auto region_width =
                       std::min(frame_col + tile_dims_.cols, frame_dims_.cols) -
                       frame_col;
 
-                    const auto nbytes = region_width * bytes_of_type;
+                    const auto nbytes = region_width * bytes_per_px;
                     memcpy(bytes_out + offset, buf + buf_offset, nbytes);
                 }
-                offset += tile_dims_.cols * bytes_of_type;
+                offset += tile_dims_.cols * bytes_per_px;
             }
             bytes_written += bytes_per_tile;
         }
@@ -139,9 +139,9 @@ zarr::ChunkWriter::flush_() noexcept
     }
 
     using namespace std::chrono_literals;
-    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * bytes_of_type;
+      tile_dims_.cols * tile_dims_.rows * bytes_per_px;
     if (bytes_to_flush_ % bytes_per_tile != 0) {
         LOGE("Expected bytes to flush to be a multiple of the "
              "number of bytes per tile.");
@@ -157,7 +157,7 @@ zarr::ChunkWriter::flush_() noexcept
     auto buf_sizes = compress_buffers_();
     std::fill(buffers_ready_, buffers_ready_ + chunk_buffers_.size(), false);
     {
-        std::scoped_lock lock(mutex_);
+        std::scoped_lock lock(buffers_mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             auto& buf = chunk_buffers_.at(i);
             zarr_->push_to_job_queue(std::move(
@@ -194,7 +194,7 @@ zarr::ChunkWriter::flush_() noexcept
 
     // reset buffers
     const auto bytes_per_chunk =
-      tile_dims_.cols * tile_dims_.rows * bytes_of_type * frames_per_chunk_;
+      tile_dims_.cols * tile_dims_.rows * bytes_per_px * frames_per_chunk_;
     for (auto& buf : chunk_buffers_) {
         // absurd edge case we need to account for
         if (buf.size() > bytes_per_chunk) {
