@@ -157,7 +157,7 @@ zarr::ChunkWriter::flush_() noexcept
     auto buf_sizes = compress_buffers_();
     std::fill(buffers_ready_, buffers_ready_ + chunk_buffers_.size(), false);
     {
-        std::scoped_lock lock(mutex_);
+        std::scoped_lock lock(buffers_mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             auto& buf = chunk_buffers_.at(i);
             zarr_->push_to_job_queue(std::move(

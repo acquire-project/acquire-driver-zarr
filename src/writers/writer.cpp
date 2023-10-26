@@ -315,7 +315,7 @@ zarr::Writer::compress_buffers_() noexcept
 
     const auto bytes_of_type = common::bytes_of_type(pixel_type_);
 
-    std::scoped_lock lock(mutex_);
+    std::scoped_lock lock(buffers_mutex_);
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
         auto& buf = chunk_buffers_.at(i);
 

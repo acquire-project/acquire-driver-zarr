@@ -77,7 +77,6 @@ struct Writer
 
     /// Compression
     std::optional<BloscCompressionParams> blosc_compression_params_;
-    // std::optional<ZstdCompressionParams> zstd_compression_params_; // TODO
 
     /// Filesystem
     FileCreator file_creator_;
@@ -87,7 +86,7 @@ struct Writer
     /// Multithreading
     std::vector<std::vector<uint8_t>> chunk_buffers_;
     bool* buffers_ready_;
-    std::mutex mutex_;
+    std::mutex buffers_mutex_;
 
     /// Bookkeeping
     uint64_t bytes_to_flush_;
