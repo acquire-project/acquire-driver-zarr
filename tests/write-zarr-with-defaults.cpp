@@ -154,8 +154,10 @@ acquire(AcquireRuntime* runtime, const char* filename)
             }
             clock_sleep_ms(&throttle, 100.0f);
 
-            LOG(
-              "stream %d expected_frames_per_chunk %d time %f", 0, nframes, clock_toc_ms(&clock));
+            LOG("stream %d expected_frames_per_chunk %d time %f",
+                0,
+                nframes,
+                clock_toc_ms(&clock));
         } while (DeviceState_Running == acquire_get_state(runtime) &&
                  nframes < props.video[0].max_frame_count);
 

@@ -1,41 +1,27 @@
 #ifndef H_ACQUIRE_STORAGE_ZARR_V0
 #define H_ACQUIRE_STORAGE_ZARR_V0
 
-#include "device/kit/storage.h"
-#include "platform.h"
-#include "logger.h"
-
-#include "prelude.h"
-#include "chunk.writer.hh"
-#include "frame.scaler.hh"
-
-#include <condition_variable>
-#include <filesystem>
-#include <optional>
-#include <queue>
-#include <string>
-#include <thread>
-#include <tuple>
-#include <unordered_map>
-#include <vector>
-
 #ifndef __cplusplus
 #error "This header requires C++20"
 #endif
 
+#include "device/kit/storage.h"
+
+#include "prelude.h"
+#include "common.hh"
+#include "writers/writer.hh"
+#include "writers/blosc.compressor.hh"
+
+#include <filesystem>
+#include <map>
+#include <optional>
+#include <stdexcept>
+#include <utility> // std::pair
+#include <vector>
+
+namespace fs = std::filesystem;
+
 namespace acquire::sink::zarr {
-
-struct Zarr;
-
-struct ThreadContext
-{
-    Zarr* zarr;
-    std::thread thread;
-    std::mutex mutex;
-    std::condition_variable cv;
-    bool should_stop;
-};
-
 // StorageInterface
 
 struct StorageInterface : public Storage
@@ -55,131 +41,93 @@ struct StorageInterface : public Storage
     virtual void reserve_image_shape(const ImageShape* shape) = 0;
 };
 
-/// \brief Zarr writer that conforms to v0.4 of the OME-NGFF specification.
-///
-/// This writes one multi-scale zarr image with one level/scale using the
-/// OME-NGFF specification to determine the directory structure and contents
-/// of group and array attributes.
-///
-/// https://ngff.openmicroscopy.org/0.4/
-struct Zarr final : StorageInterface
+struct Zarr : StorageInterface
 {
-    using JobT = std::function<bool()>;
+  public:
+    using JobT = std::function<bool(std::string&)>;
+    struct ThreadContext
+    {
+        std::thread thread;
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool should_stop;
+        bool ready;
+    };
 
     Zarr();
-    explicit Zarr(CompressionParams&& compression_params);
-    ~Zarr() override;
+    Zarr(BloscCompressionParams&& compression_params);
+    ~Zarr() noexcept override;
 
+    /// StorageInterface
     void set(const StorageProperties* props) override;
     void get(StorageProperties* props) const override;
-    void get_meta(StoragePropertyMetadata* meta) const override;
     void start() override;
-    [[nodiscard]] int stop() noexcept override;
-
-    /// @return number of consumed bytes
+    int stop() noexcept override;
     size_t append(const VideoFrame* frames, size_t nbytes) override;
-
     void reserve_image_shape(const ImageShape* shape) override;
 
-    void push_frame_to_writers(const std::shared_ptr<TiledFrame> frame);
-    std::optional<JobT> pop_from_job_queue();
+    /// Error state
+    void set_error(const std::string& msg) noexcept;
 
-  private:
+    /// Multithreading
+    void push_to_job_queue(JobT&& job);
+    size_t jobs_on_queue() const;
+
+  protected:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
 
-    // static - set on construction
-    char dimension_separator_;
-    std::optional<CompressionParams> compression_params_;
-    std::vector<ThreadContext> thread_pool_;
+    /// static - set on construction
+    std::optional<BloscCompressionParams> blosc_compression_params_;
 
-    // changes on set()
-    std::string data_dir_;
+    /// changes on set
+    fs::path dataset_root_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     uint64_t max_bytes_per_chunk_;
-    ImageShape image_shape_;
-    TileShape tile_shape_;
     bool enable_multiscale_;
 
-    /// Downsampling of incoming frames.
-    std::optional<FrameScaler> frame_scaler_;
+    /// changes on reserve_image_shape
+    std::vector<std::pair<ImageDims, ImageDims>> image_tile_shapes_;
+    SampleType pixel_type_;
+    std::vector<std::shared_ptr<Writer>> writers_;
 
-    /// Chunk writers for each layer/scale
-    std::map<size_t, std::vector<std::shared_ptr<ChunkWriter>>> writers_;
+    /// changes on append
+    // scaled frames, keyed by level-of-detail
+    std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
 
-    // changes during acquisition
-    uint32_t frame_count_;
-    mutable std::mutex job_queue_mutex_;
-    std::queue<JobT> job_queue_;
+    /// Multithreading
+    std::vector<ThreadContext> threads_;
+    mutable std::mutex mutex_; // for jobs_ and error_ / error_msg_
+    std::queue<JobT> jobs_;
 
+    /// Error state
+    bool error_;
+    std::string error_msg_;
+
+    /// Setup
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
+    virtual void allocate_writers_() = 0;
 
-    void create_data_directory_() const;
-    void write_zarray_json_() const;
-    void write_zarray_json_inner_(size_t layer,
-                                  const ImageShape& image_shape,
-                                  const TileShape& tile_shape) const;
-    void write_external_metadata_json_() const;
-    void write_zgroup_json_() const;
-    void write_group_zattrs_json_() const;
+    /// Metadata
+    void write_all_array_metadata_() const;
+    virtual void write_array_metadata_(size_t level) const = 0;
+    virtual void write_external_metadata_() const = 0;
+    virtual void write_base_metadata_() const = 0;
+    virtual void write_group_metadata_() const = 0;
 
-    void allocate_writers_();
-    void validate_image_and_tile_shapes_() const;
+    /// Filesystem
+    virtual fs::path get_data_directory_() const = 0;
 
-    void start_threads_();
-    void recover_threads_();
+    /// Multiscale
+    void write_multiscale_frames_(const VideoFrame* frame);
+
+    /// Multithreading
+    std::optional<JobT> pop_from_job_queue_() noexcept;
+    void worker_thread_(ThreadContext* ctx);
 };
 
-// utilities
-
-void
-validate_props(const StorageProperties* props);
-
-std::filesystem::path
-as_path(const StorageProperties& props);
-
-void
-validate_image_shapes_equal(const ImageShape& lhs, const ImageShape& rhs);
-
-const char*
-sample_type_to_dtype(SampleType t);
-
-const char*
-sample_type_to_string(SampleType t) noexcept;
-
-size_t
-bytes_per_sample_type(SampleType t) noexcept;
-
-void
-validate_json(const char* str, size_t nbytes);
-
-void
-validate_directory_is_writable(const std::string& path);
-
-size_t
-get_bytes_per_frame(const ImageShape& image_shape) noexcept;
-
-size_t
-get_bytes_per_tile(const ImageShape& image_shape,
-                   const TileShape& tile_shape) noexcept;
-
-uint32_t
-get_tiles_per_chunk(const ImageShape& image_shape,
-                    const TileShape& tile_shape,
-                    uint64_t max_bytes_per_chunk) noexcept;
-
-size_t
-get_bytes_per_chunk(const ImageShape& image_shape,
-                    const TileShape& tile_shape,
-                    size_t max_bytes_per_chunk) noexcept;
-
-void
-write_string(const std::string& path, const std::string& str);
-
-void
-worker_thread(ThreadContext* ctx);
 } // namespace acquire::sink::zarr
 
 #endif // H_ACQUIRE_STORAGE_ZARR_V0

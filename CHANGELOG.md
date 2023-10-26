@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Ship debug libs for C-Blosc on Linux and Mac.
+
+### Changed
+
+- Upgrades C-Blosc from v1.21.4 to v1.21.5.
+
 ### Fixed
 
 - A bug where enabling multiscale without specifying the tile size would cause an error.
+- Exceptions thrown off the main thread are now caught and logged, and Zarr throws an error in `append`.
 
 ## [0.1.4](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.3...v0.1.4) - 2023-08-11
 
