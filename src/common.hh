@@ -23,9 +23,6 @@ struct ImageDims
 
 namespace common {
 size_t
-bytes_of_type(const SampleType& type);
-
-size_t
 bytes_per_tile(const ImageDims& tile_shape, const SampleType& type);
 
 size_t

@@ -287,7 +287,7 @@ zarr::Writer::finalize_chunks_() noexcept
         return;
     }
     const auto bytes_per_frame =
-      frame_dims_.rows * frame_dims_.cols * common::bytes_of_type(pixel_type_);
+      frame_dims_.rows * frame_dims_.cols * bytes_of_type(pixel_type_);
     const auto frames_to_write = frames_per_chunk_ - frames_this_chunk;
 
     bytes_to_flush_ += frames_to_write * bytes_per_frame;
@@ -313,7 +313,7 @@ zarr::Writer::compress_buffers_() noexcept
 
     TRACE("Compressing");
 
-    const auto bytes_of_type = common::bytes_of_type(pixel_type_);
+    const auto bytes_per_px = bytes_of_type(pixel_type_);
 
     std::scoped_lock lock(buffers_mutex_);
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
@@ -321,7 +321,7 @@ zarr::Writer::compress_buffers_() noexcept
 
         zarr_->push_to_job_queue([params = blosc_compression_params_.value(),
                                   buf = &buf,
-                                  bytes_of_type,
+                                  bytes_per_px,
                                   bytes_per_chunk,
                                   finished = buffers_ready_ + i,
                                   buf_size = buf_sizes.data() +
@@ -333,7 +333,7 @@ zarr::Writer::compress_buffers_() noexcept
                 const auto nb =
                   blosc_compress_ctx(params.clevel,
                                      params.shuffle,
-                                     bytes_of_type,
+                                     bytes_per_px,
                                      bytes_per_chunk,
                                      buf->data(),
                                      tmp.data(),
