@@ -1,6 +1,7 @@
 #include "shard.writer.hh"
 #include "../zarr.hh"
 
+#include <latch>
 #include <stdexcept>
 #include <iostream>
 
@@ -98,8 +99,6 @@ zarr::ShardWriter::make_buffers_() noexcept
 {
     const auto nchunks = tiles_per_frame_();
     chunk_buffers_.resize(nchunks);
-    buffers_ready_ = new bool[nchunks];
-    std::fill(buffers_ready_, buffers_ready_ + nchunks, true);
 
     const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
@@ -143,8 +142,7 @@ zarr::ShardWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
                     const auto frame_col = j * tile_dims_.cols;
 
                     const auto buf_offset =
-                      bytes_per_px *
-                      (frame_row * frame_dims_.cols + frame_col);
+                      bytes_per_px * (frame_row * frame_dims_.cols + frame_col);
 
                     const auto region_width =
                       std::min(frame_col + tile_dims_.cols, frame_dims_.cols) -
@@ -223,16 +221,16 @@ zarr::ShardWriter::flush_() noexcept
     }
 
     // write out
-    std::fill(buffers_ready_, buffers_ready_ + shard_buffers_.size(), false);
+    std::latch latch(shard_buffers_.size());
     {
         std::scoped_lock lock(buffers_mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             const auto& shard = shard_buffers_.at(i);
-            zarr_->push_to_job_queue(std::move(
-              [fh = &files_.at(i),
-               shard = shard.data(),
-               size = shard_sizes.at(i),
-               finished = buffers_ready_ + i](std::string& err) -> bool {
+            zarr_->push_to_job_queue(
+              std::move([fh = &files_.at(i),
+                         shard = shard.data(),
+                         size = shard_sizes.at(i),
+                         &latch](std::string& err) -> bool {
                   bool success = false;
                   try {
                       success = file_write(fh, 0, shard, shard + size);
@@ -246,7 +244,7 @@ zarr::ShardWriter::flush_() noexcept
                   } catch (...) {
                       err = "Failed to write shard (unknown)";
                   }
-                  *finished = true;
+                  latch.count_down();
 
                   return success;
               }));
@@ -254,11 +252,7 @@ zarr::ShardWriter::flush_() noexcept
     }
 
     // wait for all threads to finish
-    while (!std::all_of(buffers_ready_,
-                        buffers_ready_ + shard_buffers_.size(),
-                        [](const auto& b) { return b; })) {
-        std::this_thread::sleep_for(500us);
-    }
+    latch.wait();
 
     // reset buffers
     const auto bytes_per_chunk =
@@ -286,7 +280,8 @@ zarr::ShardWriter::flush_() noexcept
 bool
 zarr::ShardWriter::make_files_() noexcept
 {
-    file_creator_.set_base_dir(data_root_ / ("c" + std::to_string(current_chunk_)));
+    file_creator_.set_base_dir(data_root_ /
+                               ("c" + std::to_string(current_chunk_)));
     return file_creator_.create(
       1, shards_per_frame_y_, shards_per_frame_x_, files_);
 }

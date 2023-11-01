@@ -85,7 +85,6 @@ struct Writer
 
     /// Multithreading
     std::vector<std::vector<uint8_t>> chunk_buffers_;
-    bool* buffers_ready_;
     std::mutex buffers_mutex_;
 
     /// Bookkeeping
