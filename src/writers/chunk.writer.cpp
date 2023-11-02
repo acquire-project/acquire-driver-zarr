@@ -109,23 +109,28 @@ zarr::ChunkWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
                 if (frame_row < frame_dims_.rows) {
                     const auto frame_col = j * tile_dims_.cols;
 
-                    const auto buf_offset =
-                      bytes_per_px * (frame_row * frame_dims_.cols + frame_col);
-
                     const auto region_width =
                       std::min(frame_col + tile_dims_.cols, frame_dims_.cols) -
                       frame_col;
 
+                    const auto region_start =
+                      bytes_per_px * (frame_row * frame_dims_.cols + frame_col);
                     const auto nbytes = region_width * bytes_per_px;
-                    std::copy(buf + buf_offset,
-                              buf + buf_offset + nbytes,
+                    const auto region_stop = region_start + nbytes;
+
+                    std::copy(buf + region_start,
+                              buf + region_stop,
                               std::back_inserter(chunk));
                     std::fill_n(
                       std::back_inserter(chunk), bytes_per_row - nbytes, 0);
+
+                    bytes_written += bytes_per_row;
+                } else {
+                    std::fill_n(std::back_inserter(chunk), bytes_per_row, 0);
+                    bytes_written += bytes_per_row;
                 }
                 offset += tile_dims_.cols * bytes_per_px;
             }
-            bytes_written += bytes_per_tile;
         }
     }
 

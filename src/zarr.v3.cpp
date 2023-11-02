@@ -238,8 +238,8 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
         json::object({
           { "chunks_per_shard",
             json::array({
-              1,                                 // t
-              1,                                 // c
+              1,                                // t
+              1,                                // c
               shard_dims.rows / tile_dims.rows, // y
               shard_dims.cols / tile_dims.cols, // x
             }) },

@@ -298,6 +298,14 @@ zarr::Writer::finalize_chunks_() noexcept
       frame_dims_.rows * frame_dims_.cols * bytes_of_type(pixel_type_);
     const auto frames_to_write = frames_per_chunk_ - frames_this_chunk;
 
+    const auto bytes_to_fill =
+      frames_to_write * common::bytes_per_tile(tile_dims_, pixel_type_);
+    for (auto& chunk : chunk_buffers_) {
+        std::fill_n(std::back_inserter(chunk), bytes_to_fill, 0);
+        CHECK(chunk.size() == common::bytes_per_chunk(
+                                tile_dims_, pixel_type_, frames_per_chunk_));
+    }
+
     bytes_to_flush_ += frames_to_write * bytes_per_frame;
 }
 

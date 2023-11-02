@@ -195,7 +195,8 @@ verify_layer(const LayerTestCase& test_case)
                                          std::to_string(layer) / "0" / "0" /
                                          std::to_string(i) / std::to_string(j);
             CHECK(fs::is_regular_file(chunk_file_path));
-            ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+            const auto file_size = fs::file_size(chunk_file_path);
+            ASSERT_EQ(int, "%d", chunk_size, file_size);
         }
     }
 
