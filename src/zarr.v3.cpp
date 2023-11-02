@@ -134,7 +134,7 @@ zarr::ZarrV3::allocate_writers_()
               shard_dims,
               tile_dims,
               (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-              (get_data_directory_() / "0").string(),
+              (get_data_directory_() / std::to_string(i)).string(),
               this,
               blosc_compression_params_.value()));
         } else {
@@ -143,7 +143,7 @@ zarr::ZarrV3::allocate_writers_()
               shard_dims,
               tile_dims,
               (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-              (get_data_directory_() / "0").string(),
+              (get_data_directory_() / std::to_string(i)).string(),
               this));
         }
     }

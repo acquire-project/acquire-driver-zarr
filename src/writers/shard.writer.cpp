@@ -45,8 +45,6 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
 bool
 zarr::ShardWriter::write(const VideoFrame* frame) noexcept
 {
-    using namespace std::chrono_literals;
-
     if (!validate_frame_(frame)) {
         // log is written in validate_frame
         return false;
@@ -166,7 +164,6 @@ zarr::ShardWriter::flush_() noexcept
         return;
     }
 
-    using namespace std::chrono_literals;
     const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
       tile_dims_.cols * tile_dims_.rows * bytes_per_px;

@@ -216,7 +216,6 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
 void
 zarr::Writer::finalize() noexcept
 {
-    using namespace std::chrono_literals;
     finalize_chunks_();
     if (bytes_to_flush_ > 0) {
         flush_();
@@ -272,8 +271,6 @@ zarr::Writer::validate_frame_(const VideoFrame* frame) noexcept
 void
 zarr::Writer::finalize_chunks_() noexcept
 {
-    using namespace std::chrono_literals;
-
     const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
 
     // don't write zeros if we have written less than one full chunk or if
@@ -301,7 +298,6 @@ zarr::Writer::compress_buffers_() noexcept
         }
         return buf_sizes;
     }
-    using namespace std::chrono_literals;
 
     buf_sizes.resize(nchunks);
 
