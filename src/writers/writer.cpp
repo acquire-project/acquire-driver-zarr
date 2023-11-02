@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <functional>
+#include <latch>
 
 namespace zarr = acquire::sink::zarr;
 
@@ -176,7 +177,6 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , bytes_to_flush_{ 0 }
   , current_chunk_{ 0 }
   , pixel_type_{ SampleTypeCount }
-  , buffers_ready_{ nullptr }
   , zarr_{ zarr }
   , file_creator_{ zarr }
 {
@@ -211,11 +211,6 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
 {
     blosc_compression_params_ = compression_params;
-}
-
-zarr::Writer::~Writer()
-{
-    delete[] buffers_ready_;
 }
 
 void
@@ -309,13 +304,13 @@ zarr::Writer::compress_buffers_() noexcept
     using namespace std::chrono_literals;
 
     buf_sizes.resize(nchunks);
-    std::fill(buffers_ready_, buffers_ready_ + nchunks, false);
 
     TRACE("Compressing");
 
     const auto bytes_per_px = bytes_of_type(pixel_type_);
 
     std::scoped_lock lock(buffers_mutex_);
+    std::latch latch(chunk_buffers_.size());
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
         auto& buf = chunk_buffers_.at(i);
 
@@ -323,9 +318,8 @@ zarr::Writer::compress_buffers_() noexcept
                                   buf = &buf,
                                   bytes_per_px,
                                   bytes_per_chunk,
-                                  finished = buffers_ready_ + i,
-                                  buf_size = buf_sizes.data() +
-                                             i](std::string& err) -> bool {
+                                  buf_size = buf_sizes.data() + i,
+                                  &latch](std::string& err) -> bool {
             bool success = false;
             try {
                 const auto tmp_size = bytes_per_chunk + BLOSC_MAX_OVERHEAD;
@@ -356,18 +350,14 @@ zarr::Writer::compress_buffers_() noexcept
             } catch (...) {
                 err = "Failed to compress chunk (unknown)";
             }
-            *finished = true;
+            latch.count_down();
 
             return success;
         });
     }
 
     // wait for all threads to finish
-    while (!std::all_of(buffers_ready_,
-                        buffers_ready_ + nchunks,
-                        [](const auto& b) { return b; })) {
-        std::this_thread::sleep_for(500us);
-    }
+    latch.wait();
 
     return buf_sizes;
 }

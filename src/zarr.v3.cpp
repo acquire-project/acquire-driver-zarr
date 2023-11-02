@@ -24,6 +24,7 @@ compressed_zarr_v3_init()
     return nullptr;
 }
 
+/** @brief Find the smallest prime factor of @p n. **/
 uint32_t
 smallest_prime_factor(uint32_t n)
 {
@@ -57,6 +58,18 @@ smallest_prime_factor(uint32_t n)
     return n;
 }
 
+/**
+ * @brief Compute the shard dimensions for a given frame and tile shape.
+ * @details The shard dimensions are computed by determining how many tiles are
+ *          needed to cover the frame, and then computing the minimum number of
+ *          shards that can be used to cover the tiles. We are constrained by
+ *          the shard dimensions being a multiple of the tile dimensions, and by
+ *          the shard dimensions not exceeding the frame dimensions. We also
+ *          prefer to write to as few shards (i.e., files) as possible.
+ * @param frame_dims Width and height of the frame.
+ * @param tile_dims Width and height of each tile.
+ * @return Width and height of each shard.
+ */
 zarr::ImageDims
 make_shard_dims(const zarr::ImageDims& frame_dims,
                 const zarr::ImageDims& tile_dims)
@@ -67,14 +80,24 @@ make_shard_dims(const zarr::ImageDims& frame_dims,
     };
 
     const auto h_rat = (float)frame_dims.rows / (float)tile_dims.rows;
+
+    // number of pixel rows across all shards
     auto shard_rows = (uint32_t)std::ceil(h_rat * tile_dims.rows);
+
+    // if the number of rows is larger than that of the frame, we need to split
+    // them up
     if (shard_rows > frame_dims.rows) {
         auto n_shards_rows = smallest_prime_factor(shard_rows / tile_dims.rows);
         shard_dims.rows = n_shards_rows * tile_dims.rows;
     }
 
     const auto w_rat = (float)frame_dims.cols / (float)tile_dims.cols;
+
+    // number of pixel columns across all shards
     auto shard_cols = (uint32_t)std::ceil(w_rat * tile_dims.cols);
+
+    // if the number of columns is larger than that of the frame, we need to
+    // split them up
     if (shard_cols > frame_dims.cols) {
         auto n_shards_cols = smallest_prime_factor(shard_cols / tile_dims.cols);
         shard_dims.cols = n_shards_cols * tile_dims.cols;
@@ -86,37 +109,43 @@ make_shard_dims(const zarr::ImageDims& frame_dims,
 
 zarr::ZarrV3::ZarrV3(BloscCompressionParams&& compression_params)
   : Zarr(std::move(compression_params))
-  , shard_dims_{}
 {
 }
 
 void
 zarr::ZarrV3::allocate_writers_()
 {
-    const ImageDims& frame_dims = image_tile_shapes_.at(0).first;
-    const ImageDims& tile_dims = image_tile_shapes_.at(0).second;
-    shard_dims_ = make_shard_dims(frame_dims, tile_dims);
-
-    uint64_t bytes_per_tile = common::bytes_per_tile(tile_dims, pixel_type_);
-
     writers_.clear();
-    if (blosc_compression_params_.has_value()) {
-        writers_.push_back(std::make_shared<ShardWriter>(
-          frame_dims,
-          shard_dims_,
-          tile_dims,
-          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-          (get_data_directory_() / "0").string(),
-          this,
-          blosc_compression_params_.value()));
-    } else {
-        writers_.push_back(std::make_shared<ShardWriter>(
-          frame_dims,
-          shard_dims_,
-          tile_dims,
-          (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
-          (get_data_directory_() / "0").string(),
-          this));
+    shard_dims_.reserve(image_tile_shapes_.size());
+
+    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
+        const auto& frame_dims = image_tile_shapes_.at(i).first;
+        const auto& tile_dims = image_tile_shapes_.at(i).second;
+
+        const uint64_t bytes_per_tile =
+          common::bytes_per_tile(tile_dims, pixel_type_);
+
+        const auto shard_dims = make_shard_dims(frame_dims, tile_dims);
+        shard_dims_.push_back(shard_dims);
+
+        if (blosc_compression_params_.has_value()) {
+            writers_.push_back(std::make_shared<ShardWriter>(
+              frame_dims,
+              shard_dims,
+              tile_dims,
+              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              (get_data_directory_() / "0").string(),
+              this,
+              blosc_compression_params_.value()));
+        } else {
+            writers_.push_back(std::make_shared<ShardWriter>(
+              frame_dims,
+              shard_dims,
+              tile_dims,
+              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              (get_data_directory_() / "0").string(),
+              this));
+        }
     }
 }
 
@@ -151,6 +180,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
 
     const ImageDims& image_dims = image_tile_shapes_.at(level).first;
     const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
+    const ImageDims& shard_dims = shard_dims_.at(level);
 
     const uint64_t frame_count = writers_.at(level)->frames_written();
     const auto frames_per_chunk =

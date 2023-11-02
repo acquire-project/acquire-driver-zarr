@@ -59,7 +59,7 @@ struct Writer
            const std::string& data_root,
            Zarr* zarr,
            const BloscCompressionParams& compression_params);
-    virtual ~Writer();
+    virtual ~Writer() noexcept = default;
 
     [[nodiscard]] virtual bool write(const VideoFrame* frame) noexcept = 0;
     void finalize() noexcept;
@@ -74,6 +74,7 @@ struct Writer
     uint16_t tiles_per_frame_y_;
     SampleType pixel_type_;
     uint32_t frames_per_chunk_;
+    std::vector<std::vector<uint8_t>> chunk_buffers_;
 
     /// Compression
     std::optional<BloscCompressionParams> blosc_compression_params_;
@@ -84,7 +85,6 @@ struct Writer
     std::vector<file> files_;
 
     /// Multithreading
-    std::vector<std::vector<uint8_t>> chunk_buffers_;
     std::mutex buffers_mutex_;
 
     /// Bookkeeping

@@ -3,7 +3,6 @@
 
 #include <latch>
 #include <stdexcept>
-#include <iostream>
 
 namespace zarr = acquire::sink::zarr;
 

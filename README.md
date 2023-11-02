@@ -28,8 +28,27 @@ Multiscale storage can be enabled or disabled by calling `storage_properties_set
 the video stream.
 
 For the [Zarr v3] version of each device, you can use the `ZarrV3*` devices.
-**Note:** Zarr v3 is not [yet](https://github.com/ome/ngff/pull/206) supported by the Python OME-Zarr library, so you
+**Note:** Zarr v3 is not [yet](https://github.com/ome/ngff/pull/206) supported by [ome-zarr-py](https://github.com/ome/ome-zarr-py), so you
 will not be able to read multiscale metadata from the resulting dataset.
+
+Zarr v3 *is* supported by [zarr-python](https://github.com/zarr-developers/zarr-python), but you will need to set two environment variables to work with it:
+
+```bash
+export ZARR_V3_EXPERIMENTAL_API=1
+export ZARR_V3_SHARDING=1
+```
+
+You can also set these variables in your Python script:
+
+```python
+import os
+
+# these MUST come before importing zarr
+os.environ["ZARR_V3_EXPERIMENTAL_API"] = "1"
+os.environ["ZARR_V3_SHARDING"] = "1"
+
+import zarr
+```
 
 ### Configuring chunking
 

@@ -93,8 +93,9 @@ size_t
 zarr::ChunkWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
 {
     const auto bytes_per_px = bytes_of_type(pixel_type_);
-    const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * bytes_per_px;
+    const auto bytes_per_row = tile_dims_.rows * bytes_per_px;
+    const auto bytes_per_tile = tile_dims_.cols * bytes_per_row;
+
     const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
 
     size_t bytes_written = 0;

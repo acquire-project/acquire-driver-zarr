@@ -15,7 +15,7 @@ struct ZarrV3 final : public Zarr
     void get_meta(StoragePropertyMetadata* meta) const override;
 
   private:
-    ImageDims shard_dims_;
+    std::vector<ImageDims> shard_dims_;
 
     /// Setup
     void allocate_writers_() override;
