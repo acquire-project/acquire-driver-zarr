@@ -194,8 +194,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
       { "chunk_shape",
         json::array({
           frames_per_chunk, // t
-                            // TODO (aliddell): c?
-          1,                // z
+          1,                // c
           tile_dims.rows,   // y
           tile_dims.cols,   // x
         }) },
@@ -208,8 +207,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
     metadata["fill_value"] = 0;
     metadata["shape"] = json::array({
       frame_count,     // t
-                       // TODO (aliddell): c?
-      1,               // z
+      1,               // c
       image_dims.rows, // y
       image_dims.cols, // x
     });
@@ -241,10 +239,9 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
           { "chunks_per_shard",
             json::array({
               1,                                 // t
-                                                 // TODO (aliddell): c?
-              1,                                 // z
-              shard_dims_.rows / tile_dims.rows, // y
-              shard_dims_.cols / tile_dims.cols, // x
+              1,                                 // c
+              shard_dims.rows / tile_dims.rows, // y
+              shard_dims.cols / tile_dims.cols, // x
             }) },
         }) },
     });

@@ -191,7 +191,13 @@ zarr::ZarrV2::write_group_metadata_() const
                 {
                   {
                     { "type", "scale" },
-                    { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
+                    { "scale",
+                      {
+                        1,                 // t
+                        1,                 // c
+                        pixel_scale_um_.y, // y
+                        pixel_scale_um_.x  // x
+                      } },
                   },
                 } },
             },
@@ -207,8 +213,8 @@ zarr::ZarrV2::write_group_metadata_() const
                     {
                       "scale",
                       {
-                        std::pow(2, i), // t
-                        1,              // c
+                        std::pow(2, i),                     // t
+                        1,                                  // c
                         std::pow(2, i) * pixel_scale_um_.y, // y
                         std::pow(2, i) * pixel_scale_um_.x  // x
                       },
