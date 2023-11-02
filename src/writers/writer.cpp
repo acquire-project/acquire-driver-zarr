@@ -27,105 +27,77 @@ zarr::FileCreator::create(int n_c,
                           int n_x,
                           std::vector<file>& files) noexcept
 {
-    using namespace std::chrono_literals;
-
-    std::vector<std::shared_ptr<std::mutex>> mutexes;
-    for (auto i = 0; i < n_c; ++i) {
-        mutexes.push_back(std::make_shared<std::mutex>());
-    }
-
-    std::vector<int> finished(n_c * n_y, 0);
-
-    if (!create_channel_dirs_(n_c)) {
+    if (!create_c_dirs_(n_c)) {
         return false;
     }
 
-    files.resize(n_c * n_y * n_x);
+    if (!create_y_dirs_(n_c, n_y)) {
+        return false;
+    }
+
+    const auto n_files = n_c * n_y * n_x;
+
+    files.resize(n_files);
+    std::latch latch(n_files);
+    std::atomic<bool> failure{ false };
 
     // until we support more than one channel, n_c will always be 1
     for (auto c = 0; c < n_c; ++c) {
         for (auto y = 0; y < n_y; ++y) {
-            zarr_->push_to_job_queue(
-              [base = base_dir_,
-               files = files.data() + c * n_y * n_x + y * n_x,
-               mtx = mutexes.at(c),
-               c,
-               y,
-               n_x,
-               done = finished.data() + c * n_y + y](std::string& err) -> bool {
-                  bool success = false;
-                  try {
-                      auto path = base / std::to_string(c);
-                      {
-                          std::unique_lock lock(*mtx);
-                          while (!fs::exists(path)) {
-                              lock.unlock();
-                              std::this_thread::sleep_for(1ms);
-                              lock.lock();
-                          }
-                      }
-
-                      path /= std::to_string(y);
-
-                      if (fs::exists(path)) {
-                          EXPECT(fs::is_directory(path),
-                                 "%s must be a directory.",
-                                 path.c_str());
-                      } else {
-                          EXPECT(fs::create_directories(path),
-                                 "Failed to create directory: %s",
-                                 path.c_str());
-                      }
-
-                      for (auto x = 0; x < n_x; ++x) {
-                          auto& file = files[x];
-                          auto file_path = path / std::to_string(x);
+            for (auto x = 0; x < n_x; ++x) {
+                zarr_->push_to_job_queue(
+                  [base = base_dir_,
+                   &file = files.at(c * n_y * n_x + y * n_x + x),
+                   c,
+                   y,
+                   x,
+                   &latch,
+                   &failure](std::string& err) -> bool {
+                      bool success = false;
+                      try {
+                          auto path = base / std::to_string(c) /
+                                      std::to_string(y) / std::to_string(x);
 
                           EXPECT(file_create(&file,
-                                             file_path.string().c_str(),
-                                             file_path.string().size()),
+                                             path.string().c_str(),
+                                             path.string().size()),
                                  "Failed to open file: '%s'",
-                                 file_path.c_str());
+                                 path.c_str());
+
+                          success = true;
+                      } catch (const std::exception& exc) {
+                          char buf[128];
+                          snprintf(buf,
+                                   sizeof(buf),
+                                   "Failed to create directory: %s",
+                                   exc.what());
+                          err = buf;
+                          failure = true;
+                      } catch (...) {
+                          err = "Failed to create directory (unknown)";
+                          failure = true;
                       }
 
-                      success = true;
-                  } catch (const std::exception& exc) {
-                      char buf[128];
-                      snprintf(buf,
-                               sizeof(buf),
-                               "Failed to create directory: %s",
-                               exc.what());
-                      err = buf;
-                  } catch (...) {
-                      err = "Failed to create directory (unknown)";
-                  }
-
-                  *done = success ? 1 : -1;
-                  return success;
-              });
+                      latch.count_down();
+                      return success;
+                  });
+            }
         }
     }
 
-    while (!std::all_of(
-      finished.begin(), finished.end(), [](const auto& f) { return f != 0; })) {
-        std::this_thread::sleep_for(500us);
-    }
+    latch.wait();
 
-    return std::all_of(
-      finished.begin(), finished.end(), [](const auto& f) { return f == 1; });
+    return !failure;
 }
 
 bool
-zarr::FileCreator::create_channel_dirs_(int n_c) noexcept
+zarr::FileCreator::create_c_dirs_(int n_c) noexcept
 {
-    using namespace std::chrono_literals;
-
-    std::vector<int> finished(n_c, 0);
+    std::latch latch(n_c);
+    std::atomic<bool> failure{ false };
     for (auto c = 0; c < n_c; ++c) {
-        // create the channel directory
         zarr_->push_to_job_queue(
-          [base = base_dir_, c, done = finished.data() + c](
-            std::string& err) -> bool {
+          std::move([base = base_dir_, c, &latch, &failure](std::string& err) {
               bool success = false;
               try {
                   const auto path = base / std::to_string(c);
@@ -146,21 +118,65 @@ zarr::FileCreator::create_channel_dirs_(int n_c) noexcept
                            "Failed to create directory: %s",
                            exc.what());
                   err = buf;
+                  failure = true;
               } catch (...) {
                   err = "Failed to create directory (unknown)";
+                  failure = true;
               }
-              *done = success ? 1 : -1;
+
+              latch.count_down();
               return success;
-          });
+          }));
     }
 
-    while (!std::all_of(
-      finished.begin(), finished.end(), [](const auto& f) { return f != 0; })) {
-        std::this_thread::sleep_for(500us);
+    latch.wait();
+    return !failure;
+}
+
+bool
+zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
+{
+    std::latch latch(n_c * n_y);
+    std::atomic<bool> failure{ false };
+    for (auto c = 0; c < n_c; ++c) {
+        for (auto y = 0; y < n_y; ++y) {
+            zarr_->push_to_job_queue(std::move(
+              [base = base_dir_, c, y, &latch, &failure](std::string& err) {
+                  bool success = false;
+                  try {
+                      const auto path =
+                        base / std::to_string(c) / std::to_string(y);
+                      if (fs::exists(path)) {
+                          EXPECT(fs::is_directory(path),
+                                 "%s must be a directory.",
+                                 path.c_str());
+                      } else {
+                          EXPECT(fs::create_directories(path),
+                                 "Failed to create directory: %s",
+                                 path.c_str());
+                      }
+                      success = true;
+                  } catch (const std::exception& exc) {
+                      char buf[128];
+                      snprintf(buf,
+                               sizeof(buf),
+                               "Failed to create directory: %s",
+                               exc.what());
+                      err = buf;
+                      failure = true;
+                  } catch (...) {
+                      err = "Failed to create directory (unknown)";
+                      failure = true;
+                  }
+
+                  latch.count_down();
+                  return success;
+              }));
+        }
     }
 
-    return std::all_of(
-      finished.begin(), finished.end(), [](const auto& f) { return f == 1; });
+    latch.wait();
+    return !failure;
 }
 
 /// Writer

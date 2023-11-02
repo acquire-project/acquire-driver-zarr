@@ -207,5 +207,5 @@ zarr::ChunkWriter::make_files_() noexcept
 {
     file_creator_.set_base_dir(data_root_ / std::to_string(current_chunk_));
     return file_creator_.create(
-      1, tiles_per_frame_y_, tiles_per_frame_x_, files_);
+      1, 1, tiles_per_frame_y_, tiles_per_frame_x_, files_);
 }

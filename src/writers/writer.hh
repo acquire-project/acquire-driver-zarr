@@ -39,7 +39,8 @@ struct FileCreator
     fs::path base_dir_;
     Zarr* zarr_;
 
-    bool create_channel_dirs_(int n_c) noexcept;
+    bool create_c_dirs_(int n_c) noexcept;
+    bool create_y_dirs_(int n_c, int n_y) noexcept;
 };
 
 struct Writer
