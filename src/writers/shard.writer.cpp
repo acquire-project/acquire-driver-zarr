@@ -94,67 +94,27 @@ zarr::ShardWriter::shards_per_frame_() const
 void
 zarr::ShardWriter::make_buffers_() noexcept
 {
-    const auto nchunks = tiles_per_frame_();
-    chunk_buffers_.resize(nchunks);
+    const auto n_chunks = tiles_per_frame_();
 
     const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
       tile_dims_.cols * tile_dims_.rows * bytes_per_px;
-    const auto bytes_per_chunk = bytes_per_tile * frames_per_chunk_;
 
-    for (auto& buf : chunk_buffers_) {
-        buf.resize(frames_per_chunk_ * bytes_per_tile);
-        std::fill(buf.begin(), buf.end(), 0);
+    const auto bytes_to_reserve =
+      bytes_per_tile * frames_per_chunk_ +
+      (blosc_compression_params_.has_value() ? BLOSC_MAX_OVERHEAD : 0);
+
+    for (auto i = 0; i < n_chunks; ++i) {
+        chunk_buffers_.emplace_back();
+        chunk_buffers_.back().reserve(bytes_to_reserve);
     }
 
-    const auto nshards = shards_per_frame_();
-    shard_buffers_.resize(nshards);
+    const auto n_shards = shards_per_frame_();
+    const auto chunks_per_shard = chunks_per_shard_();
 
-    for (auto& buf : shard_buffers_) {
-        buf.resize(chunks_per_shard_() * bytes_per_chunk        // data
-                   + 2 * chunks_per_shard_() * sizeof(uint64_t) // indices
-        );
+    for (auto i = 0; i < n_shards; ++i) {
+        shard_buffers_.emplace_back();
     }
-}
-
-size_t
-zarr::ShardWriter::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
-{
-    const auto bytes_per_px = bytes_of_type(pixel_type_);
-    const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * bytes_per_px;
-    const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
-
-    size_t bytes_written = 0;
-
-    for (auto i = 0; i < tiles_per_frame_y_; ++i) {
-        for (auto j = 0; j < tiles_per_frame_x_; ++j) {
-            size_t offset = bytes_per_tile * frames_this_chunk;
-
-            uint8_t* bytes_out =
-              chunk_buffers_.at(i * tiles_per_frame_x_ + j).data();
-            for (auto k = 0; k < tile_dims_.rows; ++k) {
-                const auto frame_row = i * tile_dims_.rows + k;
-                if (frame_row < frame_dims_.rows) {
-                    const auto frame_col = j * tile_dims_.cols;
-
-                    const auto buf_offset =
-                      bytes_per_px * (frame_row * frame_dims_.cols + frame_col);
-
-                    const auto region_width =
-                      std::min(frame_col + tile_dims_.cols, frame_dims_.cols) -
-                      frame_col;
-
-                    const auto nbytes = region_width * bytes_per_px;
-                    memcpy(bytes_out + offset, buf + buf_offset, nbytes);
-                }
-                offset += tile_dims_.cols * bytes_per_px;
-            }
-            bytes_written += bytes_per_tile;
-        }
-    }
-
-    return bytes_written;
 }
 
 void
@@ -167,11 +127,11 @@ zarr::ShardWriter::flush_() noexcept
     const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_tile =
       tile_dims_.cols * tile_dims_.rows * bytes_per_px;
+
     if (bytes_to_flush_ % bytes_per_tile != 0) {
         LOGE("Expected bytes to flush to be a multiple of the "
              "number of bytes per tile.");
     }
-    const auto chunks_per_shard = chunks_per_shard_();
 
     // create shard files if necessary
     if (files_.empty() && !make_files_()) {
@@ -179,41 +139,49 @@ zarr::ShardWriter::flush_() noexcept
         return;
     }
 
+    const auto chunks_per_shard = chunks_per_shard_();
+
     // compress buffers
-    auto chunk_sizes = compress_buffers_();
-    const size_t index_size = 2 * chunks_per_shard * sizeof(uint64_t);
+    compress_buffers_();
+    const size_t bytes_of_index = 2 * chunks_per_shard * sizeof(uint64_t);
+
+    const auto max_bytes_per_chunk =
+      bytes_per_tile * frames_per_chunk_ +
+      (blosc_compression_params_.has_value() ? BLOSC_MAX_OVERHEAD : 0);
+
+    const auto max_bytes_per_shard =
+      max_bytes_per_chunk * chunks_per_shard // data
+      + bytes_of_index;                      // indices
 
     // concatenate chunks into shards
-    std::vector<size_t> shard_sizes;
     for (auto i = 0; i < shard_buffers_.size(); ++i) {
         auto& shard = shard_buffers_.at(i);
         size_t shard_size = 0;
         std::vector<uint64_t> chunk_indices;
 
+        shard.reserve(max_bytes_per_shard);
+
         for (auto j = 0; j < chunks_per_shard; ++j) {
             chunk_indices.push_back(shard_size); // chunk index
             const auto k = i * chunks_per_shard + j;
-            shard_size += chunk_sizes.at(k);
-            chunk_indices.push_back(chunk_sizes.at(k)); // chunk extent
+
+            auto& chunk = chunk_buffers_.at(k);
+            shard_size += chunk.size();
+            chunk_indices.push_back(chunk.size()); // chunk extent
+
+            std::copy(chunk.begin(),
+                      chunk.end(),
+                      std::back_inserter(shard));
+            chunk.clear();
+            shard.shrink_to_fit();
         }
 
-        // if we're very unlucky we can technically run into this
-        if (shard.size() < shard_size + index_size) {
-            shard.resize(shard_size + index_size);
-        }
-
-        size_t offset = 0;
-        for (auto j = 0; j < chunks_per_shard; ++j) {
-            const auto k = i * chunks_per_shard + j;
-            const auto& chunk = chunk_buffers_.at(k);
-            memcpy(shard.data() + offset, chunk.data(), chunk_sizes.at(k));
-            offset += chunk_sizes.at(k);
-        }
-        memcpy(shard.data() + offset,
-               chunk_indices.data(),
-               chunk_indices.size() * 8);
-        offset += chunk_indices.size() * 8;
-        shard_sizes.push_back(offset);
+        // write the indices out at the end of the shard
+        const auto* indices =
+          reinterpret_cast<const uint8_t*>(chunk_indices.data());
+        std::copy(indices,
+                  indices + chunk_indices.size() * sizeof(uint64_t),
+                  std::back_inserter(shard));
     }
 
     // write out
@@ -225,7 +193,7 @@ zarr::ShardWriter::flush_() noexcept
             zarr_->push_to_job_queue(
               std::move([fh = &files_.at(i),
                          shard = shard.data(),
-                         size = shard_sizes.at(i),
+                         size = shard.size(),
                          &latch](std::string& err) -> bool {
                   bool success = false;
                   try {
@@ -251,24 +219,13 @@ zarr::ShardWriter::flush_() noexcept
     latch.wait();
 
     // reset buffers
-    const auto bytes_per_chunk =
-      tile_dims_.cols * tile_dims_.rows * bytes_per_px * frames_per_chunk_;
     for (auto& buf : chunk_buffers_) {
-        // absurd edge case we need to account for
-        if (buf.size() > bytes_per_chunk) {
-            buf.resize(bytes_per_chunk);
-        }
-
-        std::fill(buf.begin(), buf.end(), 0);
+        buf.reserve(max_bytes_per_chunk);
     }
-    const auto bytes_per_shard = bytes_per_chunk * chunks_per_shard;
-    for (auto& buf : shard_buffers_) {
-        // absurd edge case we need to account for
-        if (buf.size() > bytes_per_shard + index_size) {
-            buf.resize(bytes_per_shard + index_size);
-        }
 
-        std::fill(buf.begin(), buf.end(), 0);
+    for (auto& buf : shard_buffers_) {
+        buf.clear();
+        buf.reserve(max_bytes_per_shard);
     }
     bytes_to_flush_ = 0;
 }

@@ -90,6 +90,7 @@ the full value of the frame size along that dimension will be used instead.
 You should take care that the values you select won't result in tile sizes that are too small or too large for your
 application.
 
+**Important:**
 The `max_bytes_per_chunk` parameter can be used to cap the size of a chunk.
 A minimum of 16 MiB is enforced, but no maximum, so if you are compressing you must ensure that you have sufficient
 memory for all your chunks to be stored in memory at once.

@@ -302,28 +302,20 @@ zarr::Writer::finalize_chunks_() noexcept
       frames_to_write * common::bytes_per_tile(tile_dims_, pixel_type_);
     for (auto& chunk : chunk_buffers_) {
         std::fill_n(std::back_inserter(chunk), bytes_to_fill, 0);
-        CHECK(chunk.size() == common::bytes_per_chunk(
-                                tile_dims_, pixel_type_, frames_per_chunk_));
     }
 
     bytes_to_flush_ += frames_to_write * bytes_per_frame;
 }
 
-std::vector<size_t>
+void
 zarr::Writer::compress_buffers_() noexcept
 {
-    const auto nchunks = tiles_per_frame_();
+    const auto n_chunks = tiles_per_frame_();
 
-    const size_t bytes_per_chunk = bytes_to_flush_ / nchunks;
-    std::vector<size_t> buf_sizes;
+    const size_t bytes_per_chunk = bytes_to_flush_ / n_chunks;
     if (!blosc_compression_params_.has_value()) {
-        for (auto& buf : chunk_buffers_) {
-            buf_sizes.push_back(std::min(bytes_per_chunk, buf.size()));
-        }
-        return buf_sizes;
+        return;
     }
-
-    buf_sizes.resize(nchunks);
 
     TRACE("Compressing");
 
@@ -332,13 +324,12 @@ zarr::Writer::compress_buffers_() noexcept
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
-        auto& buf = chunk_buffers_.at(i);
+        auto& chunk = chunk_buffers_.at(i);
 
         zarr_->push_to_job_queue([params = blosc_compression_params_.value(),
-                                  buf = &buf,
+                                  buf = &chunk,
                                   bytes_per_px,
                                   bytes_per_chunk,
-                                  buf_size = buf_sizes.data() + i,
                                   &latch](std::string& err) -> bool {
             bool success = false;
             try {
@@ -355,11 +346,9 @@ zarr::Writer::compress_buffers_() noexcept
                                      params.codec_id.c_str(),
                                      0 /* blocksize - 0:automatic */,
                                      1);
-                if (nb > buf->size()) {
-                    buf->resize(nb);
-                }
-                memcpy(buf->data(), tmp.data(), nb);
-                *buf_size = nb;
+
+                tmp.resize(nb);
+                buf->swap(tmp);
 
                 success = true;
             } catch (const std::exception& exc) {
@@ -378,8 +367,60 @@ zarr::Writer::compress_buffers_() noexcept
 
     // wait for all threads to finish
     latch.wait();
+}
 
-    return buf_sizes;
+size_t
+zarr::Writer::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
+{
+    const auto bytes_per_px = bytes_of_type(pixel_type_);
+    const auto bytes_per_row = tile_dims_.cols * bytes_per_px;
+    const auto bytes_per_tile = tile_dims_.rows * bytes_per_row;
+
+    const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
+
+    size_t bytes_written = 0;
+
+    for (auto i = 0; i < tiles_per_frame_y_; ++i) {
+        for (auto j = 0; j < tiles_per_frame_x_; ++j) {
+            size_t offset = bytes_per_tile * frames_this_chunk;
+
+            const auto c = i * tiles_per_frame_x_ + j;
+            auto& chunk = chunk_buffers_.at(c);
+
+            for (auto k = 0; k < tile_dims_.rows; ++k) {
+                const auto frame_row = i * tile_dims_.rows + k;
+                if (frame_row < frame_dims_.rows) {
+                    const auto frame_col = j * tile_dims_.cols;
+
+                    const auto region_width =
+                      std::min(frame_col + tile_dims_.cols, frame_dims_.cols) -
+                      frame_col;
+
+                    const auto region_start =
+                      bytes_per_px * (frame_row * frame_dims_.cols + frame_col);
+                    const auto nbytes = region_width * bytes_per_px;
+                    const auto region_stop = region_start + nbytes;
+
+                    // copy region
+                    std::copy(buf + region_start,
+                              buf + region_stop,
+                              std::back_inserter(chunk));
+
+                    // fill remainder with zeros
+                    std::fill_n(
+                      std::back_inserter(chunk), bytes_per_row - nbytes, 0);
+
+                    bytes_written += bytes_per_row;
+                } else {
+                    std::fill_n(std::back_inserter(chunk), bytes_per_row, 0);
+                    bytes_written += bytes_per_row;
+                }
+                offset += tile_dims_.cols * bytes_per_px;
+            }
+        }
+    }
+
+    return bytes_written;
 }
 
 uint32_t
@@ -391,11 +432,6 @@ zarr::Writer::tiles_per_frame_() const
 void
 zarr::Writer::close_files_()
 {
-    using namespace std::chrono_literals;
-    while (0 < zarr_->jobs_on_queue()) {
-        std::this_thread::sleep_for(2ms);
-    }
-
     for (auto& file : files_) {
         file_close(&file);
     }

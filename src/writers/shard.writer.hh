@@ -54,7 +54,6 @@ struct ShardWriter final : public Writer
     uint16_t shards_per_frame_() const;
 
     void make_buffers_() noexcept override;
-    size_t write_bytes_(const uint8_t* buf, size_t buf_size) noexcept override;
     void flush_() noexcept override;
     [[nodiscard]] bool make_files_() noexcept override;
 };

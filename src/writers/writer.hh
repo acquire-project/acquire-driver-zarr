@@ -99,9 +99,8 @@ struct Writer
     virtual void make_buffers_() noexcept = 0;
 
     void finalize_chunks_() noexcept;
-    std::vector<size_t> compress_buffers_() noexcept;
-    virtual size_t write_bytes_(const uint8_t* buf,
-                                size_t buf_size) noexcept = 0;
+    void compress_buffers_() noexcept;
+    size_t write_bytes_(const uint8_t* buf, size_t buf_size) noexcept;
     virtual void flush_() noexcept = 0;
 
     uint32_t tiles_per_frame_() const;
