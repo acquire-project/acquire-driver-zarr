@@ -41,8 +41,6 @@ struct ShardWriter final : public Writer
                 const BloscCompressionParams& compression_params);
     ~ShardWriter() override = default;
 
-    [[nodiscard]] bool write(const VideoFrame* frame) noexcept override;
-
   private:
     ImageDims shard_dims_;
     uint16_t shards_per_frame_x_;

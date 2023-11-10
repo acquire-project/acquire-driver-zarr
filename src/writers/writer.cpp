@@ -14,19 +14,23 @@ zarr::FileCreator::FileCreator(Zarr* zarr)
 {
 }
 
-void
-zarr::FileCreator::set_base_dir(const fs::path& base_dir) noexcept
-{
-    base_dir_ = base_dir;
-    fs::create_directories(base_dir_);
-}
-
 bool
-zarr::FileCreator::create(int n_c,
+zarr::FileCreator::create(const fs::path& base_dir,
+                          int n_c,
                           int n_y,
                           int n_x,
                           std::vector<file>& files) noexcept
 {
+    base_dir_ = base_dir;
+
+    std::error_code ec;
+    if (!fs::create_directories(base_dir_, ec)) {
+        LOGE("Failed to create directory %s: %s",
+             base_dir_.string().c_str(),
+             ec.message().c_str());
+        return false;
+    }
+
     if (!create_c_dirs_(n_c)) {
         return false;
     }
@@ -79,7 +83,7 @@ zarr::FileCreator::create(int n_c,
                       }
 
                       latch.count_down();
-                      return success;
+                      return success; // set to !failure here
                   });
             }
         }
@@ -98,19 +102,17 @@ zarr::FileCreator::create_c_dirs_(int n_c) noexcept
     for (auto c = 0; c < n_c; ++c) {
         zarr_->push_to_job_queue(
           std::move([base = base_dir_, c, &latch, &failure](std::string& err) {
-              bool success = false;
               try {
                   const auto path = base / std::to_string(c);
                   if (fs::exists(path)) {
                       EXPECT(fs::is_directory(path),
                              "%s must be a directory.",
                              path.c_str());
-                  } else {
+                  } else if (!failure) {
                       EXPECT(fs::create_directories(path),
                              "Failed to create directory: %s",
                              path.c_str());
                   }
-                  success = true;
               } catch (const std::exception& exc) {
                   char buf[128];
                   snprintf(buf,
@@ -125,7 +127,7 @@ zarr::FileCreator::create_c_dirs_(int n_c) noexcept
               }
 
               latch.count_down();
-              return success;
+              return !failure;
           }));
     }
 
@@ -142,7 +144,6 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
         for (auto y = 0; y < n_y; ++y) {
             zarr_->push_to_job_queue(std::move(
               [base = base_dir_, c, y, &latch, &failure](std::string& err) {
-                  bool success = false;
                   try {
                       const auto path =
                         base / std::to_string(c) / std::to_string(y);
@@ -150,12 +151,11 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
                           EXPECT(fs::is_directory(path),
                                  "%s must be a directory.",
                                  path.c_str());
-                      } else {
+                      } else if (!failure) {
                           EXPECT(fs::create_directories(path),
                                  "Failed to create directory: %s",
                                  path.c_str());
                       }
-                      success = true;
                   } catch (const std::exception& exc) {
                       char buf[128];
                       snprintf(buf,
@@ -170,7 +170,7 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
                   }
 
                   latch.count_down();
-                  return success;
+                  return !failure;
               }));
         }
     }
@@ -227,6 +227,45 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
 {
     blosc_compression_params_ = compression_params;
+}
+
+bool
+zarr::Writer::write(const VideoFrame* frame) noexcept
+{
+    if (!validate_frame_(frame)) {
+        // log is written in validate_frame
+        return false;
+    }
+
+    try {
+        if (chunk_buffers_.empty()) {
+            make_buffers_();
+        }
+
+        // write out
+        bytes_to_flush_ += write_frame_to_chunks_(
+          frame->data, frame->bytes_of_frame - sizeof(*frame));
+
+        ++frames_written_;
+
+        // rollover if necessary
+        const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
+        if (frames_written_ > 0 && frames_this_chunk == 0) {
+            flush_();
+            rollover_();
+        }
+        return true;
+    } catch (const std::exception& exc) {
+        char buf[128];
+        snprintf(buf, sizeof(buf), "Failed to write frame: %s", exc.what());
+        zarr_->set_error(buf);
+    } catch (...) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "Failed to write frame (unknown)");
+        zarr_->set_error(buf);
+    }
+
+    return false;
 }
 
 void
@@ -370,7 +409,7 @@ zarr::Writer::compress_buffers_() noexcept
 }
 
 size_t
-zarr::Writer::write_bytes_(const uint8_t* buf, size_t buf_size) noexcept
+zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept
 {
     const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_row = tile_dims_.cols * bytes_per_px;

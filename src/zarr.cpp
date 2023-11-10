@@ -589,13 +589,6 @@ zarr::Zarr::push_to_job_queue(JobT&& job)
     jobs_.push(std::move(job));
 }
 
-size_t
-zarr::Zarr::jobs_on_queue() const
-{
-    std::scoped_lock lock(mutex_);
-    return jobs_.size();
-}
-
 void
 zarr::Zarr::write_all_array_metadata_() const
 {
@@ -704,6 +697,7 @@ zarr::Zarr::worker_thread_(ThreadContext* ctx)
             break;
         }
 
+        // FIXME: wait
         if (auto job = pop_from_job_queue_(); job.has_value()) {
             ctx->ready = false;
             std::string err_msg;

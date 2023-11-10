@@ -13,10 +13,6 @@
 
 #include <condition_variable>
 #include <filesystem>
-#include <mutex>
-#include <optional>
-#include <queue>
-#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -29,8 +25,8 @@ struct FileCreator
     explicit FileCreator(Zarr* zarr);
     ~FileCreator() noexcept = default;
 
-    void set_base_dir(const fs::path& base_dir) noexcept;
-    [[nodiscard]] bool create(int n_c,
+    [[nodiscard]] bool create(const fs::path& base_dir,
+                              int n_c,
                               int n_y,
                               int n_x,
                               std::vector<file>& files) noexcept;
@@ -62,7 +58,7 @@ struct Writer
            const BloscCompressionParams& compression_params);
     virtual ~Writer() noexcept = default;
 
-    [[nodiscard]] virtual bool write(const VideoFrame* frame) noexcept = 0;
+    [[nodiscard]] bool write(const VideoFrame* frame) noexcept;
     void finalize() noexcept;
 
     uint32_t frames_written() const noexcept;
@@ -96,17 +92,17 @@ struct Writer
 
     [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;
 
-    virtual void make_buffers_() noexcept = 0;
+    virtual void make_buffers_() noexcept = 0; // FIXME: pull down
 
     void finalize_chunks_() noexcept;
     void compress_buffers_() noexcept;
-    size_t write_bytes_(const uint8_t* buf, size_t buf_size) noexcept;
+    size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept;
     virtual void flush_() noexcept = 0;
 
     uint32_t tiles_per_frame_() const;
 
     /// Files
-    [[nodiscard]] virtual bool make_files_() noexcept = 0;
+    [[nodiscard]] virtual bool make_files_() noexcept = 0; // FIXME: pull down
     void close_files_();
     void rollover_();
 };

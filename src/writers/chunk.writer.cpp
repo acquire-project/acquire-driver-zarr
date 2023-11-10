@@ -31,45 +31,6 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
 {
 }
 
-bool
-zarr::ChunkWriter::write(const VideoFrame* frame) noexcept
-{
-    if (!validate_frame_(frame)) {
-        // log is written in validate_frame
-        return false;
-    }
-
-    try {
-        if (chunk_buffers_.empty()) {
-            make_buffers_();
-        }
-
-        // write out
-        bytes_to_flush_ +=
-          write_bytes_(frame->data, frame->bytes_of_frame - sizeof(*frame));
-
-        ++frames_written_;
-
-        // rollover if necessary
-        const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
-        if (frames_written_ > 0 && frames_this_chunk == 0) {
-            flush_();
-            rollover_();
-        }
-        return true;
-    } catch (const std::exception& exc) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "Failed to write frame: %s", exc.what());
-        zarr_->set_error(buf);
-    } catch (...) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "Failed to write frame (unknown)");
-        zarr_->set_error(buf);
-    }
-
-    return false;
-}
-
 void
 zarr::ChunkWriter::make_buffers_() noexcept
 {
@@ -125,7 +86,8 @@ zarr::ChunkWriter::flush_() noexcept
                          &latch](std::string& err) -> bool {
                   bool success = false;
                   try {
-                      success = file_write(fh, 0, data, data + size);
+                      success = file_write(
+                        fh, 0, data, data + size); // FIXME: this won't throw
                   } catch (const std::exception& exc) {
                       char buf[128];
                       snprintf(buf,
@@ -161,7 +123,9 @@ zarr::ChunkWriter::flush_() noexcept
 bool
 zarr::ChunkWriter::make_files_() noexcept
 {
-    file_creator_.set_base_dir(data_root_ / std::to_string(current_chunk_));
-    return file_creator_.create(
-      1, tiles_per_frame_y_, tiles_per_frame_x_, files_);
+    return file_creator_.create(data_root_ / std::to_string(current_chunk_),
+                                1,
+                                tiles_per_frame_y_,
+                                tiles_per_frame_x_,
+                                files_);
 }

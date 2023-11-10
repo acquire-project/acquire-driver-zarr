@@ -42,42 +42,8 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
 }
 
-bool
-zarr::ShardWriter::write(const VideoFrame* frame) noexcept
-{
-    if (!validate_frame_(frame)) {
-        // log is written in validate_frame
-        return false;
-    }
-
-    try {
-        if (chunk_buffers_.empty()) {
-            make_buffers_();
-        }
-
-        bytes_to_flush_ +=
-          write_bytes_(frame->data, frame->bytes_of_frame - sizeof(*frame));
-
-        ++frames_written_;
-
-        // rollover if necessary
-        const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
-        if (frames_written_ > 0 && frames_this_chunk == 0) {
-            flush_();
-            rollover_();
-        }
-
-        return true;
-    } catch (const std::exception& exc) {
-        LOGE("Failed to write frame: %s", exc.what());
-    } catch (...) {
-        LOGE("Failed to write frame (unknown)");
-    }
-
-    return false;
-}
-
 uint16_t
+// FIXME (aliddell): this is generalizable and doesn't need to be a method
 zarr::ShardWriter::chunks_per_shard_() const
 {
     const uint16_t chunks_per_shard_x = shard_dims_.cols / tile_dims_.cols;
@@ -110,7 +76,6 @@ zarr::ShardWriter::make_buffers_() noexcept
     }
 
     const auto n_shards = shards_per_frame_();
-    const auto chunks_per_shard = chunks_per_shard_();
 
     for (auto i = 0; i < n_shards; ++i) {
         shard_buffers_.emplace_back();
@@ -135,7 +100,8 @@ zarr::ShardWriter::flush_() noexcept
 
     // create shard files if necessary
     if (files_.empty() && !make_files_()) {
-        zarr_->set_error("Failed to flush.");
+        zarr_->set_error("Failed to flush."); // this sets from the one of the
+                                              // jobs. do we need it?
         return;
     }
 
@@ -153,25 +119,24 @@ zarr::ShardWriter::flush_() noexcept
       max_bytes_per_chunk * chunks_per_shard // data
       + bytes_of_index;                      // indices
 
+    // FIXME (aliddell): put this into a job
     // concatenate chunks into shards
     for (auto i = 0; i < shard_buffers_.size(); ++i) {
         auto& shard = shard_buffers_.at(i);
-        size_t shard_size = 0;
+        size_t chunk_index = 0;
         std::vector<uint64_t> chunk_indices;
 
         shard.reserve(max_bytes_per_shard);
 
         for (auto j = 0; j < chunks_per_shard; ++j) {
-            chunk_indices.push_back(shard_size); // chunk index
+            chunk_indices.push_back(chunk_index); // chunk offset
             const auto k = i * chunks_per_shard + j;
 
             auto& chunk = chunk_buffers_.at(k);
-            shard_size += chunk.size();
+            chunk_index += chunk.size();
             chunk_indices.push_back(chunk.size()); // chunk extent
 
-            std::copy(chunk.begin(),
-                      chunk.end(),
-                      std::back_inserter(shard));
+            std::copy(chunk.begin(), chunk.end(), std::back_inserter(shard));
             chunk.clear();
             shard.shrink_to_fit();
         }
@@ -233,8 +198,10 @@ zarr::ShardWriter::flush_() noexcept
 bool
 zarr::ShardWriter::make_files_() noexcept
 {
-    file_creator_.set_base_dir(data_root_ /
-                               ("c" + std::to_string(current_chunk_)));
-    return file_creator_.create(
-      1, shards_per_frame_y_, shards_per_frame_x_, files_);
+    return file_creator_.create(data_root_ /
+                                  ("c" + std::to_string(current_chunk_)),
+                                1,
+                                shards_per_frame_y_,
+                                shards_per_frame_x_,
+                                files_);
 }

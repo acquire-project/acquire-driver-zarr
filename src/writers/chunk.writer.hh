@@ -39,8 +39,6 @@ struct ChunkWriter final : public Writer
                 const BloscCompressionParams& compression_params);
     ~ChunkWriter() override = default;
 
-    [[nodiscard]] bool write(const VideoFrame* frame) noexcept override;
-
   private:
     void make_buffers_() noexcept override;
     void flush_() noexcept override;

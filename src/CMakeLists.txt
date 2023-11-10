@@ -6,7 +6,6 @@ endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
-        prelude.h
         common.hh
         common.cpp
         writers/writer.hh

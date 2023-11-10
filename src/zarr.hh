@@ -7,7 +7,6 @@
 
 #include "device/kit/storage.h"
 
-#include "prelude.h"
 #include "common.hh"
 #include "writers/writer.hh"
 #include "writers/blosc.compressor.hh"
@@ -44,16 +43,6 @@ struct StorageInterface : public Storage
 struct Zarr : StorageInterface
 {
   public:
-    using JobT = std::function<bool(std::string&)>;
-    struct ThreadContext
-    {
-        std::thread thread;
-        std::mutex mutex;
-        std::condition_variable cv;
-        bool should_stop;
-        bool ready;
-    };
-
     Zarr();
     Zarr(BloscCompressionParams&& compression_params);
     ~Zarr() noexcept override;
@@ -71,7 +60,6 @@ struct Zarr : StorageInterface
 
     /// Multithreading
     void push_to_job_queue(JobT&& job);
-    size_t jobs_on_queue() const;
 
   protected:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
