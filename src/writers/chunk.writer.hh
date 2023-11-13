@@ -40,7 +40,6 @@ struct ChunkWriter final : public Writer
     ~ChunkWriter() override = default;
 
   private:
-    void make_buffers_() noexcept override;
     void flush_() noexcept override;
     [[nodiscard]] bool make_files_() noexcept override;
 };

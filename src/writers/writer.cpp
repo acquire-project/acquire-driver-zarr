@@ -9,8 +9,7 @@
 namespace zarr = acquire::sink::zarr;
 
 /// DirectoryCreator
-zarr::FileCreator::
-FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
+zarr::FileCreator::FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
   : thread_pool_{ thread_pool }
 {
 }
@@ -181,12 +180,11 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
 }
 
 /// Writer
-zarr::Writer::
-Writer(const ImageDims& frame_dims,
-       const ImageDims& tile_dims,
-       uint32_t frames_per_chunk,
-       const std::string& data_root,
-       std::shared_ptr<common::ThreadPool> thread_pool)
+zarr::Writer::Writer(const ImageDims& frame_dims,
+                     const ImageDims& tile_dims,
+                     uint32_t frames_per_chunk,
+                     const std::string& data_root,
+                     std::shared_ptr<common::ThreadPool> thread_pool)
   : frame_dims_{ frame_dims }
   , tile_dims_{ tile_dims }
   , data_root_{ data_root }
@@ -220,13 +218,12 @@ Writer(const ImageDims& frame_dims,
     }
 }
 
-zarr::Writer::
-Writer(const ImageDims& frame_dims,
-       const ImageDims& tile_dims,
-       uint32_t frames_per_chunk,
-       const std::string& data_root,
-       std::shared_ptr<common::ThreadPool> thread_pool,
-       const BloscCompressionParams& compression_params)
+zarr::Writer::Writer(const ImageDims& frame_dims,
+                     const ImageDims& tile_dims,
+                     uint32_t frames_per_chunk,
+                     const std::string& data_root,
+                     std::shared_ptr<common::ThreadPool> thread_pool,
+                     const BloscCompressionParams& compression_params)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, thread_pool)
 {
     blosc_compression_params_ = compression_params;
@@ -296,6 +293,25 @@ zarr::Writer::validate_frame_(const VideoFrame* frame)
            "Expected frame to have %d rows. Got %d.",
            frame_dims_.rows,
            frame->shape.dims.height);
+}
+
+void
+zarr::Writer::make_buffers_() noexcept
+{
+    const auto n_chunks = tiles_per_frame_();
+
+    const auto bytes_per_px = bytes_of_type(pixel_type_);
+    const auto bytes_per_tile =
+      tile_dims_.cols * tile_dims_.rows * bytes_per_px;
+
+    const auto bytes_to_reserve =
+      bytes_per_tile * frames_per_chunk_ +
+      (blosc_compression_params_.has_value() ? BLOSC_MAX_OVERHEAD : 0);
+
+    for (auto i = 0; i < n_chunks; ++i) {
+        chunk_buffers_.emplace_back();
+        chunk_buffers_.back().reserve(bytes_to_reserve);
+    }
 }
 
 void

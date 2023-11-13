@@ -32,25 +32,6 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
 }
 
 void
-zarr::ChunkWriter::make_buffers_() noexcept
-{
-    const auto n_chunks = tiles_per_frame_();
-
-    const auto bytes_per_px = bytes_of_type(pixel_type_);
-    const auto bytes_per_tile =
-      tile_dims_.cols * tile_dims_.rows * bytes_per_px;
-
-    const auto bytes_to_reserve =
-      bytes_per_tile * frames_per_chunk_ +
-      (blosc_compression_params_.has_value() ? BLOSC_MAX_OVERHEAD : 0);
-
-    for (auto i = 0; i < n_chunks; ++i) {
-        chunk_buffers_.emplace_back();
-        chunk_buffers_.back().reserve(bytes_to_reserve);
-    }
-}
-
-void
 zarr::ChunkWriter::flush_() noexcept
 {
     if (bytes_to_flush_ == 0) {
@@ -85,8 +66,8 @@ zarr::ChunkWriter::flush_() noexcept
                          &latch](std::string& err) -> bool {
                   bool success = false;
                   try {
-                      success = file_write(
-                        fh, 0, data, data + size); // FIXME: this won't throw
+                      CHECK(file_write(fh, 0, data, data + size));
+                      success = true;
                   } catch (const std::exception& exc) {
                       char buf[128];
                       snprintf(buf,

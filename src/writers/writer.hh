@@ -92,7 +92,7 @@ struct Writer
 
     void validate_frame_(const VideoFrame* frame);
 
-    virtual void make_buffers_() noexcept = 0; // FIXME: pull down
+    void make_buffers_() noexcept;
 
     void finalize_chunks_() noexcept;
     void compress_buffers_() noexcept;

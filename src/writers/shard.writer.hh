@@ -46,12 +46,9 @@ struct ShardWriter final : public Writer
     uint16_t shards_per_frame_x_;
     uint16_t shards_per_frame_y_;
 
-    std::vector<std::vector<uint8_t>> shard_buffers_;
-
     uint16_t chunks_per_shard_() const;
     uint16_t shards_per_frame_() const;
 
-    void make_buffers_() noexcept override;
     void flush_() noexcept override;
     [[nodiscard]] bool make_files_() noexcept override;
 };
