@@ -22,7 +22,7 @@ struct Zarr;
 struct FileCreator
 {
     FileCreator() = delete;
-    explicit FileCreator(Zarr* zarr);
+    explicit FileCreator(std::shared_ptr<common::ThreadPool> thread_pool);
     ~FileCreator() noexcept = default;
 
     [[nodiscard]] bool create(const fs::path& base_dir,
@@ -33,7 +33,7 @@ struct FileCreator
 
   private:
     fs::path base_dir_;
-    Zarr* zarr_;
+    std::shared_ptr<common::ThreadPool> thread_pool_;
 
     bool create_c_dirs_(int n_c) noexcept;
     bool create_y_dirs_(int n_c, int n_y) noexcept;
@@ -47,18 +47,18 @@ struct Writer
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root,
-           Zarr* zarr);
+           std::shared_ptr<common::ThreadPool> thread_pool);
 
     /// Constructor with Blosc compression params
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root,
-           Zarr* zarr,
+           std::shared_ptr<common::ThreadPool> thread_pool,
            const BloscCompressionParams& compression_params);
     virtual ~Writer() noexcept = default;
 
-    [[nodiscard]] bool write(const VideoFrame* frame) noexcept;
+    [[nodiscard]] bool write(const VideoFrame* frame);
     void finalize() noexcept;
 
     uint32_t frames_written() const noexcept;
@@ -88,9 +88,9 @@ struct Writer
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
     uint32_t current_chunk_;
-    Zarr* zarr_;
+    std::shared_ptr<common::ThreadPool> thread_pool_;
 
-    [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;
+    void validate_frame_(const VideoFrame* frame);
 
     virtual void make_buffers_() noexcept = 0; // FIXME: pull down
 

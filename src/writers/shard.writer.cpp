@@ -11,8 +11,8 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               Zarr* zarr)
-  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
+                               std::shared_ptr<common::ThreadPool> thread_pool)
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, thread_pool)
   , shard_dims_{ shard_dims }
 {
     shards_per_frame_x_ =
@@ -26,13 +26,13 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               Zarr* zarr,
+                               std::shared_ptr<common::ThreadPool> thread_pool,
                                const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
            frames_per_chunk,
            data_root,
-           zarr,
+           thread_pool,
            compression_params)
   , shard_dims_{ shard_dims }
 {
@@ -100,8 +100,6 @@ zarr::ShardWriter::flush_() noexcept
 
     // create shard files if necessary
     if (files_.empty() && !make_files_()) {
-        zarr_->set_error("Failed to flush."); // this sets from the one of the
-                                              // jobs. do we need it?
         return;
     }
 
@@ -155,7 +153,7 @@ zarr::ShardWriter::flush_() noexcept
         std::scoped_lock lock(buffers_mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             const auto& shard = shard_buffers_.at(i);
-            zarr_->push_to_job_queue(
+            thread_pool_->push_to_job_queue(
               std::move([fh = &files_.at(i),
                          shard = shard.data(),
                          size = shard.size(),

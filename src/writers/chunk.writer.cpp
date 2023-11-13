@@ -11,8 +11,8 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               Zarr* zarr)
-  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
+                               std::shared_ptr<common::ThreadPool> thread_pool)
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, thread_pool)
 {
 }
 
@@ -20,13 +20,13 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
                                const ImageDims& tile_dims,
                                uint32_t frames_per_chunk,
                                const std::string& data_root,
-                               Zarr* zarr,
+                               std::shared_ptr<common::ThreadPool> thread_pool,
                                const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
            frames_per_chunk,
            data_root,
-           zarr,
+           thread_pool,
            compression_params)
 {
 }
@@ -68,7 +68,6 @@ zarr::ChunkWriter::flush_() noexcept
 
     // create chunk files if necessary
     if (files_.empty() && !make_files_()) {
-        zarr_->set_error("Failed to flush.");
         return;
     }
 
@@ -79,7 +78,7 @@ zarr::ChunkWriter::flush_() noexcept
         std::scoped_lock lock(buffers_mutex_);
         for (auto i = 0; i < files_.size(); ++i) {
             auto& chunk = chunk_buffers_.at(i);
-            zarr_->push_to_job_queue(
+            thread_pool_->push_to_job_queue(
               std::move([fh = &files_.at(i),
                          data = chunk.data(),
                          size = chunk.size(),

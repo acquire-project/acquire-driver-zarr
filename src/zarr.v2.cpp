@@ -65,7 +65,7 @@ zarr::ZarrV2::allocate_writers_()
               tile_shape,
               (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
               (get_data_directory_() / std::to_string(i)).string(),
-              this,
+              thread_pool_,
               blosc_compression_params_.value()));
         } else {
             writers_.push_back(std::make_shared<ChunkWriter>(
@@ -73,7 +73,7 @@ zarr::ZarrV2::allocate_writers_()
               tile_shape,
               (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
               (get_data_directory_() / std::to_string(i)).string(),
-              this));
+              thread_pool_));
         }
     }
 }

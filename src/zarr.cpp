@@ -320,7 +320,8 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
 } // end ::{anonymous} namespace
 
 /// StorageInterface
-zarr::StorageInterface::StorageInterface()
+zarr::StorageInterface::
+StorageInterface()
   : Storage{
       .state = DeviceState_AwaitingConfiguration,
       .set = ::zarr_set,
@@ -529,31 +530,24 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 
 /// Zarr
 
-zarr::Zarr::Zarr()
-  : threads_(std::thread::hardware_concurrency())
+zarr::Zarr::
+Zarr()
+  : thread_pool_{ std::make_shared<common::ThreadPool>(
+      std::thread::hardware_concurrency(),
+      [this](const std::string& err) { this->set_error(err); }) }
+  , pixel_scale_um_{ 1, 1 }
+  , max_bytes_per_chunk_{ 0 }
+  , enable_multiscale_{ false }
+  , pixel_type_{ SampleType_u8 }
+  , error_{ false }
 {
-    // spin up threads
-    for (auto& ctx_ : threads_) {
-        ctx_.ready = true;
-        ctx_.should_stop = false;
-        ctx_.thread = std::thread([this, ctx = &ctx_] { worker_thread_(ctx); });
-    }
 }
 
-zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
+zarr::Zarr::
+Zarr(BloscCompressionParams&& compression_params)
   : Zarr()
 {
     blosc_compression_params_ = std::move(compression_params);
-}
-
-zarr::Zarr::~Zarr() noexcept
-{
-    // spin down threads
-    for (auto& ctx : threads_) {
-        ctx.should_stop = true;
-        ctx.cv.notify_one();
-        ctx.thread.join();
-    }
 }
 
 void
@@ -580,13 +574,6 @@ zarr::Zarr::set_error(const std::string& msg) noexcept
         error_ = true;
         error_msg_ = msg;
     }
-}
-
-void
-zarr::Zarr::push_to_job_queue(JobT&& job)
-{
-    std::scoped_lock lock(mutex_);
-    jobs_.push(std::move(job));
 }
 
 void
@@ -663,57 +650,6 @@ zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
             break;
         }
     }
-}
-
-std::optional<zarr::Zarr::JobT>
-zarr::Zarr::pop_from_job_queue_() noexcept
-{
-    std::scoped_lock lock(mutex_);
-    if (jobs_.empty()) {
-        return std::nullopt;
-    }
-
-    auto job = jobs_.front();
-    jobs_.pop();
-    return job;
-}
-
-void
-zarr::Zarr::worker_thread_(ThreadContext* ctx)
-{
-    using namespace std::chrono_literals;
-
-    TRACE("Worker thread starting.");
-    if (nullptr == ctx) {
-        LOGE("Null context passed to worker thread.");
-        return;
-    }
-
-    while (true) {
-        std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
-
-        if (ctx->should_stop) {
-            break;
-        }
-
-        // FIXME: wait
-        if (auto job = pop_from_job_queue_(); job.has_value()) {
-            ctx->ready = false;
-            std::string err_msg;
-            if (!job.value()(err_msg)) {
-                set_error(err_msg);
-            }
-            ctx->ready = true;
-            lock.unlock();
-            ctx->cv.notify_one();
-        } else {
-            lock.unlock();
-            std::this_thread::sleep_for(1ms);
-        }
-    }
-
-    TRACE("Worker thread exiting.");
 }
 
 #ifndef NO_UNIT_TESTS

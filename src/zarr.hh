@@ -44,8 +44,8 @@ struct Zarr : StorageInterface
 {
   public:
     Zarr();
-    Zarr(BloscCompressionParams&& compression_params);
-    ~Zarr() noexcept override;
+    explicit Zarr(BloscCompressionParams&& compression_params);
+    ~Zarr() noexcept override = default;
 
     /// StorageInterface
     void set(const StorageProperties* props) override;
@@ -57,9 +57,6 @@ struct Zarr : StorageInterface
 
     /// Error state
     void set_error(const std::string& msg) noexcept;
-
-    /// Multithreading
-    void push_to_job_queue(JobT&& job);
 
   protected:
     using ChunkingProps = StorageProperties::storage_properties_chunking_s;
@@ -86,9 +83,8 @@ struct Zarr : StorageInterface
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
 
     /// Multithreading
-    std::vector<ThreadContext> threads_;
-    mutable std::mutex mutex_; // for jobs_ and error_ / error_msg_
-    std::queue<JobT> jobs_;
+    std::shared_ptr<common::ThreadPool> thread_pool_;
+    mutable std::mutex mutex_; // for error_ / error_msg_
 
     /// Error state
     bool error_;
@@ -110,10 +106,6 @@ struct Zarr : StorageInterface
 
     /// Multiscale
     void write_multiscale_frames_(const VideoFrame* frame);
-
-    /// Multithreading
-    std::optional<JobT> pop_from_job_queue_() noexcept;
-    void worker_thread_(ThreadContext* ctx);
 };
 
 } // namespace acquire::sink::zarr

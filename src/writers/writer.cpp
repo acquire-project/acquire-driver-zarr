@@ -9,8 +9,9 @@
 namespace zarr = acquire::sink::zarr;
 
 /// DirectoryCreator
-zarr::FileCreator::FileCreator(Zarr* zarr)
-  : zarr_{ zarr }
+zarr::FileCreator::
+FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
+  : thread_pool_{ thread_pool }
 {
 }
 
@@ -49,7 +50,7 @@ zarr::FileCreator::create(const fs::path& base_dir,
     for (auto c = 0; c < n_c; ++c) {
         for (auto y = 0; y < n_y; ++y) {
             for (auto x = 0; x < n_x; ++x) {
-                zarr_->push_to_job_queue(
+                thread_pool_->push_to_job_queue(
                   [base = base_dir_,
                    &file = files.at(c * n_y * n_x + y * n_x + x),
                    c,
@@ -100,7 +101,7 @@ zarr::FileCreator::create_c_dirs_(int n_c) noexcept
     std::latch latch(n_c);
     std::atomic<bool> failure{ false };
     for (auto c = 0; c < n_c; ++c) {
-        zarr_->push_to_job_queue(
+        thread_pool_->push_to_job_queue(
           std::move([base = base_dir_, c, &latch, &failure](std::string& err) {
               try {
                   const auto path = base / std::to_string(c);
@@ -142,7 +143,7 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
     std::atomic<bool> failure{ false };
     for (auto c = 0; c < n_c; ++c) {
         for (auto y = 0; y < n_y; ++y) {
-            zarr_->push_to_job_queue(std::move(
+            thread_pool_->push_to_job_queue(std::move(
               [base = base_dir_, c, y, &latch, &failure](std::string& err) {
                   try {
                       const auto path =
@@ -180,11 +181,12 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
 }
 
 /// Writer
-zarr::Writer::Writer(const ImageDims& frame_dims,
-                     const ImageDims& tile_dims,
-                     uint32_t frames_per_chunk,
-                     const std::string& data_root,
-                     Zarr* zarr)
+zarr::Writer::
+Writer(const ImageDims& frame_dims,
+       const ImageDims& tile_dims,
+       uint32_t frames_per_chunk,
+       const std::string& data_root,
+       std::shared_ptr<common::ThreadPool> thread_pool)
   : frame_dims_{ frame_dims }
   , tile_dims_{ tile_dims }
   , data_root_{ data_root }
@@ -193,8 +195,8 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
   , bytes_to_flush_{ 0 }
   , current_chunk_{ 0 }
   , pixel_type_{ SampleTypeCount }
-  , zarr_{ zarr }
-  , file_creator_{ zarr }
+  , thread_pool_{ thread_pool }
+  , file_creator_{ thread_pool }
 {
     CHECK(tile_dims_.cols > 0);
     CHECK(tile_dims_.rows > 0);
@@ -218,54 +220,40 @@ zarr::Writer::Writer(const ImageDims& frame_dims,
     }
 }
 
-zarr::Writer::Writer(const ImageDims& frame_dims,
-                     const ImageDims& tile_dims,
-                     uint32_t frames_per_chunk,
-                     const std::string& data_root,
-                     Zarr* zarr,
-                     const BloscCompressionParams& compression_params)
-  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, zarr)
+zarr::Writer::
+Writer(const ImageDims& frame_dims,
+       const ImageDims& tile_dims,
+       uint32_t frames_per_chunk,
+       const std::string& data_root,
+       std::shared_ptr<common::ThreadPool> thread_pool,
+       const BloscCompressionParams& compression_params)
+  : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, thread_pool)
 {
     blosc_compression_params_ = compression_params;
 }
 
 bool
-zarr::Writer::write(const VideoFrame* frame) noexcept
+zarr::Writer::write(const VideoFrame* frame)
 {
-    if (!validate_frame_(frame)) {
-        // log is written in validate_frame
-        return false;
+    validate_frame_(frame);
+
+    if (chunk_buffers_.empty()) {
+        make_buffers_();
     }
 
-    try {
-        if (chunk_buffers_.empty()) {
-            make_buffers_();
-        }
+    // write out
+    bytes_to_flush_ += write_frame_to_chunks_(
+      frame->data, frame->bytes_of_frame - sizeof(*frame));
 
-        // write out
-        bytes_to_flush_ += write_frame_to_chunks_(
-          frame->data, frame->bytes_of_frame - sizeof(*frame));
+    ++frames_written_;
 
-        ++frames_written_;
-
-        // rollover if necessary
-        const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
-        if (frames_written_ > 0 && frames_this_chunk == 0) {
-            flush_();
-            rollover_();
-        }
-        return true;
-    } catch (const std::exception& exc) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "Failed to write frame: %s", exc.what());
-        zarr_->set_error(buf);
-    } catch (...) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "Failed to write frame (unknown)");
-        zarr_->set_error(buf);
+    // rollover if necessary
+    const auto frames_this_chunk = frames_written_ % frames_per_chunk_;
+    if (frames_written_ > 0 && frames_this_chunk == 0) {
+        flush_();
+        rollover_();
     }
-
-    return false;
+    return true;
 }
 
 void
@@ -285,42 +273,29 @@ zarr::Writer::frames_written() const noexcept
     return frames_written_;
 }
 
-bool
-zarr::Writer::validate_frame_(const VideoFrame* frame) noexcept
+void
+zarr::Writer::validate_frame_(const VideoFrame* frame)
 {
-    try {
-        CHECK(frame);
+    CHECK(frame);
 
-        if (pixel_type_ == SampleTypeCount) {
-            pixel_type_ = frame->shape.type;
-        } else {
-            EXPECT(pixel_type_ == frame->shape.type,
-                   "Expected frame to have pixel type %s. Got %s.",
-                   common::sample_type_to_string(pixel_type_),
-                   common::sample_type_to_string(frame->shape.type));
-        }
-
-        // validate the incoming frame shape against the stored frame dims
-        EXPECT(frame_dims_.cols == frame->shape.dims.width,
-               "Expected frame to have %d columns. Got %d.",
-               frame_dims_.cols,
-               frame->shape.dims.width);
-        EXPECT(frame_dims_.rows == frame->shape.dims.height,
-               "Expected frame to have %d rows. Got %d.",
-               frame_dims_.rows,
-               frame->shape.dims.height);
-
-        return true;
-    } catch (const std::exception& exc) {
-        char buf[128];
-        snprintf(buf, sizeof(buf), "Invalid frame: %s", exc.what());
-        zarr_->set_error(buf);
-    } catch (...) {
-        char buf[32];
-        snprintf(buf, sizeof(buf), "Invalid frame (unknown)");
-        zarr_->set_error(buf);
+    if (pixel_type_ == SampleTypeCount) {
+        pixel_type_ = frame->shape.type;
+    } else {
+        EXPECT(pixel_type_ == frame->shape.type,
+               "Expected frame to have pixel type %s. Got %s.",
+               common::sample_type_to_string(pixel_type_),
+               common::sample_type_to_string(frame->shape.type));
     }
-    return false;
+
+    // validate the incoming frame shape against the stored frame dims
+    EXPECT(frame_dims_.cols == frame->shape.dims.width,
+           "Expected frame to have %d columns. Got %d.",
+           frame_dims_.cols,
+           frame->shape.dims.width);
+    EXPECT(frame_dims_.rows == frame->shape.dims.height,
+           "Expected frame to have %d rows. Got %d.",
+           frame_dims_.rows,
+           frame->shape.dims.height);
 }
 
 void
@@ -365,11 +340,12 @@ zarr::Writer::compress_buffers_() noexcept
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
         auto& chunk = chunk_buffers_.at(i);
 
-        zarr_->push_to_job_queue([params = blosc_compression_params_.value(),
-                                  buf = &chunk,
-                                  bytes_per_px,
-                                  bytes_per_chunk,
-                                  &latch](std::string& err) -> bool {
+        thread_pool_->push_to_job_queue([params =
+                                           blosc_compression_params_.value(),
+                                         buf = &chunk,
+                                         bytes_per_px,
+                                         bytes_per_chunk,
+                                         &latch](std::string& err) -> bool {
             bool success = false;
             try {
                 const auto tmp_size = bytes_per_chunk + BLOSC_MAX_OVERHEAD;
@@ -409,7 +385,8 @@ zarr::Writer::compress_buffers_() noexcept
 }
 
 size_t
-zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept
+zarr::Writer::write_frame_to_chunks_(const uint8_t* buf,
+                                     size_t buf_size) noexcept
 {
     const auto bytes_per_px = bytes_of_type(pixel_type_);
     const auto bytes_per_row = tile_dims_.cols * bytes_per_px;

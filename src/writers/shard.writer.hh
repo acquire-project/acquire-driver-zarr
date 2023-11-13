@@ -29,7 +29,7 @@ struct ShardWriter final : public Writer
                 const ImageDims& tile_dims,
                 uint32_t frames_per_chunk,
                 const std::string& data_root,
-                Zarr* zarr);
+                std::shared_ptr<common::ThreadPool> thread_pool);
 
     /// Constructor with Blosc compression params
     ShardWriter(const ImageDims& frame_dims,
@@ -37,7 +37,7 @@ struct ShardWriter final : public Writer
                 const ImageDims& tile_dims,
                 uint32_t frames_per_chunk,
                 const std::string& data_root,
-                Zarr* zarr,
+                std::shared_ptr<common::ThreadPool> thread_pool,
                 const BloscCompressionParams& compression_params);
     ~ShardWriter() override = default;
 
