@@ -413,6 +413,7 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf,
     size_t bytes_written = 0;
 
     for (auto i = 0; i < tiles_per_frame_y_; ++i) {
+        // TODO (aliddell): we can optimize this when tiles_per_frame_x_ is 1
         for (auto j = 0; j < tiles_per_frame_x_; ++j) {
             size_t offset = bytes_per_tile * frames_this_chunk;
 

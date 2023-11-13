@@ -50,6 +50,7 @@ struct Zarr : StorageInterface
     /// StorageInterface
     void set(const StorageProperties* props) override;
     void get(StorageProperties* props) const override;
+    void get_meta(StoragePropertyMetadata* meta) const override;
     void start() override;
     int stop() noexcept override;
     size_t append(const VideoFrame* frames, size_t nbytes) override;
@@ -70,7 +71,7 @@ struct Zarr : StorageInterface
     fs::path dataset_root_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
-    uint64_t max_bytes_per_chunk_;
+    uint32_t planes_per_chunk_;
     bool enable_multiscale_;
 
     /// changes on reserve_image_shape

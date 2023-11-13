@@ -1,4 +1,5 @@
-/// @brief Test that enabling multiscale without specifying a tile size doesn't crash.
+/// @brief Test that enabling multiscale without specifying a tile size doesn't
+/// crash.
 
 #include "device/hal/device.manager.h"
 #include "acquire.h"
@@ -71,6 +72,7 @@ reporter(int is_error,
 
 const static uint32_t frame_width = 640;
 const static uint32_t frame_height = 480;
+const static uint32_t chunk_planes = 128;
 const static uint32_t max_frame_count = 100;
 
 void
@@ -103,8 +105,10 @@ setup(AcquireRuntime* runtime)
                             0,
                             sample_spacing_um);
 
-    storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, frame_width, frame_height, 1, 64 << 20);
+    storage_properties_set_chunking_props(&props.video[0].storage.settings,
+                                          frame_width,
+                                          frame_height,
+                                          chunk_planes);
 
     storage_properties_set_enable_multiscale(&props.video[0].storage.settings,
                                              1);

@@ -28,10 +28,12 @@ Multiscale storage can be enabled or disabled by calling `storage_properties_set
 the video stream.
 
 For the [Zarr v3] version of each device, you can use the `ZarrV3*` devices.
-**Note:** Zarr v3 is not [yet](https://github.com/ome/ngff/pull/206) supported by [ome-zarr-py](https://github.com/ome/ome-zarr-py), so you
+**Note:** Zarr v3 is not [yet](https://github.com/ome/ngff/pull/206) supported
+by [ome-zarr-py](https://github.com/ome/ome-zarr-py), so you
 will not be able to read multiscale metadata from the resulting dataset.
 
-Zarr v3 *is* supported by [zarr-python](https://github.com/zarr-developers/zarr-python), but you will need to set two environment variables to work with it:
+Zarr v3 *is* supported by [zarr-python](https://github.com/zarr-developers/zarr-python), but you will need to set two
+environment variables to work with it:
 
 ```bash
 export ZARR_V3_EXPERIMENTAL_API=1
@@ -54,16 +56,15 @@ import zarr
 
 You can configure chunking by calling `storage_properties_set_chunking_props()` on your `StorageProperties` object
 _after_ calling `storage_properties_init()`.
-There are 4 parameters you can set to determine the chunk size, namely `tile_width`, `tile_height`, `tile_planes`,
-and `bytes_per_chunk`:
+There are 3 parameters you can set to determine the chunk size, namely `chunk_width`, `chunk_height`,
+and `chunk_planes`:
 
 ```c
 int
 storage_properties_set_chunking_props(struct StorageProperties* out,
-                                      uint32_t tile_width,
-                                      uint32_t tile_height,
-                                      uint32_t tile_planes,
-                                      uint64_t max_bytes_per_chunk)
+                                      uint32_t chunk_width,
+                                      uint32_t chunk_height,
+                                      uint32_t chunk_planes)
 ```
 
 | ![frames](https://github.com/aliddell/acquire-driver-zarr/assets/844464/3510d468-4751-4fa0-b2bf-0e29a5f3ea1c) |
@@ -83,35 +84,51 @@ the same ROI in its respective frame.
 |:-------------------------------------------------------------------------------------------------------------:|
 |            A collection of frames, divided into tiles. A single chunk has been highlighted in red.            |
 
-You can specify the width and height, in pixels, of each tile, and if your frame size has more than one plane, you can
-specify the number of planes you want per tile as well.
+You can specify the width and height, in pixels, of each tile.
 If any of these values are unset (equivalently, set to 0), or if they are set to a value larger than the frame size,
 the full value of the frame size along that dimension will be used instead.
 You should take care that the values you select won't result in tile sizes that are too small or too large for your
 application.
-
-**Important:**
-The `max_bytes_per_chunk` parameter can be used to cap the size of a chunk.
-A minimum of 16 MiB is enforced, but no maximum, so if you are compressing you must ensure that you have sufficient
-memory for all your chunks to be stored in memory at once.
+You can also set the number of tile *planes* to concatenate into a chunk.
+If this value is unset (or set to 0), it will default to a prescribed minimum value of 32.
 
 #### Example
 
-Suppose your frame size is 1920 x 1080 x 1, with a pixel type of unsigned 8-bit integer.
-You can use a tile size of 640 x 360 x 1, which will divide your frame evenly into 9 tiles.
-You want chunk sizes of at most 64 MiB.
+Suppose your frame size is 1920 x 1080, with a pixel type of unsigned 8-bit integer.
+You can use a tile size of 640 x 360, which will divide your frame evenly into 9 tiles.
+You want chunk sizes of at most 32 MiB and this works out to 32 * 2^20 / (640 * 360) = 145.63555555555556, so you select
+145 chunk planes.
 You would configure your storage properties as follows:
 
 ```c
 storage_properties_set_chunking_props(&storage_props,
                                       640,
                                       360,
-                                      1,
-                                      64 * 1024 * 1024);
+                                      145);
 ```
 
-Note that 64 * 1024 * 1024 / (640 * 360) = 291.2711111111111, so each chunk will contain 291 tiles, or about 63.94 MiB
-raw, before compression.
+### Configuring sharding
+
+Configuring sharding is similar to configuring chunking.
+You can configure sharding by calling `storage_properties_set_sharding_props()` on your `StorageProperties` object
+_after_ calling `storage_properties_init()`.
+There are 3 parameters you can set to determine the shard size, namely `shard_width`, `shard_height`,
+and `shard_planes`.
+**Note:** whereas the unit for the width, height, and plane values when chunking is *pixels*, when sharding, the unit is
+*chunks*.
+So in the previous example, if you wanted combine all your chunks together into a single shard, you would set your shard
+properties like so:
+
+```c
+storage_properties_set_sharding_props(&storage_props,
+                                      3, // width: 1920 / 640
+                                      3, // height: 1080 / 360
+                                      1);
+```
+
+This would result in all 9 chunks being combined into a single shard.
+
+```c
 
 ### Compression
 

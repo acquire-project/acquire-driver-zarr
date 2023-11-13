@@ -1,8 +1,8 @@
 /// @file
 /// @brief Generate a Zarr dataset with a single chunk using the simulated
-/// radial sine pattern with a u16 sample type. This example was used to generate
-/// data for a visual EXAMPLE of a fix for a striping artifact observed when
-/// writing to a Zarr dataset with multibyte samples.
+/// radial sine pattern with a u16 sample type. This example was used to
+/// generate data for a visual EXAMPLE of a fix for a striping artifact observed
+/// when writing to a Zarr dataset with multibyte samples.
 
 #include "device/hal/device.manager.h"
 #include "acquire.h"
@@ -88,7 +88,7 @@ reporter(int is_error,
 
 const static uint32_t frame_width = 1280;
 const static uint32_t frame_height = 720;
-const static uint32_t expected_frames_per_chunk = 30;
+const static uint32_t frames_per_chunk = 30;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -120,8 +120,10 @@ acquire(AcquireRuntime* runtime, const char* filename)
                             sizeof(external_metadata),
                             sample_spacing_um);
 
-    storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, frame_width, frame_height, 1, 64 << 20);
+    storage_properties_set_chunking_props(&props.video[0].storage.settings,
+                                          frame_width,
+                                          frame_height,
+                                          frames_per_chunk);
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u16;
@@ -129,7 +131,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                              .y = frame_height };
     // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 2e5;
-    props.video[0].max_frame_count = expected_frames_per_chunk;
+    props.video[0].max_frame_count = frames_per_chunk;
 
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
@@ -164,13 +166,13 @@ main()
     ASSERT_STREQ("<u2", zarray["dtype"].get<std::string>());
 
     auto shape = zarray["shape"];
-    ASSERT_EQ(int, "%d", expected_frames_per_chunk, shape[0]);
+    ASSERT_EQ(int, "%d", frames_per_chunk, shape[0]);
     ASSERT_EQ(int, "%d", 1, shape[1]);
     ASSERT_EQ(int, "%d", frame_height, shape[2]);
     ASSERT_EQ(int, "%d", frame_width, shape[3]);
 
     auto chunks = zarray["chunks"];
-    ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunks[0]);
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0]);
     ASSERT_EQ(int, "%d", 1, chunks[1]);
     ASSERT_EQ(int, "%d", frame_height, chunks[2]);
     ASSERT_EQ(int, "%d", frame_width, chunks[3]);

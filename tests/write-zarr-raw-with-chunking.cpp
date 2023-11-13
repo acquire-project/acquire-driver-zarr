@@ -60,12 +60,9 @@ reporter(int is_error,
 const static uint32_t frame_width = 1920;
 const static uint32_t frame_height = 1080;
 
-const static uint32_t tile_width = frame_width / 2;
-const static uint32_t tile_height = frame_height / 2;
-
-const static uint32_t max_bytes_per_chunk = 32 << 20;
-const static auto expected_frames_per_chunk =
-  (uint32_t)std::floor(max_bytes_per_chunk / (tile_width * tile_height));
+const static uint32_t chunk_width = frame_width / 2;
+const static uint32_t chunk_height = frame_height / 2;
+const static uint32_t chunk_planes = 128;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -99,10 +96,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     CHECK(
       storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            tile_width,
-                                            tile_height,
-                                            1,
-                                            max_bytes_per_chunk));
+                                            chunk_width,
+                                            chunk_height,
+                                            chunk_planes));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -110,7 +106,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                              .y = frame_height };
     // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 1e4;
-    props.video[0].max_frame_count = expected_frames_per_chunk;
+    props.video[0].max_frame_count = chunk_planes;
 
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
@@ -143,16 +139,16 @@ main()
     json zarray = json::parse(f);
 
     auto shape = zarray["shape"];
-    ASSERT_EQ(int, "%d", expected_frames_per_chunk, shape[0]);
+    ASSERT_EQ(int, "%d", chunk_planes, shape[0]);
     ASSERT_EQ(int, "%d", 1, shape[1]);
     ASSERT_EQ(int, "%d", frame_height, shape[2]);
     ASSERT_EQ(int, "%d", frame_width, shape[3]);
 
     auto chunks = zarray["chunks"];
-    ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunks[0]);
+    ASSERT_EQ(int, "%d", chunk_planes, chunks[0]);
     ASSERT_EQ(int, "%d", 1, chunks[1]);
-    ASSERT_EQ(int, "%d", tile_height, chunks[2]);
-    ASSERT_EQ(int, "%d", tile_width, chunks[3]);
+    ASSERT_EQ(int, "%d", chunk_height, chunks[2]);
+    ASSERT_EQ(int, "%d", chunk_width, chunks[3]);
 
     // check chunked data
     auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *

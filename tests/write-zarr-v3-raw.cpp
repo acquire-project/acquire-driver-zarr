@@ -72,10 +72,10 @@ reporter(int is_error,
     } while (0)
 
 const static uint32_t frame_width = 1080;
-const static uint32_t tile_width = frame_width / 4;
+const static uint32_t chunk_width = frame_width / 4;
 const static uint32_t frame_height = 960;
-const static uint32_t tile_height = frame_height / 3;
-const static uint32_t expected_frames_per_chunk = 48;
+const static uint32_t chunk_height = frame_height / 3;
+const static uint32_t frames_per_chunk = 48;
 const static uint32_t max_frame_count = 48;
 
 void
@@ -109,8 +109,13 @@ setup(AcquireRuntime* runtime)
                             sizeof(external_metadata),
                             sample_spacing_um);
 
-    storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, tile_width, tile_height, 1, 16 << 20);
+    storage_properties_set_chunking_props(&props.video[0].storage.settings,
+                                          chunk_width,
+                                          chunk_height,
+                                          frames_per_chunk);
+
+    storage_properties_set_sharding_props(
+      &props.video[0].storage.settings, 4, 3, 1);
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -144,9 +149,9 @@ acquire(AcquireRuntime* runtime)
         do {
             struct clock throttle;
             clock_init(&throttle);
-            //            EXPECT(clock_cmp_now(&clock) < 0,
-            //                   "Timeout at %f ms",
-            //                   clock_toc_ms(&clock) + time_limit_ms);
+            EXPECT(clock_cmp_now(&clock) < 0,
+                   "Timeout at %f ms",
+                   clock_toc_ms(&clock) + time_limit_ms);
             OK(acquire_map_read(runtime, 0, &beg, &end));
             for (cur = beg; cur < end; cur = next(cur)) {
                 LOG("stream %d counting frame w id %d", 0, cur->frame_id);
@@ -226,10 +231,10 @@ validate(AcquireRuntime* runtime)
     CHECK("regular" == chunk_grid["type"]);
 
     const auto chunk_shape = chunk_grid["chunk_shape"];
-    ASSERT_EQ(int, "%d", expected_frames_per_chunk, chunk_shape[0]);
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunk_shape[0]);
     ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
-    ASSERT_EQ(int, "%d", tile_height, chunk_shape[2]);
-    ASSERT_EQ(int, "%d", tile_width, chunk_shape[3]);
+    ASSERT_EQ(int, "%d", chunk_height, chunk_shape[2]);
+    ASSERT_EQ(int, "%d", chunk_width, chunk_shape[3]);
 
     CHECK("C" == metadata["chunk_memory_layout"]);
     CHECK("u1" == metadata["data_type"]);
@@ -259,8 +264,7 @@ validate(AcquireRuntime* runtime)
     const uint32_t bytes_per_chunk =
       chunk_shape[0].get<uint32_t>() * chunk_shape[1].get<uint32_t>() *
       chunk_shape[2].get<uint32_t>() * chunk_shape[3].get<uint32_t>();
-    for (auto t = 0; t < std::ceil(max_frame_count / expected_frames_per_chunk);
-         ++t) {
+    for (auto t = 0; t < std::ceil(max_frame_count / frames_per_chunk); ++t) {
         fs::path path = test_path / "data" / "root" / "0" /
                         ("c" + std::to_string(t)) / "0" / "0" / "0";
 

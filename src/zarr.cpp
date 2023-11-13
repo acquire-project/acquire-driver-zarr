@@ -320,8 +320,7 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
 } // end ::{anonymous} namespace
 
 /// StorageInterface
-zarr::StorageInterface::
-StorageInterface()
+zarr::StorageInterface::StorageInterface()
   : Storage{
       .state = DeviceState_AwaitingConfiguration,
       .set = ::zarr_set,
@@ -357,14 +356,15 @@ zarr::Zarr::set(const StorageProperties* props)
     image_tile_shapes_.clear();
     image_tile_shapes_.emplace_back();
 
-    set_chunking(props->chunking, meta.chunking);
+    set_chunking(props->chunk_dims_px, meta.chunk_dims_px);
 
-    if (props->enable_multiscale && !meta.multiscale.supported) {
+    if (props->enable_multiscale && !meta.multiscale.is_supported) {
         // TODO (aliddell): https://github.com/ome/ngff/pull/206
         LOGE("OME-Zarr multiscale not yet supported in Zarr v3. "
              "Multiscale arrays will not be written.");
     }
-    enable_multiscale_ = meta.multiscale.supported && props->enable_multiscale;
+    enable_multiscale_ =
+      meta.multiscale.is_supported && props->enable_multiscale;
 }
 
 void
@@ -377,12 +377,42 @@ zarr::Zarr::get(StorageProperties* props) const
     props->pixel_scale_um = pixel_scale_um_;
 
     if (!image_tile_shapes_.empty()) {
-        props->chunking.tile.width = image_tile_shapes_.at(0).second.cols;
-        props->chunking.tile.height = image_tile_shapes_.at(0).second.rows;
+        props->chunk_dims_px.width = image_tile_shapes_.at(0).second.cols;
+        props->chunk_dims_px.height = image_tile_shapes_.at(0).second.rows;
     }
-    props->chunking.tile.planes = 1;
+    props->chunk_dims_px.planes = planes_per_chunk_;
 
     props->enable_multiscale = enable_multiscale_;
+}
+
+void
+zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
+{
+    CHECK(meta);
+
+    *meta = {
+        .chunk_dims_px = {
+          .is_supported = 1,
+          .width = {
+            .writable = 1,
+            .low = 32.f,
+            .high = -1.f,
+            .type = PropertyType_FixedPrecision
+          },
+          .height = {
+            .writable = 1,
+            .low = 32.f,
+            .high = -1.f,
+            .type = PropertyType_FixedPrecision
+          },
+          .planes = {
+            .writable = 1,
+            .low = 32.f,
+            .high = -1.f,
+            .type = PropertyType_FixedPrecision
+          },
+        },
+    };
 }
 
 void
@@ -480,7 +510,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     {
         StorageProperties props = { 0 };
         get(&props);
-        uint32_t tile_width = props.chunking.tile.width;
+        uint32_t tile_width = props.chunk_dims_px.width;
         if (image_shape.cols > 0 &&
             (tile_width == 0 || tile_width > image_shape.cols)) {
             LOGE("%s. Setting width to %u.",
@@ -491,7 +521,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
         }
         tile_shape.cols = tile_width;
 
-        uint32_t tile_height = props.chunking.tile.height;
+        uint32_t tile_height = props.chunk_dims_px.height;
         if (image_shape.rows > 0 &&
             (tile_height == 0 || tile_height > image_shape.rows)) {
             LOGE("%s. Setting height to %u.",
@@ -503,17 +533,6 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
         tile_shape.rows = tile_height;
 
         storage_properties_destroy(&props);
-    }
-
-    // ensure that the chunk size can accommodate at least one tile
-    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape, pixel_type_);
-    CHECK(bytes_per_tile > 0);
-
-    if (max_bytes_per_chunk_ < bytes_per_tile) {
-        LOGE("Specified chunk size %llu is too small. Setting to %llu bytes.",
-             max_bytes_per_chunk_,
-             bytes_per_tile);
-        max_bytes_per_chunk_ = bytes_per_tile;
     }
 
     if (enable_multiscale_) {
@@ -530,21 +549,19 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 
 /// Zarr
 
-zarr::Zarr::
-Zarr()
+zarr::Zarr::Zarr()
   : thread_pool_{ std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); }) }
   , pixel_scale_um_{ 1, 1 }
-  , max_bytes_per_chunk_{ 0 }
+  , planes_per_chunk_{ 0 }
   , enable_multiscale_{ false }
   , pixel_type_{ SampleType_u8 }
   , error_{ false }
 {
 }
 
-zarr::Zarr::
-Zarr(BloscCompressionParams&& compression_params)
+zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
   : Zarr()
 {
     blosc_compression_params_ = std::move(compression_params);
@@ -553,15 +570,18 @@ Zarr(BloscCompressionParams&& compression_params)
 void
 zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
 {
-    max_bytes_per_chunk_ = std::clamp(props.max_bytes_per_chunk,
-                                      (uint64_t)meta.max_bytes_per_chunk.low,
-                                      (uint64_t)meta.max_bytes_per_chunk.high);
-
     // image shape is set *after* this is set so we verify it later
     image_tile_shapes_.at(0).second = {
-        .cols = props.tile.width,
-        .rows = props.tile.height,
+        .cols = std::clamp(
+          props.width, (uint32_t)meta.width.low, (uint32_t)meta.width.high),
+        .rows = std::clamp(
+          props.height, (uint32_t)meta.height.low, (uint32_t)meta.height.high),
     };
+
+    planes_per_chunk_ = std::clamp(
+      props.planes, (uint32_t)meta.planes.low, (uint32_t)meta.planes.high);
+
+    CHECK(planes_per_chunk_ > 0);
 }
 
 void

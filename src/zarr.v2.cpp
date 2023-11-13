@@ -32,19 +32,11 @@ zarr::ZarrV2::ZarrV2(BloscCompressionParams&& compression_params)
 void
 zarr::ZarrV2::get_meta(StoragePropertyMetadata* meta) const
 {
-    CHECK(meta);
-    *meta = {
-        .chunking = {
-          .supported = 1,
-          .max_bytes_per_chunk = {
-            .writable = 1,
-            .low = (float)(16 << 20),
-            .high = (float)(1 << 30),
-            .type = PropertyType_FixedPrecision },
-        },
-        .multiscale = {
-          .supported = 1,
-        }
+    Zarr::get_meta(meta);
+
+    meta->shard_dims_chunks = { 0 };
+    meta->multiscale = {
+        .is_supported = 1,
     };
 }
 
@@ -63,7 +55,7 @@ zarr::ZarrV2::allocate_writers_()
             writers_.push_back(std::make_shared<ChunkWriter>(
               image_shape,
               tile_shape,
-              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              planes_per_chunk_,
               (get_data_directory_() / std::to_string(i)).string(),
               thread_pool_,
               blosc_compression_params_.value()));
@@ -71,7 +63,7 @@ zarr::ZarrV2::allocate_writers_()
             writers_.push_back(std::make_shared<ChunkWriter>(
               image_shape,
               tile_shape,
-              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              planes_per_chunk_,
               (get_data_directory_() / std::to_string(i)).string(),
               thread_pool_));
         }
@@ -91,11 +83,8 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     const ImageDims& image_dims = image_tile_shapes_.at(level).first;
     const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
 
-    const auto frame_count = (uint64_t)writers_.at(level)->frames_written();
-    const auto frames_per_chunk =
-      std::min(frame_count,
-               (uint64_t)common::frames_per_chunk(
-                 tile_dims, pixel_type_, max_bytes_per_chunk_));
+    const auto frame_count = writers_.at(level)->frames_written();
+    const auto frames_per_chunk = std::min(frame_count, planes_per_chunk_);
 
     json zarray_attrs = {
         { "zarr_format", 2 },

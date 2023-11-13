@@ -67,13 +67,15 @@ reporter(int is_error,
           a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
     } while (0)
 
-const static uint32_t frame_width = 128;
-const static uint32_t frame_height = 96;
+const static uint32_t frame_width = 256;
+const static uint32_t frame_height = 192;
 
-const static uint32_t tile_width = frame_width / 3; // 128 is not divisible by 3
-const static uint32_t tile_height = frame_height / 5; // 96 is not divisible by 5
+const static uint32_t chunk_width =
+  frame_width / 3; // 128 is not divisible by 3
+const static uint32_t chunk_height =
+  frame_height / 5; // 96 is not divisible by 5
+const static uint32_t chunk_planes = 64;
 
-const static uint32_t max_bytes_per_chunk = 32 << 20;
 const static uint32_t max_frame_count = 70;
 
 void
@@ -108,10 +110,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     CHECK(
       storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            tile_width,
-                                            tile_height,
-                                            1,
-                                            max_bytes_per_chunk));
+                                            chunk_width,
+                                            chunk_height,
+                                            chunk_planes));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -220,10 +221,10 @@ main()
     ASSERT_EQ(int, "%d", frame_width, shape[3]);
 
     auto chunks = zarray["chunks"];
-    ASSERT_EQ(int, "%d", max_frame_count, chunks[0]);
+    ASSERT_EQ(int, "%d", chunk_planes, chunks[0]);
     ASSERT_EQ(int, "%d", 1, chunks[1]);
-    ASSERT_EQ(int, "%d", tile_height, chunks[2]);
-    ASSERT_EQ(int, "%d", tile_width, chunks[3]);
+    ASSERT_EQ(int, "%d", chunk_height, chunks[2]);
+    ASSERT_EQ(int, "%d", chunk_width, chunks[3]);
 
     // check chunked data
     auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *

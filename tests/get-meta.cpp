@@ -85,23 +85,10 @@ main()
 
                 CHECK(Device_Ok == storage_get_meta(storage, &metadata));
 
-                CHECK(metadata.chunking.supported);
-                ASSERT_EQ(int,
-                          "%d",
-                          PropertyType_FixedPrecision,
-                          (int)metadata.chunking.max_bytes_per_chunk.type);
-                // minimum cap on chunk size is 16 MiB
-                ASSERT_EQ(int,
-                          "%d",
-                          16 << 20,
-                          (int)metadata.chunking.max_bytes_per_chunk.low);
-                // maximum cap on chunk size is 1 GiB
-                ASSERT_EQ(int,
-                          "%d",
-                          1 << 30,
-                          (int)metadata.chunking.max_bytes_per_chunk.high);
-
-                CHECK((bool)metadata.multiscale.supported !=
+                CHECK(metadata.chunk_dims_px.is_supported);
+                CHECK((bool)metadata.shard_dims_chunks.is_supported ==
+                      name.starts_with("ZarrV3"));
+                CHECK((bool)metadata.multiscale.is_supported !=
                       name.starts_with("ZarrV3"));
 
                 CHECK(Device_Ok == driver_close_device(device));

@@ -74,11 +74,8 @@ setup(AcquireRuntime* runtime)
     OK(acquire_get_configuration_metadata(runtime, &metadata));
 
     props.video[0].camera.settings.binning = 1;
-    props.video[0].camera.settings.pixel_type = SampleType_u16;
-    props.video[0].camera.settings.shape = {
-        .x = (uint32_t)metadata.video[0].camera.shape.x.high,
-        .y = (uint32_t)metadata.video[0].camera.shape.y.high,
-    };
+    props.video[0].camera.settings.pixel_type = SampleType_u8;
+    props.video[0].camera.settings.shape = { .x = 64, .y = 48 };
     props.video[0].camera.settings.exposure_time_us = 1e4;
     props.video[0].max_frame_count = 10;
 
