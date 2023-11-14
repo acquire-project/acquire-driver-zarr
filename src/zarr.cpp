@@ -381,19 +381,19 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
           .width = {
             .writable = 1,
             .low = 32.f,
-            .high = (float)std::numeric_limits<uint32_t>::max(),
+            .high = (float)std::numeric_limits<uint16_t>::max(),
             .type = PropertyType_FixedPrecision
           },
           .height = {
             .writable = 1,
             .low = 32.f,
-            .high = (float)std::numeric_limits<uint32_t>::max(),
+            .high = (float)std::numeric_limits<uint16_t>::max(),
             .type = PropertyType_FixedPrecision
           },
           .planes = {
             .writable = 1,
             .low = 32.f,
-            .high = (float)std::numeric_limits<uint32_t>::max(),
+            .high = (float)std::numeric_limits<uint16_t>::max(),
             .type = PropertyType_FixedPrecision
           },
         },
@@ -576,8 +576,6 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
         .rows = std::clamp(
           props.height, (uint32_t)meta.height.low, (uint32_t)meta.height.high),
     };
-
-    const auto hi = (uint32_t)(-1.f);
 
     planes_per_chunk_ = std::clamp(
       props.planes, (uint32_t)meta.planes.low, (uint32_t)meta.planes.high);
