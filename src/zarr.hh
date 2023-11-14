@@ -21,40 +21,22 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
-// StorageInterface
 
-struct StorageInterface : public Storage
-{
-    StorageInterface();
-    virtual ~StorageInterface() = default;
-    virtual void set(const StorageProperties* props) = 0;
-    virtual void get(StorageProperties* props) const = 0;
-    virtual void get_meta(StoragePropertyMetadata* meta) const = 0;
-    virtual void start() = 0;
-    virtual int stop() noexcept = 0;
-
-    /// @return number of consumed bytes
-    virtual size_t append(const VideoFrame* frames, size_t nbytes) = 0;
-
-    /// @brief Set the image shape for allocating chunk writers.
-    virtual void reserve_image_shape(const ImageShape* shape) = 0;
-};
-
-struct Zarr : StorageInterface
+struct Zarr: public Storage
 {
   public:
     Zarr();
     explicit Zarr(BloscCompressionParams&& compression_params);
-    ~Zarr() noexcept override = default;
+    virtual ~Zarr() noexcept = default;
 
-    /// StorageInterface
-    void set(const StorageProperties* props) override;
-    void get(StorageProperties* props) const override;
-    void get_meta(StoragePropertyMetadata* meta) const override;
-    void start() override;
-    int stop() noexcept override;
-    size_t append(const VideoFrame* frames, size_t nbytes) override;
-    void reserve_image_shape(const ImageShape* shape) override;
+    /// Storage interface
+    virtual void set(const StorageProperties* props);
+    void get(StorageProperties* props) const;
+    virtual void get_meta(StoragePropertyMetadata* meta) const;
+    void start();
+    int stop() noexcept;
+    size_t append(const VideoFrame* frames, size_t nbytes);
+    virtual void reserve_image_shape(const ImageShape* shape);
 
     /// Error state
     void set_error(const std::string& msg) noexcept;

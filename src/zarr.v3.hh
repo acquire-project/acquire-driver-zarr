@@ -8,10 +8,10 @@ struct ZarrV3 final : public Zarr
 {
   public:
     ZarrV3() = default;
-    ZarrV3(BloscCompressionParams&& compression_params);
+    explicit ZarrV3(BloscCompressionParams&& compression_params);
     ~ZarrV3() override = default;
 
-    /// StorageInterface
+    /// Storage interface
     void set(const StorageProperties* props) override;
     void get_meta(StoragePropertyMetadata* meta) const override;
     void reserve_image_shape(const ImageShape* shape) override;

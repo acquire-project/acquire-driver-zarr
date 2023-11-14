@@ -15,11 +15,11 @@ zarr::FileCreator::FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
 }
 
 bool
-zarr::FileCreator::create(const fs::path& base_dir,
-                          int n_c,
-                          int n_y,
-                          int n_x,
-                          std::vector<file>& files) noexcept
+zarr::FileCreator::create_files(const fs::path& base_dir,
+                                int n_c,
+                                int n_y,
+                                int n_x,
+                                std::vector<file>& files) noexcept
 {
     base_dir_ = base_dir;
 

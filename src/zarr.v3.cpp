@@ -1,5 +1,5 @@
 #include "zarr.v3.hh"
-#include "writers/shard.writer.hh"
+#include "writers/zarrv3.writer.hh"
 
 #include "json.hpp"
 
@@ -49,7 +49,7 @@ zarr::ZarrV3::allocate_writers_()
         const auto& tile_dims = image_tile_shapes_.at(i).second;
 
         if (blosc_compression_params_.has_value()) {
-            writers_.push_back(std::make_shared<ShardWriter>(
+            writers_.push_back(std::make_shared<ZarrV3Writer>(
               frame_dims,
               shard_dims_.at(i),
               tile_dims,
@@ -58,7 +58,7 @@ zarr::ZarrV3::allocate_writers_()
               thread_pool_,
               blosc_compression_params_.value()));
         } else {
-            writers_.push_back(std::make_shared<ShardWriter>(
+            writers_.push_back(std::make_shared<ZarrV3Writer>(
               frame_dims,
               shard_dims_.at(i),
               tile_dims,

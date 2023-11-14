@@ -1,6 +1,6 @@
 #include "zarr.hh"
 
-#include "writers/chunk.writer.hh"
+#include "writers/zarrv2.writer.hh"
 #include "json.hpp"
 
 namespace zarr = acquire::sink::zarr;
@@ -84,7 +84,7 @@ zarr_set(Storage* self_, const StorageProperties* props) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->set(props);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -102,7 +102,7 @@ zarr_get(const Storage* self_, StorageProperties* props) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->get(props);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -116,7 +116,7 @@ zarr_get_meta(const Storage* self_, StoragePropertyMetadata* meta) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->get_meta(meta);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -132,7 +132,7 @@ zarr_start(Storage* self_) noexcept
 
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->start();
         state = DeviceState_Running;
     } catch (const std::exception& exc) {
@@ -150,7 +150,7 @@ zarr_append(Storage* self_, const VideoFrame* frames, size_t* nbytes) noexcept
     DeviceState state;
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         *nbytes = self->append(frames, *nbytes);
         state = DeviceState_Running;
     } catch (const std::exception& exc) {
@@ -173,7 +173,7 @@ zarr_stop(Storage* self_) noexcept
 
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         CHECK(self->stop());
         state = DeviceState_Armed;
     } catch (const std::exception& exc) {
@@ -190,7 +190,7 @@ zarr_destroy(Storage* self_) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         if (self_->stop)
             self_->stop(self_);
 
@@ -207,7 +207,7 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->reserve_image_shape(shape);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -319,22 +319,6 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
 }
 } // end ::{anonymous} namespace
 
-/// StorageInterface
-zarr::StorageInterface::StorageInterface()
-  : Storage{
-      .state = DeviceState_AwaitingConfiguration,
-      .set = ::zarr_set,
-      .get = ::zarr_get,
-      .get_meta = ::zarr_get_meta,
-      .start = ::zarr_start,
-      .append = ::zarr_append,
-      .stop = ::zarr_stop,
-      .destroy = ::zarr_destroy,
-      .reserve_image_shape = ::zarr_reserve_image_shape,
-  }
-{
-}
-
 void
 zarr::Zarr::set(const StorageProperties* props)
 {
@@ -347,8 +331,9 @@ zarr::Zarr::set(const StorageProperties* props)
     validate_props(props);
     dataset_root_ = as_path(*props);
 
-    if (props->external_metadata_json.str)
+    if (props->external_metadata_json.str) {
         external_metadata_json_ = props->external_metadata_json.str;
+    }
 
     pixel_scale_um_ = props->pixel_scale_um;
 
@@ -453,6 +438,9 @@ zarr::Zarr::stop() noexcept
                 writer->finalize();
             }
             writers_.clear();
+
+            thread_pool_->await_stop();
+
             is_ok = 1;
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
@@ -550,7 +538,18 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 /// Zarr
 
 zarr::Zarr::Zarr()
-  : thread_pool_{ std::make_shared<common::ThreadPool>(
+  : Storage {
+      .state = DeviceState_AwaitingConfiguration,
+      .set = ::zarr_set,
+      .get = ::zarr_get,
+      .get_meta = ::zarr_get_meta,
+      .start = ::zarr_start,
+      .append = ::zarr_append,
+      .stop = ::zarr_stop,
+      .destroy = ::zarr_destroy,
+      .reserve_image_shape = ::zarr_reserve_image_shape,
+  }
+  , thread_pool_{ std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); }) }
   , pixel_scale_um_{ 1, 1 }

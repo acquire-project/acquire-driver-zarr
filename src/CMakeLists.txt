@@ -10,10 +10,10 @@ add_library(${tgt} MODULE
         common.cpp
         writers/writer.hh
         writers/writer.cpp
-        writers/chunk.writer.hh
-        writers/chunk.writer.cpp
-        writers/shard.writer.hh
-        writers/shard.writer.cpp
+        writers/zarrv2.writer.hh
+        writers/zarrv2.writer.cpp
+        writers/zarrv3.writer.hh
+        writers/zarrv3.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
         zarr.hh

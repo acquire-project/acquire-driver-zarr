@@ -1,5 +1,5 @@
 #include "zarr.v2.hh"
-#include "writers/chunk.writer.hh"
+#include "writers/zarrv2.writer.hh"
 
 #include "json.hpp"
 
@@ -52,7 +52,7 @@ zarr::ZarrV2::allocate_writers_()
           common::bytes_per_tile(tile_shape, pixel_type_);
 
         if (blosc_compression_params_.has_value()) {
-            writers_.push_back(std::make_shared<ChunkWriter>(
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
               image_shape,
               tile_shape,
               planes_per_chunk_,
@@ -60,7 +60,7 @@ zarr::ZarrV2::allocate_writers_()
               thread_pool_,
               blosc_compression_params_.value()));
         } else {
-            writers_.push_back(std::make_shared<ChunkWriter>(
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
               image_shape,
               tile_shape,
               planes_per_chunk_,

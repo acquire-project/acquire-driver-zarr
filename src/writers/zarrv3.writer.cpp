@@ -1,4 +1,4 @@
-#include "shard.writer.hh"
+#include "zarrv3.writer.hh"
 #include "../zarr.hh"
 
 #include <latch>
@@ -6,12 +6,13 @@
 
 namespace zarr = acquire::sink::zarr;
 
-zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
-                               const ImageDims& shard_dims,
-                               const ImageDims& tile_dims,
-                               uint32_t frames_per_chunk,
-                               const std::string& data_root,
-                               std::shared_ptr<common::ThreadPool> thread_pool)
+zarr::ZarrV3Writer::ZarrV3Writer(
+  const ImageDims& frame_dims,
+  const ImageDims& shard_dims,
+  const ImageDims& tile_dims,
+  uint32_t frames_per_chunk,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, thread_pool)
   , shard_dims_{ shard_dims }
 {
@@ -21,13 +22,14 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
       std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
 }
 
-zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
-                               const ImageDims& shard_dims,
-                               const ImageDims& tile_dims,
-                               uint32_t frames_per_chunk,
-                               const std::string& data_root,
-                               std::shared_ptr<common::ThreadPool> thread_pool,
-                               const BloscCompressionParams& compression_params)
+zarr::ZarrV3Writer::ZarrV3Writer(
+  const ImageDims& frame_dims,
+  const ImageDims& shard_dims,
+  const ImageDims& tile_dims,
+  uint32_t frames_per_chunk,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
            frames_per_chunk,
@@ -44,7 +46,7 @@ zarr::ShardWriter::ShardWriter(const ImageDims& frame_dims,
 
 uint16_t
 // FIXME (aliddell): this is generalizable and doesn't need to be a method
-zarr::ShardWriter::chunks_per_shard_() const
+zarr::ZarrV3Writer::chunks_per_shard_() const
 {
     const uint16_t chunks_per_shard_x = shard_dims_.cols / tile_dims_.cols;
     const uint16_t chunks_per_shard_y = shard_dims_.rows / tile_dims_.rows;
@@ -52,13 +54,13 @@ zarr::ShardWriter::chunks_per_shard_() const
 }
 
 uint16_t
-zarr::ShardWriter::shards_per_frame_() const
+zarr::ZarrV3Writer::shards_per_frame_() const
 {
     return shards_per_frame_x_ * shards_per_frame_y_;
 }
 
 void
-zarr::ShardWriter::flush_() noexcept
+zarr::ZarrV3Writer::flush_() noexcept
 {
     if (bytes_to_flush_ == 0) {
         return;
@@ -74,7 +76,12 @@ zarr::ShardWriter::flush_() noexcept
     }
 
     // create shard files if necessary
-    if (files_.empty() && !make_files_()) {
+    if (files_.empty() && !file_creator_.create_files(
+                            data_root_ / ("c" + std::to_string(current_chunk_)),
+                            1,
+                            shards_per_frame_y_,
+                            shards_per_frame_x_,
+                            files_)) {
         return;
     }
 
@@ -144,15 +151,4 @@ zarr::ShardWriter::flush_() noexcept
         buf.reserve(max_bytes_per_chunk);
     }
     bytes_to_flush_ = 0;
-}
-
-bool
-zarr::ShardWriter::make_files_() noexcept
-{
-    return file_creator_.create(data_root_ /
-                                  ("c" + std::to_string(current_chunk_)),
-                                1,
-                                shards_per_frame_y_,
-                                shards_per_frame_x_,
-                                files_);
 }

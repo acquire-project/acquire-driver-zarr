@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `ChunkWriter`s need to specify which multiscale layer they write to.
+- `ZarrV2Writer`s need to specify which multiscale layer they write to.
 - The Zarr writer now validates that image and tile shapes are set and compatible with each other before the first
   append.
 

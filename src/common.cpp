@@ -17,19 +17,13 @@ common::ThreadPool::ThreadPool(size_t n_threads,
 
     for (auto& ctx_ : contexts_) {
         ctx_.should_stop = false;
-        ctx_.ready = true;
         ctx_.thread = std::thread([this, ctx = &ctx_] { thread_worker_(ctx); });
     }
 }
 
 common::ThreadPool::~ThreadPool() noexcept
 {
-    // spin down threads
-    for (auto& ctx : contexts_) {
-        ctx.should_stop = true;
-        ctx.cv.notify_one();
-        ctx.thread.join();
-    }
+    await_stop();
 }
 
 void
@@ -37,6 +31,20 @@ common::ThreadPool::push_to_job_queue(JobT&& job)
 {
     std::scoped_lock lock(jobs_mutex_);
     jobs_.push(std::move(job));
+
+    for (auto& ctx: contexts_) {
+        ctx.cv.notify_one();
+    }
+}
+
+void common::ThreadPool::await_stop() noexcept
+{
+    // spin down threads
+    for (auto& ctx : contexts_) {
+        ctx.should_stop = true;
+        ctx.cv.notify_one();
+        ctx.thread.join();
+    }
 }
 
 std::optional<common::ThreadPool::JobT>
@@ -47,7 +55,7 @@ common::ThreadPool::pop_from_job_queue_() noexcept
         return std::nullopt;
     }
 
-    auto job = jobs_.front();
+    auto job = std::move(jobs_.front());
     jobs_.pop();
     return job;
 }
@@ -65,24 +73,16 @@ common::ThreadPool::thread_worker_(ThreadContext* ctx)
 
     while (true) {
         std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
+        ctx->cv.wait(lock, [&] { return ctx->should_stop || !jobs_.empty(); });
 
         if (ctx->should_stop) {
             break;
         }
 
-        // FIXME: wait
         if (auto job = pop_from_job_queue_(); job.has_value()) {
-            ctx->ready = false;
             if (std::string err_msg; !job.value()(err_msg)) {
                 error_handler_(err_msg);
             }
-            ctx->ready = true;
-            lock.unlock();
-            ctx->cv.notify_one();
-        } else {
-            lock.unlock();
-            std::this_thread::sleep_for(1ms);
         }
     }
 

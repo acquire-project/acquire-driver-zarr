@@ -4,6 +4,7 @@
 #include "logger.h"
 #include "device/props/components.h"
 
+#include <condition_variable>
 #include <filesystem>
 #include <functional>
 #include <mutex>
@@ -50,21 +51,28 @@ struct ThreadPool final
 {
   public:
     using JobT = std::function<bool(std::string&)>;
+
+    // The error handler `err` is called when a job returns false. This
+    // can happen when the job encounters an error, or otherwise fails. The
+    // std::string& argument to the error handler is a diagnostic message from
+    // the failing job and is logged to the error stream by the Zarr driver when
+    // the next call to `append()` is made.
+    ThreadPool(size_t n_threads, std::function<void(const std::string&)> err);
+    ~ThreadPool() noexcept;
+
+    void push_to_job_queue(JobT&& job);
+
+    void await_stop() noexcept;
+
+  private:
     struct ThreadContext
     {
         std::thread thread;
         std::mutex mutex;
         std::condition_variable cv;
         bool should_stop;
-        bool ready;
     };
 
-    ThreadPool(size_t n_threads, std::function<void(const std::string&)> err);
-    ~ThreadPool() noexcept;
-
-    void push_to_job_queue(JobT&& job);
-
-  private:
     std::function<void(const std::string&)> error_handler_;
 
     std::vector<ThreadContext> contexts_;

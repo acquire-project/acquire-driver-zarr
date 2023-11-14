@@ -25,11 +25,11 @@ struct FileCreator
     explicit FileCreator(std::shared_ptr<common::ThreadPool> thread_pool);
     ~FileCreator() noexcept = default;
 
-    [[nodiscard]] bool create(const fs::path& base_dir,
-                              int n_c,
-                              int n_y,
-                              int n_x,
-                              std::vector<file>& files) noexcept;
+    [[nodiscard]] bool create_files(const fs::path& base_dir,
+                                    int n_c,
+                                    int n_y,
+                                    int n_x,
+                                    std::vector<file>& files) noexcept;
 
   private:
     fs::path base_dir_;
@@ -102,7 +102,6 @@ struct Writer
     uint32_t tiles_per_frame_() const;
 
     /// Files
-    [[nodiscard]] virtual bool make_files_() noexcept = 0; // FIXME: pull down
     void close_files_();
     void rollover_();
 };

@@ -1,4 +1,4 @@
-#include "chunk.writer.hh"
+#include "zarrv2.writer.hh"
 #include "../zarr.hh"
 
 #include <cmath>
@@ -7,21 +7,23 @@
 
 namespace zarr = acquire::sink::zarr;
 
-zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
-                               const ImageDims& tile_dims,
-                               uint32_t frames_per_chunk,
-                               const std::string& data_root,
-                               std::shared_ptr<common::ThreadPool> thread_pool)
+zarr::ZarrV2Writer::ZarrV2Writer(
+  const ImageDims& frame_dims,
+  const ImageDims& tile_dims,
+  uint32_t frames_per_chunk,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, thread_pool)
 {
 }
 
-zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
-                               const ImageDims& tile_dims,
-                               uint32_t frames_per_chunk,
-                               const std::string& data_root,
-                               std::shared_ptr<common::ThreadPool> thread_pool,
-                               const BloscCompressionParams& compression_params)
+zarr::ZarrV2Writer::ZarrV2Writer(
+  const ImageDims& frame_dims,
+  const ImageDims& tile_dims,
+  uint32_t frames_per_chunk,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  const BloscCompressionParams& compression_params)
   : Writer(frame_dims,
            tile_dims,
            frames_per_chunk,
@@ -32,7 +34,7 @@ zarr::ChunkWriter::ChunkWriter(const ImageDims& frame_dims,
 }
 
 void
-zarr::ChunkWriter::flush_() noexcept
+zarr::ZarrV2Writer::flush_() noexcept
 {
     if (bytes_to_flush_ == 0) {
         return;
@@ -48,7 +50,12 @@ zarr::ChunkWriter::flush_() noexcept
     }
 
     // create chunk files if necessary
-    if (files_.empty() && !make_files_()) {
+    if (files_.empty() &&
+        !file_creator_.create_files(data_root_ / std::to_string(current_chunk_),
+                                    1,
+                                    tiles_per_frame_y_,
+                                    tiles_per_frame_x_,
+                                    files_)) {
         return;
     }
 
@@ -98,14 +105,4 @@ zarr::ChunkWriter::flush_() noexcept
         buf.reserve(bytes_to_reserve);
     }
     bytes_to_flush_ = 0;
-}
-
-bool
-zarr::ChunkWriter::make_files_() noexcept
-{
-    return file_creator_.create(data_root_ / std::to_string(current_chunk_),
-                                1,
-                                tiles_per_frame_y_,
-                                tiles_per_frame_x_,
-                                files_);
 }
