@@ -36,7 +36,11 @@ zarr::ZarrV3::set_sharding(const ShardingProps& props, const ShardingMeta& meta)
     // we can't validate and convert until we know the image shape and corrected
     // tile shape (see reserve_image_shape) so let's just store the raw values
     // for now
-    shard_dims_.emplace_back(props.width, props.height);
+    ImageDims shard_dims = {
+        .cols = props.width,
+        .rows = props.height,
+    };
+    shard_dims_.push_back(shard_dims);
 }
 
 void
