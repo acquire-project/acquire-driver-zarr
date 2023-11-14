@@ -68,7 +68,7 @@ struct ThreadPool final
     struct ThreadContext
     {
         std::thread thread;
-        std::mutex mutex;
+        std::shared_ptr<std::mutex> mutex;
         std::condition_variable cv;
         bool should_stop;
     };
@@ -76,11 +76,11 @@ struct ThreadPool final
     std::function<void(const std::string&)> error_handler_;
 
     std::vector<ThreadContext> contexts_;
-    mutable std::mutex jobs_mutex_;
+    mutable std::shared_ptr<std::mutex> jobs_mutex_;
     std::queue<JobT> jobs_;
 
     /// Multithreading
-    std::optional<JobT> pop_from_job_queue_() noexcept;
+    common::ThreadPool::JobT pop_from_job_queue_() noexcept;
     void thread_worker_(ThreadContext* ctx);
 };
 size_t

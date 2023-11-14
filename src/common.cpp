@@ -10,14 +10,17 @@ namespace common = acquire::sink::zarr::common;
 common::ThreadPool::ThreadPool(size_t n_threads,
                                std::function<void(const std::string&)> err)
   : contexts_{ n_threads }
+  , jobs_mutex_{ std::make_shared<std::mutex>() }
+  , error_handler_{ err }
 {
     if (n_threads == 0) {
         throw std::runtime_error("Cannot create thread pool with 0 threads.");
     }
 
-    for (auto& ctx_ : contexts_) {
-        ctx_.should_stop = false;
-        ctx_.thread = std::thread([this, ctx = &ctx_] { thread_worker_(ctx); });
+    for (auto& ctx : contexts_) {
+        ctx.should_stop = false;
+        ctx.thread = std::thread([this, ctx_ = &ctx] { thread_worker_(ctx_); });
+        ctx.mutex = jobs_mutex_;
     }
 }
 
@@ -29,34 +32,31 @@ common::ThreadPool::~ThreadPool() noexcept
 void
 common::ThreadPool::push_to_job_queue(JobT&& job)
 {
-    std::scoped_lock lock(jobs_mutex_);
+    std::scoped_lock lock(*jobs_mutex_);
     jobs_.push(std::move(job));
 
-    for (auto& ctx: contexts_) {
+    for (auto& ctx : contexts_) {
         ctx.cv.notify_one();
     }
 }
 
-void common::ThreadPool::await_stop() noexcept
+void
+common::ThreadPool::await_stop() noexcept
 {
     // spin down threads
     for (auto& ctx : contexts_) {
         ctx.should_stop = true;
         ctx.cv.notify_one();
+
         if (ctx.thread.joinable()) {
             ctx.thread.join();
         }
     }
 }
 
-std::optional<common::ThreadPool::JobT>
+common::ThreadPool::JobT
 common::ThreadPool::pop_from_job_queue_() noexcept
 {
-    std::scoped_lock lock(jobs_mutex_);
-    if (jobs_.empty()) {
-        return std::nullopt;
-    }
-
     auto job = std::move(jobs_.front());
     jobs_.pop();
     return job;
@@ -65,8 +65,6 @@ common::ThreadPool::pop_from_job_queue_() noexcept
 void
 common::ThreadPool::thread_worker_(ThreadContext* ctx)
 {
-    using namespace std::chrono_literals;
-
     TRACE("Worker thread starting.");
     if (nullptr == ctx) {
         LOGE("Null context passed to worker thread.");
@@ -74,17 +72,17 @@ common::ThreadPool::thread_worker_(ThreadContext* ctx)
     }
 
     while (true) {
-        std::unique_lock lock(ctx->mutex);
+        std::unique_lock lock(*ctx->mutex);
         ctx->cv.wait(lock, [&] { return ctx->should_stop || !jobs_.empty(); });
 
         if (ctx->should_stop) {
             break;
         }
 
-        if (auto job = pop_from_job_queue_(); job.has_value()) {
-            if (std::string err_msg; !job.value()(err_msg)) {
-                error_handler_(err_msg);
-            }
+        auto job = pop_from_job_queue_();
+        lock.unlock();
+        if (std::string err_msg; !job(err_msg)) {
+            error_handler_(err_msg);
         }
     }
 
