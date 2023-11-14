@@ -43,7 +43,9 @@ void common::ThreadPool::await_stop() noexcept
     for (auto& ctx : contexts_) {
         ctx.should_stop = true;
         ctx.cv.notify_one();
-        ctx.thread.join();
+        if (ctx.thread.joinable()) {
+            ctx.thread.join();
+        }
     }
 }
 
