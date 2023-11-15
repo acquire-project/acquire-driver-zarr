@@ -65,23 +65,18 @@ struct ThreadPool final
     void await_stop() noexcept;
 
   private:
-    struct ThreadContext
-    {
-        std::thread thread;
-        std::shared_ptr<std::mutex> mutex;
-        std::condition_variable cv;
-        bool should_stop;
-    };
-
     std::function<void(const std::string&)> error_handler_;
 
-    std::vector<ThreadContext> contexts_;
-    mutable std::shared_ptr<std::mutex> jobs_mutex_;
+    std::vector<std::thread> threads_;
+    mutable std::mutex jobs_mutex_;
+    std::condition_variable cv_;
     std::queue<JobT> jobs_;
 
+    std::atomic<bool> should_stop_;
+
     /// Multithreading
-    common::ThreadPool::JobT pop_from_job_queue_() noexcept;
-    void thread_worker_(ThreadContext* ctx);
+    std::optional<common::ThreadPool::JobT> pop_from_job_queue_() noexcept;
+    void thread_worker_();
 };
 size_t
 bytes_per_tile(const ImageDims& tile_shape, const SampleType& type);

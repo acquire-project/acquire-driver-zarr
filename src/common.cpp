@@ -9,18 +9,14 @@
 namespace common = acquire::sink::zarr::common;
 common::ThreadPool::ThreadPool(size_t n_threads,
                                std::function<void(const std::string&)> err)
-  : contexts_{ n_threads }
-  , jobs_mutex_{ std::make_shared<std::mutex>() }
-  , error_handler_{ err }
+  : error_handler_{ err }
 {
     if (n_threads == 0) {
         throw std::runtime_error("Cannot create thread pool with 0 threads.");
     }
 
-    for (auto& ctx : contexts_) {
-        ctx.should_stop = false;
-        ctx.thread = std::thread([this, ctx_ = &ctx] { thread_worker_(ctx_); });
-        ctx.mutex = jobs_mutex_;
+    for (auto i = 0; i < n_threads; ++i) {
+        threads_.emplace_back([this] { thread_worker_(); });
     }
 }
 
@@ -32,57 +28,57 @@ common::ThreadPool::~ThreadPool() noexcept
 void
 common::ThreadPool::push_to_job_queue(JobT&& job)
 {
-    std::scoped_lock lock(*jobs_mutex_);
+    std::unique_lock lock(jobs_mutex_);
     jobs_.push(std::move(job));
+    lock.unlock();
 
-    for (auto& ctx : contexts_) {
-        ctx.cv.notify_one();
-    }
+    cv_.notify_one();
 }
 
 void
 common::ThreadPool::await_stop() noexcept
 {
-    // spin down threads
-    for (auto& ctx : contexts_) {
-        ctx.should_stop = true;
-        ctx.cv.notify_one();
+    should_stop_ = true;
+    cv_.notify_all();
 
-        if (ctx.thread.joinable()) {
-            ctx.thread.join();
+    // spin down threads
+    for (auto& thread : threads_) {
+        if (thread.joinable()) {
+            thread.join();
         }
     }
 }
 
-common::ThreadPool::JobT
+std::optional<common::ThreadPool::JobT>
 common::ThreadPool::pop_from_job_queue_() noexcept
 {
+    if (jobs_.empty()) {
+        return std::nullopt;
+    }
+
     auto job = std::move(jobs_.front());
     jobs_.pop();
     return job;
 }
 
 void
-common::ThreadPool::thread_worker_(ThreadContext* ctx)
+common::ThreadPool::thread_worker_()
 {
     TRACE("Worker thread starting.");
-    if (nullptr == ctx) {
-        LOGE("Null context passed to worker thread.");
-        return;
-    }
 
     while (true) {
-        std::unique_lock lock(*ctx->mutex);
-        ctx->cv.wait(lock, [&] { return ctx->should_stop || !jobs_.empty(); });
+        std::unique_lock lock(jobs_mutex_);
+        cv_.wait(lock, [&] { return should_stop_ || !jobs_.empty(); });
 
-        if (ctx->should_stop) {
+        if (should_stop_) {
             break;
         }
 
-        auto job = pop_from_job_queue_();
-        lock.unlock();
-        if (std::string err_msg; !job(err_msg)) {
-            error_handler_(err_msg);
+        if (auto job = pop_from_job_queue_(); job.has_value()) {
+            lock.unlock();
+            if (std::string err_msg; !job.value()(err_msg)) {
+                error_handler_(err_msg);
+            }
         }
     }
 
