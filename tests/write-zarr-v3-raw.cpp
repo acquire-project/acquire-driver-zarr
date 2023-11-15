@@ -1,3 +1,7 @@
+/// @brief Test the basic Zarr v3 writer.
+/// @details Ensure that chunking is working as expected and metadata is written
+/// correctly.
+
 #include "device/hal/device.manager.h"
 #include "acquire.h"
 #include "platform.h" // clock
@@ -67,13 +71,17 @@ reporter(int is_error,
           a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
     } while (0)
 
-const static uint32_t frame_width = 64;
-const static uint32_t frame_height = 48;
-const static uint32_t frames_per_chunk = 70;
+const static uint32_t frame_width = 1080;
+const static uint32_t chunk_width = frame_width / 4;
+const static uint32_t frame_height = 960;
+const static uint32_t chunk_height = frame_height / 3;
+const static uint32_t frames_per_chunk = 48;
+const static uint32_t max_frame_count = 48;
 
 void
-acquire(AcquireRuntime* runtime, const char* filename)
+setup(AcquireRuntime* runtime)
 {
+    const char* filename = TEST ".zarr";
     auto dm = acquire_device_manager(runtime);
     CHECK(runtime);
     CHECK(dm);
@@ -87,7 +95,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("Zarr"),
+                                SIZED("ZarrV3"),
                                 &props.video[0].storage.identifier));
 
     const char external_metadata[] = R"({"hello":"world"})";
@@ -102,20 +110,25 @@ acquire(AcquireRuntime* runtime, const char* filename)
                             sample_spacing_um);
 
     storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                          frame_width,
-                                          frame_height,
+                                          chunk_width,
+                                          chunk_height,
                                           frames_per_chunk);
+
+    storage_properties_set_sharding_props(
+      &props.video[0].storage.settings, 4, 3, 1);
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
-    // we may drop frames with lower exposure
-    props.video[0].camera.settings.exposure_time_us = 1e4;
-    props.video[0].max_frame_count = frames_per_chunk;
+    props.video[0].max_frame_count = max_frame_count;
 
     OK(acquire_configure(runtime, &props));
+}
 
+void
+acquire(AcquireRuntime* runtime)
+{
     const auto next = [](VideoFrame* cur) -> VideoFrame* {
         return (VideoFrame*)(((uint8_t*)cur) + cur->bytes_of_frame);
     };
@@ -142,10 +155,8 @@ acquire(AcquireRuntime* runtime, const char* filename)
             OK(acquire_map_read(runtime, 0, &beg, &end));
             for (cur = beg; cur < end; cur = next(cur)) {
                 LOG("stream %d counting frame w id %d", 0, cur->frame_id);
-                CHECK(cur->shape.dims.width ==
-                      props.video[0].camera.settings.shape.x);
-                CHECK(cur->shape.dims.height ==
-                      props.video[0].camera.settings.shape.y);
+                CHECK(cur->shape.dims.width == frame_width);
+                CHECK(cur->shape.dims.height == frame_height);
                 ++nframes;
             }
             {
@@ -156,20 +167,16 @@ acquire(AcquireRuntime* runtime, const char* filename)
             }
             clock_sleep_ms(&throttle, 100.0f);
 
-            LOG("stream %d expected_frames_per_chunk %d time %f",
-                0,
-                nframes,
-                clock_toc_ms(&clock));
+            LOG(
+              "stream %d nframes %d time %f", 0, nframes, clock_toc_ms(&clock));
         } while (DeviceState_Running == acquire_get_state(runtime) &&
-                 nframes < props.video[0].max_frame_count);
+                 nframes < max_frame_count);
 
         OK(acquire_map_read(runtime, 0, &beg, &end));
         for (cur = beg; cur < end; cur = next(cur)) {
             LOG("stream %d counting frame w id %d", 0, cur->frame_id);
-            CHECK(cur->shape.dims.width ==
-                  props.video[0].camera.settings.shape.x);
-            CHECK(cur->shape.dims.height ==
-                  props.video[0].camera.settings.shape.y);
+            CHECK(cur->shape.dims.width == frame_width);
+            CHECK(cur->shape.dims.height == frame_height);
             ++nframes;
         }
         {
@@ -179,58 +186,113 @@ acquire(AcquireRuntime* runtime, const char* filename)
                 LOG("stream %d consumed bytes %d", 0, n);
         }
 
-        CHECK(nframes == props.video[0].max_frame_count);
+        CHECK(nframes == max_frame_count);
     }
 
     OK(acquire_stop(runtime));
+}
+
+void
+validate(AcquireRuntime* runtime)
+{
+    const fs::path test_path(TEST ".zarr");
+    CHECK(fs::is_directory(test_path));
+
+    // check the zarr.json metadata file
+    fs::path metadata_path = test_path / "zarr.json";
+    CHECK(fs::is_regular_file(metadata_path));
+    std::ifstream f(metadata_path);
+    json metadata = json::parse(f);
+
+    CHECK(metadata["extensions"].empty());
+    CHECK("https://purl.org/zarr/spec/protocol/core/3.0" ==
+          metadata["metadata_encoding"]);
+    CHECK(".json" == metadata["metadata_key_suffix"]);
+    CHECK("https://purl.org/zarr/spec/protocol/core/3.0" ==
+          metadata["zarr_format"]);
+
+    // check the group metadata file
+    metadata_path = test_path / "meta" / "root.group.json";
+    CHECK(fs::is_regular_file(metadata_path));
+
+    f = std::ifstream(metadata_path);
+    metadata = json::parse(f);
+    CHECK("world" == metadata["attributes"]["acquire"]["hello"]);
+
+    // check the array metadata file
+    metadata_path = test_path / "meta" / "root" / "0.array.json";
+    CHECK(fs::is_regular_file(metadata_path));
+
+    f = std::ifstream(metadata_path);
+    metadata = json::parse(f);
+
+    const auto chunk_grid = metadata["chunk_grid"];
+    CHECK("/" == chunk_grid["separator"]);
+    CHECK("regular" == chunk_grid["type"]);
+
+    const auto chunk_shape = chunk_grid["chunk_shape"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunk_shape[0]);
+    ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
+    ASSERT_EQ(int, "%d", chunk_height, chunk_shape[2]);
+    ASSERT_EQ(int, "%d", chunk_width, chunk_shape[3]);
+
+    CHECK("C" == metadata["chunk_memory_layout"]);
+    CHECK("u1" == metadata["data_type"]);
+    CHECK(metadata["extensions"].empty());
+
+    const auto array_shape = metadata["shape"];
+    ASSERT_EQ(int, "%d", max_frame_count, array_shape[0]);
+    ASSERT_EQ(int, "%d", 1, array_shape[1]);
+    ASSERT_EQ(int, "%d", frame_height, array_shape[2]);
+    ASSERT_EQ(int, "%d", frame_width, array_shape[3]);
+
+    // sharding
+    const auto storage_transformers = metadata["storage_transformers"];
+    const auto configuration = storage_transformers[0]["configuration"];
+    const auto& cps = configuration["chunks_per_shard"];
+    ASSERT_EQ(int, "%d", 1, cps[0]);
+    ASSERT_EQ(int, "%d", 1, cps[1]);
+    ASSERT_EQ(int, "%d", 3, cps[2]);
+    ASSERT_EQ(int, "%d", 4, cps[3]);
+    const size_t chunks_per_shard = cps[0].get<size_t>() *
+                                    cps[1].get<size_t>() *
+                                    cps[2].get<size_t>() * cps[3].get<size_t>();
+
+    const auto index_size = 2 * chunks_per_shard * sizeof(uint64_t);
+
+    // check that each chunked data file is the expected size
+    const uint32_t bytes_per_chunk =
+      chunk_shape[0].get<uint32_t>() * chunk_shape[1].get<uint32_t>() *
+      chunk_shape[2].get<uint32_t>() * chunk_shape[3].get<uint32_t>();
+    for (auto t = 0; t < std::ceil(max_frame_count / frames_per_chunk); ++t) {
+        fs::path path = test_path / "data" / "root" / "0" /
+                        ("c" + std::to_string(t)) / "0" / "0" / "0";
+
+        CHECK(fs::is_regular_file(path));
+
+        auto file_size = fs::file_size(path);
+
+        ASSERT_EQ(
+          int, "%d", chunks_per_shard* bytes_per_chunk + index_size, file_size);
+    }
+}
+
+void
+teardown(AcquireRuntime* runtime)
+{
+    LOG("Done (OK)");
+    acquire_shutdown(runtime);
 }
 
 int
 main()
 {
     auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
 
-    CHECK(fs::is_directory(TEST ".zarr"));
+    setup(runtime);
+    acquire(runtime);
+    validate(runtime);
+    teardown(runtime);
 
-    const auto external_metadata_path =
-      fs::path(TEST ".zarr") / "0" / ".zattrs";
-    CHECK(fs::is_regular_file(external_metadata_path));
-    ASSERT_GT(int, "%d", fs::file_size(external_metadata_path), 0);
-
-    const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
-    CHECK(fs::is_regular_file(group_zattrs_path));
-    ASSERT_GT(int, "%d", fs::file_size(group_zattrs_path), 0);
-
-    const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
-    CHECK(fs::is_regular_file(zarray_path));
-    ASSERT_GT(int, "%d", fs::file_size(zarray_path), 0);
-
-    // check metadata
-    std::ifstream f(zarray_path);
-    json zarray = json::parse(f);
-
-    auto shape = zarray["shape"];
-    ASSERT_EQ(int, "%d", frames_per_chunk, shape[0]);
-    ASSERT_EQ(int, "%d", 1, shape[1]);
-    ASSERT_EQ(int, "%d", frame_height, shape[2]);
-    ASSERT_EQ(int, "%d", frame_width, shape[3]);
-
-    auto chunks = zarray["chunks"];
-    ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0]);
-    ASSERT_EQ(int, "%d", 1, chunks[1]);
-    ASSERT_EQ(int, "%d", frame_height, chunks[2]);
-    ASSERT_EQ(int, "%d", frame_width, chunks[3]);
-
-    // check chunked data
-    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
-                      chunks[2].get<int>() * chunks[3].get<int>();
-
-    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
-    CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-
-    LOG("Done (OK)");
-    acquire_shutdown(runtime);
     return 0;
 }

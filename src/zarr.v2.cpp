@@ -1,5 +1,5 @@
 #include "zarr.v2.hh"
-#include "writers/chunk.writer.hh"
+#include "writers/zarrv2.writer.hh"
 
 #include "json.hpp"
 
@@ -32,19 +32,11 @@ zarr::ZarrV2::ZarrV2(BloscCompressionParams&& compression_params)
 void
 zarr::ZarrV2::get_meta(StoragePropertyMetadata* meta) const
 {
-    CHECK(meta);
-    *meta = {
-        .chunking = {
-          .supported = 1,
-          .max_bytes_per_chunk = {
-            .writable = 1,
-            .low = (float)(16 << 20),
-            .high = (float)(1 << 30),
-            .type = PropertyType_FixedPrecision },
-        },
-        .multiscale = {
-          .supported = 1,
-        }
+    Zarr::get_meta(meta);
+
+    meta->shard_dims_chunks = { 0 };
+    meta->multiscale = {
+        .is_supported = 1,
     };
 }
 
@@ -55,23 +47,25 @@ zarr::ZarrV2::allocate_writers_()
     for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
         const auto& image_shape = image_tile_shapes_.at(i).first;
         const auto& tile_shape = image_tile_shapes_.at(i).second;
-        uint64_t bytes_per_tile =
+
+        const uint64_t bytes_per_tile =
           common::bytes_per_tile(tile_shape, pixel_type_);
+
         if (blosc_compression_params_.has_value()) {
-            writers_.push_back(std::make_shared<ChunkWriter>(
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
               image_shape,
               tile_shape,
-              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              planes_per_chunk_,
               (get_data_directory_() / std::to_string(i)).string(),
-              this,
+              thread_pool_,
               blosc_compression_params_.value()));
         } else {
-            writers_.push_back(std::make_shared<ChunkWriter>(
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
               image_shape,
               tile_shape,
-              (uint32_t)(max_bytes_per_chunk_ / bytes_per_tile),
+              planes_per_chunk_,
               (get_data_directory_() / std::to_string(i)).string(),
-              this));
+              thread_pool_));
         }
     }
 }
@@ -89,11 +83,8 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     const ImageDims& image_dims = image_tile_shapes_.at(level).first;
     const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
 
-    const auto frame_count = (uint64_t)writers_.at(level)->frames_written();
-    const auto frames_per_chunk =
-      std::min(frame_count,
-               (uint64_t)common::frames_per_chunk(
-                 tile_dims, pixel_type_, max_bytes_per_chunk_));
+    const auto frame_count = writers_.at(level)->frames_written();
+    const auto frames_per_chunk = std::min(frame_count, planes_per_chunk_);
 
     json zarray_attrs = {
         { "zarr_format", 2 },
@@ -189,7 +180,13 @@ zarr::ZarrV2::write_group_metadata_() const
                 {
                   {
                     { "type", "scale" },
-                    { "scale", { 1, 1, pixel_scale_um_.y, pixel_scale_um_.x } },
+                    { "scale",
+                      {
+                        1,                 // t
+                        1,                 // c
+                        pixel_scale_um_.y, // y
+                        pixel_scale_um_.x  // x
+                      } },
                   },
                 } },
             },
@@ -205,8 +202,8 @@ zarr::ZarrV2::write_group_metadata_() const
                     {
                       "scale",
                       {
-                        std::pow(2, i), // t
-                        1,              // c
+                        std::pow(2, i),                     // t
+                        1,                                  // c
                         std::pow(2, i) * pixel_scale_um_.y, // y
                         std::pow(2, i) * pixel_scale_um_.x  // x
                       },

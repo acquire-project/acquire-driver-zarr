@@ -79,10 +79,10 @@ reporter(int is_error,
 const static uint32_t frame_width = 240;
 const static uint32_t frame_height = 135;
 
-const static uint32_t tile_width = frame_width / 3;
-const static uint32_t tile_height = frame_height / 3;
+const static uint32_t chunk_width = frame_width / 3;
+const static uint32_t chunk_height = frame_height / 3;
+const static uint32_t chunk_planes = 128;
 
-const static uint32_t max_bytes_per_chunk = 1 << 16;
 const static auto max_frames = 100;
 
 void
@@ -117,10 +117,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     CHECK(
       storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            tile_width,
-                                            tile_height,
-                                            1,
-                                            max_bytes_per_chunk));
+                                            chunk_width,
+                                            chunk_height,
+                                            chunk_planes));
 
     CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));
@@ -129,7 +128,6 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
-//    props.video[0].camera.settings.exposure_time_us = 1e5;
     props.video[0].max_frame_count = max_frames;
 
     OK(acquire_configure(runtime, &props));
@@ -195,7 +193,8 @@ verify_layer(const LayerTestCase& test_case)
                                          std::to_string(layer) / "0" / "0" /
                                          std::to_string(i) / std::to_string(j);
             CHECK(fs::is_regular_file(chunk_file_path));
-            ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+            const auto file_size = fs::file_size(chunk_file_path);
+            ASSERT_EQ(int, "%d", chunk_size, file_size);
         }
     }
 

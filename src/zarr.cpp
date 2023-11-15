@@ -1,6 +1,6 @@
 #include "zarr.hh"
 
-#include "writers/chunk.writer.hh"
+#include "writers/zarrv2.writer.hh"
 #include "json.hpp"
 
 namespace zarr = acquire::sink::zarr;
@@ -84,7 +84,7 @@ zarr_set(Storage* self_, const StorageProperties* props) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->set(props);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -102,7 +102,7 @@ zarr_get(const Storage* self_, StorageProperties* props) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->get(props);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -116,7 +116,7 @@ zarr_get_meta(const Storage* self_, StoragePropertyMetadata* meta) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->get_meta(meta);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -132,7 +132,7 @@ zarr_start(Storage* self_) noexcept
 
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->start();
         state = DeviceState_Running;
     } catch (const std::exception& exc) {
@@ -150,7 +150,7 @@ zarr_append(Storage* self_, const VideoFrame* frames, size_t* nbytes) noexcept
     DeviceState state;
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         *nbytes = self->append(frames, *nbytes);
         state = DeviceState_Running;
     } catch (const std::exception& exc) {
@@ -173,7 +173,7 @@ zarr_stop(Storage* self_) noexcept
 
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         CHECK(self->stop());
         state = DeviceState_Armed;
     } catch (const std::exception& exc) {
@@ -190,7 +190,7 @@ zarr_destroy(Storage* self_) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         if (self_->stop)
             self_->stop(self_);
 
@@ -207,7 +207,7 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
 {
     try {
         CHECK(self_);
-        auto* self = (zarr::StorageInterface*)self_;
+        auto* self = (zarr::Zarr*)self_;
         self->reserve_image_shape(shape);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -319,22 +319,6 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
 }
 } // end ::{anonymous} namespace
 
-/// StorageInterface
-zarr::StorageInterface::StorageInterface()
-  : Storage{
-      .state = DeviceState_AwaitingConfiguration,
-      .set = ::zarr_set,
-      .get = ::zarr_get,
-      .get_meta = ::zarr_get_meta,
-      .start = ::zarr_start,
-      .append = ::zarr_append,
-      .stop = ::zarr_stop,
-      .destroy = ::zarr_destroy,
-      .reserve_image_shape = ::zarr_reserve_image_shape,
-  }
-{
-}
-
 void
 zarr::Zarr::set(const StorageProperties* props)
 {
@@ -347,8 +331,9 @@ zarr::Zarr::set(const StorageProperties* props)
     validate_props(props);
     dataset_root_ = as_path(*props);
 
-    if (props->external_metadata_json.str)
+    if (props->external_metadata_json.str) {
         external_metadata_json_ = props->external_metadata_json.str;
+    }
 
     pixel_scale_um_ = props->pixel_scale_um;
 
@@ -356,14 +341,15 @@ zarr::Zarr::set(const StorageProperties* props)
     image_tile_shapes_.clear();
     image_tile_shapes_.emplace_back();
 
-    set_chunking(props->chunking, meta.chunking);
+    set_chunking(props->chunk_dims_px, meta.chunk_dims_px);
 
-    if (props->enable_multiscale && !meta.multiscale.supported) {
+    if (props->enable_multiscale && !meta.multiscale.is_supported) {
         // TODO (aliddell): https://github.com/ome/ngff/pull/206
         LOGE("OME-Zarr multiscale not yet supported in Zarr v3. "
              "Multiscale arrays will not be written.");
     }
-    enable_multiscale_ = meta.multiscale.supported && props->enable_multiscale;
+    enable_multiscale_ =
+      meta.multiscale.is_supported && props->enable_multiscale;
 }
 
 void
@@ -376,12 +362,42 @@ zarr::Zarr::get(StorageProperties* props) const
     props->pixel_scale_um = pixel_scale_um_;
 
     if (!image_tile_shapes_.empty()) {
-        props->chunking.tile.width = image_tile_shapes_.at(0).second.cols;
-        props->chunking.tile.height = image_tile_shapes_.at(0).second.rows;
+        props->chunk_dims_px.width = image_tile_shapes_.at(0).second.cols;
+        props->chunk_dims_px.height = image_tile_shapes_.at(0).second.rows;
     }
-    props->chunking.tile.planes = 1;
+    props->chunk_dims_px.planes = planes_per_chunk_;
 
     props->enable_multiscale = enable_multiscale_;
+}
+
+void
+zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
+{
+    CHECK(meta);
+
+    *meta = {
+        .chunk_dims_px = {
+          .is_supported = 1,
+          .width = {
+            .writable = 1,
+            .low = 32.f,
+            .high = (float)std::numeric_limits<uint16_t>::max(),
+            .type = PropertyType_FixedPrecision
+          },
+          .height = {
+            .writable = 1,
+            .low = 32.f,
+            .high = (float)std::numeric_limits<uint16_t>::max(),
+            .type = PropertyType_FixedPrecision
+          },
+          .planes = {
+            .writable = 1,
+            .low = 32.f,
+            .high = (float)std::numeric_limits<uint16_t>::max(),
+            .type = PropertyType_FixedPrecision
+          },
+        },
+    };
 }
 
 void
@@ -422,6 +438,9 @@ zarr::Zarr::stop() noexcept
                 writer->finalize();
             }
             writers_.clear();
+
+            thread_pool_->await_stop();
+
             is_ok = 1;
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
@@ -479,7 +498,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     {
         StorageProperties props = { 0 };
         get(&props);
-        uint32_t tile_width = props.chunking.tile.width;
+        uint32_t tile_width = props.chunk_dims_px.width;
         if (image_shape.cols > 0 &&
             (tile_width == 0 || tile_width > image_shape.cols)) {
             LOGE("%s. Setting width to %u.",
@@ -490,7 +509,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
         }
         tile_shape.cols = tile_width;
 
-        uint32_t tile_height = props.chunking.tile.height;
+        uint32_t tile_height = props.chunk_dims_px.height;
         if (image_shape.rows > 0 &&
             (tile_height == 0 || tile_height > image_shape.rows)) {
             LOGE("%s. Setting height to %u.",
@@ -502,17 +521,6 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
         tile_shape.rows = tile_height;
 
         storage_properties_destroy(&props);
-    }
-
-    // ensure that the chunk size can accommodate at least one tile
-    uint64_t bytes_per_tile = common::bytes_per_tile(tile_shape, pixel_type_);
-    CHECK(bytes_per_tile > 0);
-
-    if (max_bytes_per_chunk_ < bytes_per_tile) {
-        LOGE("Specified chunk size %llu is too small. Setting to %llu bytes.",
-             max_bytes_per_chunk_,
-             bytes_per_tile);
-        max_bytes_per_chunk_ = bytes_per_tile;
     }
 
     if (enable_multiscale_) {
@@ -530,14 +538,26 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 /// Zarr
 
 zarr::Zarr::Zarr()
-  : threads_(std::thread::hardware_concurrency())
+  : Storage {
+      .state = DeviceState_AwaitingConfiguration,
+      .set = ::zarr_set,
+      .get = ::zarr_get,
+      .get_meta = ::zarr_get_meta,
+      .start = ::zarr_start,
+      .append = ::zarr_append,
+      .stop = ::zarr_stop,
+      .destroy = ::zarr_destroy,
+      .reserve_image_shape = ::zarr_reserve_image_shape,
+  }
+  , thread_pool_{ std::make_shared<common::ThreadPool>(
+      std::thread::hardware_concurrency(),
+      [this](const std::string& err) { this->set_error(err); }) }
+  , pixel_scale_um_{ 1, 1 }
+  , planes_per_chunk_{ 0 }
+  , enable_multiscale_{ false }
+  , pixel_type_{ SampleType_u8 }
+  , error_{ false }
 {
-    // spin up threads
-    for (auto& ctx_ : threads_) {
-        ctx_.ready = true;
-        ctx_.should_stop = false;
-        ctx_.thread = std::thread([this, ctx = &ctx_] { worker_thread_(ctx); });
-    }
 }
 
 zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
@@ -546,28 +566,21 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
     blosc_compression_params_ = std::move(compression_params);
 }
 
-zarr::Zarr::~Zarr() noexcept
-{
-    // spin down threads
-    for (auto& ctx : threads_) {
-        ctx.should_stop = true;
-        ctx.cv.notify_one();
-        ctx.thread.join();
-    }
-}
-
 void
 zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
 {
-    max_bytes_per_chunk_ = std::clamp(props.max_bytes_per_chunk,
-                                      (uint64_t)meta.max_bytes_per_chunk.low,
-                                      (uint64_t)meta.max_bytes_per_chunk.high);
-
     // image shape is set *after* this is set so we verify it later
     image_tile_shapes_.at(0).second = {
-        .cols = props.tile.width,
-        .rows = props.tile.height,
+        .cols = std::clamp(
+          props.width, (uint32_t)meta.width.low, (uint32_t)meta.width.high),
+        .rows = std::clamp(
+          props.height, (uint32_t)meta.height.low, (uint32_t)meta.height.high),
     };
+
+    planes_per_chunk_ = std::clamp(
+      props.planes, (uint32_t)meta.planes.low, (uint32_t)meta.planes.high);
+
+    CHECK(planes_per_chunk_ > 0);
 }
 
 void
@@ -580,20 +593,6 @@ zarr::Zarr::set_error(const std::string& msg) noexcept
         error_ = true;
         error_msg_ = msg;
     }
-}
-
-void
-zarr::Zarr::push_to_job_queue(JobT&& job)
-{
-    std::scoped_lock lock(mutex_);
-    jobs_.push(std::move(job));
-}
-
-size_t
-zarr::Zarr::jobs_on_queue() const
-{
-    std::scoped_lock lock(mutex_);
-    return jobs_.size();
 }
 
 void
@@ -670,56 +669,6 @@ zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
             break;
         }
     }
-}
-
-std::optional<zarr::Zarr::JobT>
-zarr::Zarr::pop_from_job_queue_() noexcept
-{
-    std::scoped_lock lock(mutex_);
-    if (jobs_.empty()) {
-        return std::nullopt;
-    }
-
-    auto job = jobs_.front();
-    jobs_.pop();
-    return job;
-}
-
-void
-zarr::Zarr::worker_thread_(ThreadContext* ctx)
-{
-    using namespace std::chrono_literals;
-
-    TRACE("Worker thread starting.");
-    if (nullptr == ctx) {
-        LOGE("Null context passed to worker thread.");
-        return;
-    }
-
-    while (true) {
-        std::unique_lock lock(ctx->mutex);
-        ctx->cv.wait_for(lock, 1ms, [&] { return ctx->should_stop; });
-
-        if (ctx->should_stop) {
-            break;
-        }
-
-        if (auto job = pop_from_job_queue_(); job.has_value()) {
-            ctx->ready = false;
-            std::string err_msg;
-            if (!job.value()(err_msg)) {
-                set_error(err_msg);
-            }
-            ctx->ready = true;
-            lock.unlock();
-            ctx->cv.notify_one();
-        } else {
-            lock.unlock();
-            std::this_thread::sleep_for(1ms);
-        }
-    }
-
-    TRACE("Worker thread exiting.");
 }
 
 #ifndef NO_UNIT_TESTS

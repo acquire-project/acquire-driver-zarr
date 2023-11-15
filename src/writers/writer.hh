@@ -13,10 +13,6 @@
 
 #include <condition_variable>
 #include <filesystem>
-#include <mutex>
-#include <optional>
-#include <queue>
-#include <thread>
 
 namespace fs = std::filesystem;
 
@@ -26,20 +22,21 @@ struct Zarr;
 struct FileCreator
 {
     FileCreator() = delete;
-    explicit FileCreator(Zarr* zarr);
+    explicit FileCreator(std::shared_ptr<common::ThreadPool> thread_pool);
     ~FileCreator() noexcept = default;
 
-    void set_base_dir(const fs::path& base_dir) noexcept;
-    [[nodiscard]] bool create(int n_c,
-                              int n_y,
-                              int n_x,
-                              std::vector<file>& files) noexcept;
+    [[nodiscard]] bool create_files(const fs::path& base_dir,
+                                    int n_c,
+                                    int n_y,
+                                    int n_x,
+                                    std::vector<file>& files) noexcept;
 
   private:
     fs::path base_dir_;
-    Zarr* zarr_;
+    std::shared_ptr<common::ThreadPool> thread_pool_;
 
-    bool create_channel_dirs_(int n_c) noexcept;
+    bool create_c_dirs_(int n_c) noexcept;
+    bool create_y_dirs_(int n_c, int n_y) noexcept;
 };
 
 struct Writer
@@ -50,18 +47,18 @@ struct Writer
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root,
-           Zarr* zarr);
+           std::shared_ptr<common::ThreadPool> thread_pool);
 
     /// Constructor with Blosc compression params
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
            const std::string& data_root,
-           Zarr* zarr,
+           std::shared_ptr<common::ThreadPool> thread_pool,
            const BloscCompressionParams& compression_params);
-    virtual ~Writer();
+    virtual ~Writer() noexcept = default;
 
-    [[nodiscard]] virtual bool write(const VideoFrame* frame) noexcept = 0;
+    [[nodiscard]] bool write(const VideoFrame* frame);
     void finalize() noexcept;
 
     uint32_t frames_written() const noexcept;
@@ -74,6 +71,7 @@ struct Writer
     uint16_t tiles_per_frame_y_;
     SampleType pixel_type_;
     uint32_t frames_per_chunk_;
+    std::vector<std::vector<uint8_t>> chunk_buffers_;
 
     /// Compression
     std::optional<BloscCompressionParams> blosc_compression_params_;
@@ -84,30 +82,26 @@ struct Writer
     std::vector<file> files_;
 
     /// Multithreading
-    std::vector<std::vector<uint8_t>> chunk_buffers_;
-    bool* buffers_ready_;
     std::mutex buffers_mutex_;
 
     /// Bookkeeping
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
     uint32_t current_chunk_;
-    Zarr* zarr_;
+    std::shared_ptr<common::ThreadPool> thread_pool_;
 
-    [[nodiscard]] bool validate_frame_(const VideoFrame* frame) noexcept;
+    void validate_frame_(const VideoFrame* frame);
 
-    virtual void make_buffers_() noexcept = 0;
+    void make_buffers_() noexcept;
 
     void finalize_chunks_() noexcept;
-    std::vector<size_t> compress_buffers_() noexcept;
-    virtual size_t write_bytes_(const uint8_t* buf,
-                                size_t buf_size) noexcept = 0;
+    void compress_buffers_() noexcept;
+    size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept;
     virtual void flush_() noexcept = 0;
 
     uint32_t tiles_per_frame_() const;
 
     /// Files
-    [[nodiscard]] virtual bool make_files_() noexcept = 0;
     void close_files_();
     void rollover_();
 };

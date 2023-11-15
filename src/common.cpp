@@ -1,10 +1,89 @@
 #include "common.hh"
+#include "zarr.hh"
 
 #include "platform.h"
 
 #include <cmath>
+#include <thread>
 
 namespace common = acquire::sink::zarr::common;
+common::ThreadPool::ThreadPool(size_t n_threads,
+                               std::function<void(const std::string&)> err)
+  : error_handler_{ err }
+{
+    if (n_threads == 0) {
+        throw std::runtime_error("Cannot create thread pool with 0 threads.");
+    }
+
+    for (auto i = 0; i < n_threads; ++i) {
+        threads_.emplace_back([this] { thread_worker_(); });
+    }
+}
+
+common::ThreadPool::~ThreadPool() noexcept
+{
+    await_stop();
+}
+
+void
+common::ThreadPool::push_to_job_queue(JobT&& job)
+{
+    std::unique_lock lock(jobs_mutex_);
+    jobs_.push(std::move(job));
+    lock.unlock();
+
+    cv_.notify_one();
+}
+
+void
+common::ThreadPool::await_stop() noexcept
+{
+    should_stop_ = true;
+    cv_.notify_all();
+
+    // spin down threads
+    for (auto& thread : threads_) {
+        if (thread.joinable()) {
+            thread.join();
+        }
+    }
+}
+
+std::optional<common::ThreadPool::JobT>
+common::ThreadPool::pop_from_job_queue_() noexcept
+{
+    if (jobs_.empty()) {
+        return std::nullopt;
+    }
+
+    auto job = std::move(jobs_.front());
+    jobs_.pop();
+    return job;
+}
+
+void
+common::ThreadPool::thread_worker_()
+{
+    TRACE("Worker thread starting.");
+
+    while (true) {
+        std::unique_lock lock(jobs_mutex_);
+        cv_.wait(lock, [&] { return should_stop_ || !jobs_.empty(); });
+
+        if (should_stop_) {
+            break;
+        }
+
+        if (auto job = pop_from_job_queue_(); job.has_value()) {
+            lock.unlock();
+            if (std::string err_msg; !job.value()(err_msg)) {
+                error_handler_(err_msg);
+            }
+        }
+    }
+
+    TRACE("Worker thread exiting.");
+}
 
 size_t
 common::bytes_per_tile(const ImageDims& tile_shape, const SampleType& type)

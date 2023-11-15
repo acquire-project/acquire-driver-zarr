@@ -89,10 +89,10 @@ reporter(int is_error,
 const static uint32_t frame_width = 1920;
 const static uint32_t frame_height = 1080;
 
-const static uint32_t tile_width = frame_width / 3;
-const static uint32_t tile_height = frame_height / 3;
+const static uint32_t chunk_width = frame_width / 3;
+const static uint32_t chunk_height = frame_height / 3;
+const static uint32_t chunk_planes = 72;
 
-const static uint32_t max_bytes_per_chunk = 16 << 20;
 const static auto max_frames = 74;
 
 void
@@ -127,10 +127,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     CHECK(
       storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            tile_width,
-                                            tile_height,
-                                            1,
-                                            max_bytes_per_chunk));
+                                            chunk_width,
+                                            chunk_height,
+                                            chunk_planes));
 
     CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));

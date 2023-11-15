@@ -6,19 +6,22 @@ endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
-        prelude.h
         common.hh
         common.cpp
         writers/writer.hh
         writers/writer.cpp
-        writers/chunk.writer.hh
-        writers/chunk.writer.cpp
+        writers/zarrv2.writer.hh
+        writers/zarrv2.writer.cpp
+        writers/zarrv3.writer.hh
+        writers/zarrv3.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
         zarr.hh
         zarr.cpp
         zarr.v2.hh
         zarr.v2.cpp
+        zarr.v3.hh
+        zarr.v3.cpp
         zarr.driver.c
 )
 target_enable_simd(${tgt})
