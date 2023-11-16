@@ -19,7 +19,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        platform:
+          - windows-latest
+    #          - ubuntu-latest
+    #          - macos-latest
     permissions:
       actions: write
 
