@@ -60,13 +60,14 @@ struct ThreadPool final
     ThreadPool(size_t n_threads, std::function<void(const std::string&)> err);
     ~ThreadPool() noexcept;
 
+    void start();
     void push_to_job_queue(JobT&& job);
-
     void await_stop() noexcept;
 
   private:
     std::function<void(const std::string&)> error_handler_;
 
+    size_t n_threads_;
     std::vector<std::thread> threads_;
     mutable std::mutex jobs_mutex_;
     std::condition_variable cv_;

@@ -11,18 +11,21 @@ common::ThreadPool::ThreadPool(size_t n_threads,
                                std::function<void(const std::string&)> err)
   : error_handler_{ err }
 {
-    if (n_threads == 0) {
-        throw std::runtime_error("Cannot create thread pool with 0 threads.");
-    }
-
-    for (auto i = 0; i < n_threads; ++i) {
-        threads_.emplace_back([this] { thread_worker_(); });
-    }
+    n_threads_ = std::clamp(
+      n_threads, (size_t)1, (size_t)std::thread::hardware_concurrency());
 }
 
 common::ThreadPool::~ThreadPool() noexcept
 {
     await_stop();
+}
+
+void
+common::ThreadPool::start()
+{
+    for (auto i = 0; i < n_threads_; ++i) {
+        threads_.emplace_back([this] { thread_worker_(); });
+    }
 }
 
 void
