@@ -16,7 +16,7 @@ else ()
     #
     set(tests
             list-devices
-            #            get-meta
+            get-meta
             unit-tests
             multiscale-with-trivial-tile-size
             no-set-chunking
