@@ -40,7 +40,11 @@ common::ThreadPool::push_to_job_queue(JobT&& job)
 void
 common::ThreadPool::await_stop() noexcept
 {
-    should_stop_ = true;
+    {
+        std::scoped_lock lock(jobs_mutex_);
+        should_stop_ = true;
+    }
+
     cv_.notify_all();
 
     // spin down threads
