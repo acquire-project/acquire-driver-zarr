@@ -98,15 +98,14 @@ setup(AcquireRuntime* runtime)
                                 SIZED("ZarrV3"),
                                 &props.video[0].storage.identifier));
 
-    const char external_metadata[] = R"({"hello":"world"})";
     const struct PixelScale sample_spacing_um = { 1, 1 };
 
     storage_properties_init(&props.video[0].storage.settings,
                             0,
                             (char*)filename,
                             strlen(filename) + 1,
-                            (char*)external_metadata,
-                            sizeof(external_metadata),
+                            nullptr,
+                            0,
                             sample_spacing_um);
 
     storage_properties_set_chunking_props(&props.video[0].storage.settings,
@@ -217,7 +216,7 @@ validate(AcquireRuntime* runtime)
 
     f = std::ifstream(metadata_path);
     metadata = json::parse(f);
-    CHECK("world" == metadata["attributes"]["acquire"]["hello"]);
+    CHECK("" == metadata["attributes"]["acquire"]);
 
     // check the array metadata file
     metadata_path = test_path / "meta" / "root" / "0.array.json";
