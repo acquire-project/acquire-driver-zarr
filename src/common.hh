@@ -73,6 +73,7 @@ struct ThreadPool final
     std::condition_variable cv_;
     std::queue<JobT> jobs_;
 
+    bool started_;
     std::atomic<bool> should_stop_;
 
     /// Multithreading
