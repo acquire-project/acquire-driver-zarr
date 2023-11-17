@@ -68,7 +68,7 @@ common::ThreadPool::thread_worker_()
 {
     TRACE("Worker thread starting.");
 
-    while (true) {
+    while (!should_stop_) {
         std::unique_lock lock(jobs_mutex_);
         cv_.wait(lock, [&] { return should_stop_ || !jobs_.empty(); });
 
