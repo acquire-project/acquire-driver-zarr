@@ -10,14 +10,13 @@ namespace common = acquire::sink::zarr::common;
 common::ThreadPool::ThreadPool(size_t n_threads,
                                std::function<void(const std::string&)> err)
   : error_handler_{ err }
+  , started_{ false }
+  , should_stop_{ false }
 {
-    if (n_threads == 0) {
-        throw std::runtime_error("Cannot create thread pool with 0 threads.");
-    }
-
-    for (auto i = 0; i < n_threads; ++i) {
-        threads_.emplace_back([this] { thread_worker_(); });
-    }
+    n_threads_ = std::clamp(
+      n_threads,
+      (size_t)1,
+      (size_t)std::max(std::thread::hardware_concurrency(), (unsigned)1));
 }
 
 common::ThreadPool::~ThreadPool() noexcept
@@ -26,8 +25,21 @@ common::ThreadPool::~ThreadPool() noexcept
 }
 
 void
+common::ThreadPool::start()
+{
+    EXPECT(!started_, "Thread pool already started.");
+
+    for (auto i = 0; i < n_threads_; ++i) {
+        threads_.emplace_back([this] { thread_worker_(); });
+    }
+    started_ = true;
+}
+
+void
 common::ThreadPool::push_to_job_queue(JobT&& job)
 {
+    EXPECT(started_, "Cannot push to job queue before starting.");
+
     std::unique_lock lock(jobs_mutex_);
     jobs_.push(std::move(job));
     lock.unlock();
@@ -38,6 +50,10 @@ common::ThreadPool::push_to_job_queue(JobT&& job)
 void
 common::ThreadPool::await_stop() noexcept
 {
+    if (!started_) {
+        return;
+    }
+
     should_stop_ = true;
     cv_.notify_all();
 
