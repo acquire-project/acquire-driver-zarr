@@ -61,6 +61,12 @@ struct ThreadPool final
     ~ThreadPool() noexcept;
 
     void push_to_job_queue(JobT&& job);
+
+    /**
+     * @brief Block until all jobs on the queue have processed, then spin down
+     * the threads.
+     * @note After calling this function, the job queue no longer accepts jobs.
+     */
     void await_stop() noexcept;
 
   private:
@@ -73,7 +79,6 @@ struct ThreadPool final
 
     std::atomic<bool> is_accepting_jobs_;
 
-    /// Multithreading
     std::optional<common::ThreadPool::JobT> pop_from_job_queue_() noexcept;
     [[nodiscard]] bool should_stop_() const noexcept;
     void thread_worker_();
