@@ -60,24 +60,27 @@ struct ThreadPool final
     ThreadPool(size_t n_threads, std::function<void(const std::string&)> err);
     ~ThreadPool() noexcept;
 
-    void start();
     void push_to_job_queue(JobT&& job);
+
+    /**
+     * @brief Block until all jobs on the queue have processed, then spin down
+     * the threads.
+     * @note After calling this function, the job queue no longer accepts jobs.
+     */
     void await_stop() noexcept;
 
   private:
     std::function<void(const std::string&)> error_handler_;
 
-    size_t n_threads_;
     std::vector<std::thread> threads_;
     mutable std::mutex jobs_mutex_;
     std::condition_variable cv_;
     std::queue<JobT> jobs_;
 
-    bool started_;
-    std::atomic<bool> should_stop_;
+    std::atomic<bool> is_accepting_jobs_;
 
-    /// Multithreading
     std::optional<common::ThreadPool::JobT> pop_from_job_queue_() noexcept;
+    [[nodiscard]] bool should_stop_() const noexcept;
     void thread_worker_();
 };
 size_t

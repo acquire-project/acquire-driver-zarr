@@ -10,37 +10,36 @@ namespace common = acquire::sink::zarr::common;
 common::ThreadPool::ThreadPool(size_t n_threads,
                                std::function<void(const std::string&)> err)
   : error_handler_{ err }
-  , started_{ false }
-  , should_stop_{ false }
+  , is_accepting_jobs_{ true }
 {
-    n_threads_ = std::clamp(
+    n_threads = std::clamp(
       n_threads,
       (size_t)1,
       (size_t)std::max(std::thread::hardware_concurrency(), (unsigned)1));
+
+    for (auto i = 0; i < n_threads; ++i) {
+        threads_.emplace_back([this] { thread_worker_(); });
+    }
 }
 
 common::ThreadPool::~ThreadPool() noexcept
 {
-    await_stop();
-}
-
-void
-common::ThreadPool::start()
-{
-    EXPECT(!started_, "Thread pool already started.");
-
-    for (auto i = 0; i < n_threads_; ++i) {
-        threads_.emplace_back([this] { thread_worker_(); });
+    {
+        std::scoped_lock lock(jobs_mutex_);
+        while (!jobs_.empty()) {
+            jobs_.pop();
+        }
     }
-    started_ = true;
+
+    await_stop();
 }
 
 void
 common::ThreadPool::push_to_job_queue(JobT&& job)
 {
-    EXPECT(started_, "Cannot push to job queue before starting.");
-
     std::unique_lock lock(jobs_mutex_);
+    CHECK(is_accepting_jobs_);
+
     jobs_.push(std::move(job));
     lock.unlock();
 
@@ -50,11 +49,11 @@ common::ThreadPool::push_to_job_queue(JobT&& job)
 void
 common::ThreadPool::await_stop() noexcept
 {
-    if (!started_) {
-        return;
+    {
+        std::scoped_lock lock(jobs_mutex_);
+        is_accepting_jobs_ = false;
     }
 
-    should_stop_ = true;
     cv_.notify_all();
 
     // spin down threads
@@ -77,6 +76,12 @@ common::ThreadPool::pop_from_job_queue_() noexcept
     return job;
 }
 
+bool
+common::ThreadPool::should_stop_() const noexcept
+{
+    return !is_accepting_jobs_ && jobs_.empty();
+}
+
 void
 common::ThreadPool::thread_worker_()
 {
@@ -84,9 +89,9 @@ common::ThreadPool::thread_worker_()
 
     while (true) {
         std::unique_lock lock(jobs_mutex_);
-        cv_.wait(lock, [&] { return should_stop_ || !jobs_.empty(); });
+        cv_.wait(lock, [&] { return should_stop_() || !jobs_.empty(); });
 
-        if (should_stop_) {
+        if (should_stop_()) {
             break;
         }
 

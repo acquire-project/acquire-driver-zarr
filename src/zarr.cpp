@@ -404,7 +404,6 @@ void
 zarr::Zarr::start()
 {
     error_ = true;
-    thread_pool_->start();
 
     if (fs::exists(dataset_root_)) {
         std::error_code ec;
