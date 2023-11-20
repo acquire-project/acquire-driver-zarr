@@ -71,10 +71,11 @@ struct ThreadPool final
     std::condition_variable cv_;
     std::queue<JobT> jobs_;
 
-    std::atomic<bool> should_stop_;
+    std::atomic<bool> is_accepting_jobs_;
 
     /// Multithreading
     std::optional<common::ThreadPool::JobT> pop_from_job_queue_() noexcept;
+    [[nodiscard]] bool should_stop_() const noexcept;
     void thread_worker_();
 };
 size_t
