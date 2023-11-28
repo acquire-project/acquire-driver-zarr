@@ -18,14 +18,12 @@ validate_json(const char* str, size_t nbytes)
         return;
     }
 
-    // Don't do full json validation here, but make sure it at least
-    // begins and ends with '{' and '}'
-    EXPECT(nbytes >= 3,
-           "nbytes (%d) is too small. Expected a null-terminated json string.",
-           (int)nbytes);
-    EXPECT(str[nbytes - 1] == '\0', "String must be null-terminated");
-    EXPECT(str[0] == '{', "json string must start with \'{\'");
-    EXPECT(str[nbytes - 2] == '}', "json string must end with \'}\'");
+    json::parse(str,
+                str + nbytes,
+                nullptr, // callback
+                true,    // allow exceptions
+                true     // ignore comments
+    );
 }
 
 /// \brief Get the filename from a StorageProperties as fs::path.

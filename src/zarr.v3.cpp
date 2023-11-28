@@ -304,7 +304,11 @@ zarr::ZarrV3::write_group_metadata_() const
     json metadata;
     metadata["attributes"]["acquire"] =
       external_metadata_json_.empty() ? ""
-                                      : json::parse(external_metadata_json_);
+                                      : json::parse(external_metadata_json_,
+                                                    nullptr, // callback
+                                                    true,    // allow exceptions
+                                                    true     // ignore comments
+                                        );
 
     auto path = (dataset_root_ / "meta" / "root.group.json").string();
     common::write_string(path, metadata.dump(4));

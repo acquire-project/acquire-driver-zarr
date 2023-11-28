@@ -16,6 +16,7 @@ else ()
     #
     set(tests
             list-devices
+            external-metadata-with-whitespace-ok
             get-meta
             unit-tests
             multiscale-with-trivial-tile-size
