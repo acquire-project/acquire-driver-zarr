@@ -18,8 +18,12 @@ validate_json(const char* str, size_t nbytes)
         return;
     }
 
-    std::string metadata{ str, nbytes - 1 }; // don't include null terminator
-    json::parse(metadata);                   // throws if invalid
+    json::parse(str,
+                str + nbytes,
+                nullptr, // callback
+                true,    // allow exceptions
+                true     // ignore comments
+    );
 }
 
 /// \brief Get the filename from a StorageProperties as fs::path.
