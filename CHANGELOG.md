@@ -5,13 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.1.6](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.5...v0.1.6) - 2023-11-28
 
 ### Fixed
 
 - A bug where trailing whitespace on otherwise valid JSON would fail to validate.
 
-## [0.1.5](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.3...v0.1.4) - 2023-11-20
+## [0.1.5](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.4...v0.1.5) - 2023-11-20
 
 ### Added
 
