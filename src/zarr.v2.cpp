@@ -3,7 +3,6 @@
 
 #include "json.hpp"
 
-typedef<unknown> auto;
 namespace zarr = acquire::sink::zarr;
 
 namespace {
