@@ -3,6 +3,7 @@
 
 #include "json.hpp"
 
+typedef<unknown> auto;
 namespace zarr = acquire::sink::zarr;
 
 namespace {
@@ -127,7 +128,12 @@ zarr::ZarrV2::write_external_metadata_() const
     using json = nlohmann::json;
 
     std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
-    common::write_string(zattrs_path, external_metadata_json_);
+    auto external_metadata = json::parse(external_metadata_json_,
+                                         nullptr, // callback
+                                         true,    // allow exceptions
+                                         true     // ignore comments
+    );
+    common::write_string(zattrs_path, external_metadata.dump());
 }
 
 void
