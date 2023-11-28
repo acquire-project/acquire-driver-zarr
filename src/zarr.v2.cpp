@@ -127,12 +127,15 @@ zarr::ZarrV2::write_external_metadata_() const
     using json = nlohmann::json;
 
     std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
-    auto external_metadata = json::parse(external_metadata_json_,
-                                         nullptr, // callback
-                                         true,    // allow exceptions
-                                         true     // ignore comments
-    );
-    common::write_string(zattrs_path, external_metadata.dump());
+    std::string external_metadata = external_metadata_json_.empty()
+                                      ? ""
+                                      : json::parse(external_metadata_json_,
+                                                    nullptr, // callback
+                                                    true,    // allow exceptions
+                                                    true     // ignore comments
+                                                    )
+                                          .dump();
+    common::write_string(zattrs_path, external_metadata);
 }
 
 void
