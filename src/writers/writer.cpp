@@ -19,7 +19,7 @@ zarr::FileCreator::create_files(const fs::path& base_dir,
                                 int n_c,
                                 int n_y,
                                 int n_x,
-                                std::vector<file>& files) noexcept
+                                std::vector<file>& files)
 {
     base_dir_ = base_dir;
 
@@ -31,13 +31,8 @@ zarr::FileCreator::create_files(const fs::path& base_dir,
         return false;
     }
 
-    if (!create_c_dirs_(n_c)) {
-        return false;
-    }
-
-    if (!create_y_dirs_(n_c, n_y)) {
-        return false;
-    }
+    CHECK(create_c_dirs_(n_c));
+    CHECK(create_y_dirs_(n_c, n_y));
 
     const auto n_files = n_c * n_y * n_x;
 
@@ -95,7 +90,7 @@ zarr::FileCreator::create_files(const fs::path& base_dir,
 }
 
 bool
-zarr::FileCreator::create_c_dirs_(int n_c) noexcept
+zarr::FileCreator::create_c_dirs_(int n_c)
 {
     std::latch latch(n_c);
     std::atomic<bool> failure{ false };
@@ -136,7 +131,7 @@ zarr::FileCreator::create_c_dirs_(int n_c) noexcept
 }
 
 bool
-zarr::FileCreator::create_y_dirs_(int n_c, int n_y) noexcept
+zarr::FileCreator::create_y_dirs_(int n_c, int n_y)
 {
     std::latch latch(n_c * n_y);
     std::atomic<bool> failure{ false };
@@ -254,7 +249,7 @@ zarr::Writer::write(const VideoFrame* frame)
 }
 
 void
-zarr::Writer::finalize() noexcept
+zarr::Writer::finalize()
 {
     finalize_chunks_();
     if (bytes_to_flush_ > 0) {

@@ -40,7 +40,7 @@ struct ZarrV2Writer final : public Writer
     ~ZarrV2Writer() override = default;
 
   private:
-    void flush_() noexcept override;
+    void flush_() override;
 };
 } // namespace acquire::sink::zarr
 

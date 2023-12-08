@@ -34,7 +34,7 @@ zarr::ZarrV2Writer::ZarrV2Writer(
 }
 
 void
-zarr::ZarrV2Writer::flush_() noexcept
+zarr::ZarrV2Writer::flush_()
 {
     if (bytes_to_flush_ == 0) {
         return;

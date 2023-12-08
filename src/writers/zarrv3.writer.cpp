@@ -60,7 +60,7 @@ zarr::ZarrV3Writer::shards_per_frame_() const
 }
 
 void
-zarr::ZarrV3Writer::flush_() noexcept
+zarr::ZarrV3Writer::flush_()
 {
     if (bytes_to_flush_ == 0) {
         return;
