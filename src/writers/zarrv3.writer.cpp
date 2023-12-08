@@ -70,10 +70,10 @@ zarr::ZarrV3Writer::flush_()
     const auto bytes_per_tile =
       tile_dims_.cols * tile_dims_.rows * bytes_per_px;
 
-    if (bytes_to_flush_ % bytes_per_tile != 0) {
-        LOGE("Expected bytes to flush to be a multiple of the "
-             "number of bytes per tile.");
-    }
+    EXPECT(bytes_per_tile != 0, "Expected bytes per tile to be non-zero.");
+    EXPECT(bytes_to_flush_ % bytes_per_tile != 0,
+           "Expected bytes to flush to be a multiple of the number of bytes "
+           "per tile.");
 
     // create shard files if necessary
     if (files_.empty() && !file_creator_.create_files(
