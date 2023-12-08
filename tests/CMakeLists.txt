@@ -18,6 +18,7 @@ else ()
             list-devices
             external-metadata-with-whitespace-ok
             get-meta
+            restart-stopped-zarr-resets-threadpool
             unit-tests
             multiscale-with-trivial-tile-size
             no-set-chunking
