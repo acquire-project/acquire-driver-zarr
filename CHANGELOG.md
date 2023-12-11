@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Fixed
+
+- Removes `noexcept` specifier from various methods that don't need it and whose implementations may throw exceptions.
+
 ### Changed
 
 - The thread pool starts on `Zarr::start()` and shuts down on `Zarr::stop()`.

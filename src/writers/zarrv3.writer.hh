@@ -49,7 +49,7 @@ struct ZarrV3Writer final : public Writer
     uint16_t chunks_per_shard_() const;
     uint16_t shards_per_frame_() const;
 
-    void flush_() noexcept override;
+    void flush_() override;
 };
 } // namespace acquire::sink::zarr
 

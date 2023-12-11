@@ -29,14 +29,14 @@ struct FileCreator
                                     int n_c,
                                     int n_y,
                                     int n_x,
-                                    std::vector<file>& files) noexcept;
+                                    std::vector<file>& files);
 
   private:
     fs::path base_dir_;
     std::shared_ptr<common::ThreadPool> thread_pool_;
 
-    bool create_c_dirs_(int n_c) noexcept;
-    bool create_y_dirs_(int n_c, int n_y) noexcept;
+    bool create_c_dirs_(int n_c);
+    bool create_y_dirs_(int n_c, int n_y);
 };
 
 struct Writer
@@ -59,7 +59,7 @@ struct Writer
     virtual ~Writer() noexcept = default;
 
     [[nodiscard]] bool write(const VideoFrame* frame);
-    void finalize() noexcept;
+    void finalize();
 
     uint32_t frames_written() const noexcept;
 
@@ -97,7 +97,7 @@ struct Writer
     void finalize_chunks_() noexcept;
     void compress_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept;
-    virtual void flush_() noexcept = 0;
+    virtual void flush_() = 0;
 
     uint32_t tiles_per_frame_() const;
 
