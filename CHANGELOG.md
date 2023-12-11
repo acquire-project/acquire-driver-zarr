@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Removes `noexcept` specifier from various methods that don't need it and whose implementations may throw exceptions.
 
+### Changed
+
+- The thread pool starts on `Zarr::start()` and shuts down on `Zarr::stop()`.
+
 ## [0.1.6](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.5...v0.1.6) - 2023-11-28
 
 ### Fixed
