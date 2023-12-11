@@ -97,7 +97,7 @@ configure(struct Storage* zarr)
 }
 
 void
-acquire_one_frame(struct Storage* zarr)
+start_write_stop(struct Storage* zarr)
 {
     CHECK(DeviceState_Running == zarr->start(zarr));
     struct ImageShape shape = {
@@ -119,14 +119,19 @@ acquire_one_frame(struct Storage* zarr)
 
     auto* frame = (struct VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
     frame->bytes_of_frame = sizeof(*frame) + 64 * 48;
-    
+
     frame->shape = shape;
     frame->frame_id = 0;
     frame->hardware_frame_id = 0;
     frame->timestamps = { 0, 0 };
 
+    // if the thread pool is not available, this will fail
     size_t nbytes{ frame->bytes_of_frame };
-    zarr->append(zarr, frame, &nbytes);
+    CHECK(DeviceState_Running == zarr->append(zarr, frame, &nbytes));
+    CHECK(nbytes == 64 * 48 + sizeof(*frame));
+
+    CHECK(DeviceState_Running == zarr->append(zarr, frame, &nbytes));
+    CHECK(nbytes == 64 * 48 + sizeof(*frame));
 
     free(frame);
 
@@ -145,8 +150,8 @@ main()
 
         configure(zarr);
 
-        acquire_one_frame(zarr);
-        acquire_one_frame(zarr); // thread pool should reset here
+        start_write_stop(zarr);
+        start_write_stop(zarr); // thread pool should reset here
 
         lib_close(&lib);
         return 0;
