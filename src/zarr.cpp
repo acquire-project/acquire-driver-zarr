@@ -417,6 +417,10 @@ zarr::Zarr::start()
     write_all_array_metadata_();
     write_external_metadata_();
 
+    thread_pool_ = std::make_shared<common::ThreadPool>(
+      std::thread::hardware_concurrency(),
+      [this](const std::string& err) { this->set_error(err); });
+
     error_ = false;
 }
 
@@ -438,7 +442,10 @@ zarr::Zarr::stop() noexcept
             }
             writers_.clear();
 
+            // call await_stop() before destroying to give jobs a chance to
+            // finish
             thread_pool_->await_stop();
+            thread_pool_ = nullptr;
 
             is_ok = 1;
         } catch (const std::exception& exc) {
@@ -548,9 +555,7 @@ zarr::Zarr::Zarr()
       .destroy = ::zarr_destroy,
       .reserve_image_shape = ::zarr_reserve_image_shape,
   }
-  , thread_pool_{ std::make_shared<common::ThreadPool>(
-      std::thread::hardware_concurrency(),
-      [this](const std::string& err) { this->set_error(err); }) }
+  , thread_pool_{ nullptr }
   , pixel_scale_um_{ 1, 1 }
   , planes_per_chunk_{ 0 }
   , enable_multiscale_{ false }
