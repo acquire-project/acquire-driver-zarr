@@ -45,7 +45,7 @@ zarr::ZarrV2Writer::flush_()
       tile_dims_.cols * tile_dims_.rows * bytes_per_px;
 
     EXPECT(bytes_per_tile != 0, "Expected bytes per tile to be non-zero.");
-    EXPECT(bytes_to_flush_ % bytes_per_tile != 0,
+    EXPECT(bytes_to_flush_ % bytes_per_tile == 0,
            "Expected bytes to flush to be a multiple of the number of bytes "
            "per tile.");
 
