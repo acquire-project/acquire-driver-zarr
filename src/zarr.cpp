@@ -353,10 +353,13 @@ zarr::Zarr::set(const StorageProperties* props)
 void
 zarr::Zarr::get(StorageProperties* props) const
 {
-    CHECK(storage_properties_set_filename(
-      props, dataset_root_.string().c_str(), dataset_root_.string().size()));
+    CHECK(storage_properties_set_filename(props,
+                                          dataset_root_.string().c_str(),
+                                          dataset_root_.string().size() + 1));
     CHECK(storage_properties_set_external_metadata(
-      props, external_metadata_json_.c_str(), external_metadata_json_.size()));
+      props,
+      external_metadata_json_.c_str(),
+      external_metadata_json_.size() + 1));
     props->pixel_scale_um = pixel_scale_um_;
 
     if (!image_tile_shapes_.empty()) {

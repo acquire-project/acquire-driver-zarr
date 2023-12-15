@@ -88,6 +88,15 @@ zarr::ZarrV3::set(const StorageProperties* props)
 }
 
 void
+zarr::ZarrV3::get(StorageProperties* props) const
+{
+    Zarr::get(props);
+    props->shard_dims_chunks.width = shard_dims_.at(0).cols;
+    props->shard_dims_chunks.height = shard_dims_.at(0).rows;
+    props->shard_dims_chunks.planes = 1;
+}
+
+void
 zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
 {
     Zarr::get_meta(meta);

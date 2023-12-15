@@ -17,6 +17,7 @@ else ()
     set(tests
             list-devices
             external-metadata-with-whitespace-ok
+            get
             get-meta
             restart-stopped-zarr-resets-threadpool
             unit-tests

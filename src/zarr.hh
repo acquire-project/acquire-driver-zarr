@@ -22,7 +22,7 @@ namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
 
-struct Zarr: public Storage
+struct Zarr : public Storage
 {
   public:
     Zarr();
@@ -31,7 +31,7 @@ struct Zarr: public Storage
 
     /// Storage interface
     virtual void set(const StorageProperties* props);
-    void get(StorageProperties* props) const;
+    virtual void get(StorageProperties* props) const;
     virtual void get_meta(StoragePropertyMetadata* meta) const;
     void start();
     int stop() noexcept;
