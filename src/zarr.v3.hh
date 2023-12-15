@@ -22,7 +22,7 @@ struct ZarrV3 final : public Zarr
     using ShardingMeta =
       StoragePropertyMetadata::storage_property_metadata_sharding_s;
 
-    std::vector<ImageDims> shard_dims_;
+    std::vector<ImageDims> shard_dims_chunks_;
 
     /// Setup
     void set_sharding(const ShardingProps& props, const ShardingMeta& meta);

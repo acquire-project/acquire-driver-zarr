@@ -34,13 +34,14 @@ void
 zarr::ZarrV3::set_sharding(const ShardingProps& props, const ShardingMeta& meta)
 {
     // we can't validate and convert until we know the image shape and corrected
-    // tile shape (see reserve_image_shape) so let's just store the raw values
-    // for now
-    ImageDims shard_dims = {
-        .cols = props.width,
-        .rows = props.height,
-    };
-    shard_dims_.push_back(shard_dims);
+    // tile shape (see reserve_image_shape) so we need to store the raw (i.e.,
+    // per chunk) values.
+    shard_dims_chunks_.clear();
+    shard_dims_chunks_.emplace_back(
+      std::clamp(
+        props.width, (uint32_t)meta.width.low, (uint32_t)meta.width.high),
+      std::clamp(
+        props.height, (uint32_t)meta.height.low, (uint32_t)meta.height.high));
 }
 
 void
@@ -51,11 +52,16 @@ zarr::ZarrV3::allocate_writers_()
     for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
         const auto& frame_dims = image_tile_shapes_.at(i).first;
         const auto& tile_dims = image_tile_shapes_.at(i).second;
+        const auto& shard_dims_chunks = shard_dims_chunks_.at(i);
+        ImageDims shard_dims{
+            .cols = shard_dims_chunks.cols * tile_dims.cols,
+            .rows = shard_dims_chunks.rows * tile_dims.rows,
+        };
 
         if (blosc_compression_params_.has_value()) {
             writers_.push_back(std::make_shared<ZarrV3Writer>(
               frame_dims,
-              shard_dims_.at(i),
+              shard_dims,
               tile_dims,
               planes_per_chunk_,
               (get_data_directory_() / std::to_string(i)).string(),
@@ -64,7 +70,7 @@ zarr::ZarrV3::allocate_writers_()
         } else {
             writers_.push_back(std::make_shared<ZarrV3Writer>(
               frame_dims,
-              shard_dims_.at(i),
+              shard_dims,
               tile_dims,
               planes_per_chunk_,
               (get_data_directory_() / std::to_string(i)).string(),
@@ -91,8 +97,14 @@ void
 zarr::ZarrV3::get(StorageProperties* props) const
 {
     Zarr::get(props);
-    props->shard_dims_chunks.width = shard_dims_.at(0).cols;
-    props->shard_dims_chunks.height = shard_dims_.at(0).rows;
+    if (shard_dims_chunks_.empty()) {
+        props->shard_dims_chunks.width = 1;
+        props->shard_dims_chunks.height = 1;
+    } else {
+        const auto& shard_dims_chunks = shard_dims_chunks_.at(0);
+        props->shard_dims_chunks.width = shard_dims_chunks.cols;
+        props->shard_dims_chunks.height = shard_dims_chunks.rows;
+    }
     props->shard_dims_chunks.planes = 1;
 }
 
@@ -165,29 +177,21 @@ zarr::ZarrV3::reserve_image_shape(const ImageShape* shape)
         storage_properties_destroy(&props);
     }
 
-    auto& shard_dims = shard_dims_.at(0);
+    const auto& shard_dims_chunks = shard_dims_chunks_.at(0);
 
     StoragePropertyMetadata meta = { 0 };
     get_meta(&meta);
 
-    shard_dims = {
-        .cols = std::clamp(shard_dims.cols,
-                           (uint32_t)meta.shard_dims_chunks.width.low,
-                           (uint32_t)meta.shard_dims_chunks.width.high) *
-                tile_shape.cols,
-        .rows = std::clamp(shard_dims.rows,
-                           (uint32_t)meta.shard_dims_chunks.height.low,
-                           (uint32_t)meta.shard_dims_chunks.height.high) *
-                tile_shape.rows,
-    };
-
-    EXPECT(shard_dims.cols <= image_shape.cols,
+    const auto shard_width_px = shard_dims_chunks.cols * tile_shape.cols;
+    EXPECT(shard_width_px <= image_shape.cols,
            "Shard width %d exceeds frame width %d",
-           shard_dims.cols,
+           shard_width_px,
            image_shape.cols);
-    EXPECT(shard_dims.rows <= image_shape.rows,
+
+    const auto shard_height_px = shard_dims_chunks.rows * tile_shape.rows;
+    EXPECT(shard_height_px <= image_shape.rows,
            "Shard height %d exceeds frame height %d",
-           shard_dims.rows,
+           shard_height_px,
            image_shape.rows);
 
     allocate_writers_();
@@ -205,7 +209,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
 
     const ImageDims& image_dims = image_tile_shapes_.at(level).first;
     const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
-    const ImageDims& shard_dims = shard_dims_.at(level);
+    const ImageDims& shard_dims = shard_dims_chunks_.at(level);
 
     const auto frame_count = writers_.at(level)->frames_written();
     const auto frames_per_chunk = std::min(frame_count, planes_per_chunk_);
@@ -260,10 +264,10 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
         json::object({
           { "chunks_per_shard",
             json::array({
-              1,                                // t
-              1,                                // c
-              shard_dims.rows / tile_dims.rows, // y
-              shard_dims.cols / tile_dims.cols, // x
+              1,               // t
+              1,               // c
+              shard_dims.rows, // y
+              shard_dims.cols, // x
             }) },
         }) },
     });
