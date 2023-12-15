@@ -197,13 +197,23 @@ int
 main()
 {
     auto runtime = acquire_init(reporter);
-    configure(runtime);
 
-    for (auto i = 0; i < 2; ++i) {
-        acquire(runtime);
-        validate(runtime);
+    int retval = 1;
+    try {
+        configure(runtime);
+
+        for (auto i = 0; i < 2; ++i) {
+            acquire(runtime);
+            validate(runtime);
+        }
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& e) {
+        ERR("Exception: %s", e.what());
+    } catch (...) {
+        ERR("Unknown exception");
     }
 
     acquire_shutdown(runtime);
-    LOG("Done (OK)");
+    return retval;
 }
