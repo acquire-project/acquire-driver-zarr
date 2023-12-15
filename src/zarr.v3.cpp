@@ -37,11 +37,12 @@ zarr::ZarrV3::set_sharding(const ShardingProps& props, const ShardingMeta& meta)
     // tile shape (see reserve_image_shape) so we need to store the raw (i.e.,
     // per chunk) values.
     shard_dims_chunks_.clear();
-    shard_dims_chunks_.emplace_back(
-      std::clamp(
-        props.width, (uint32_t)meta.width.low, (uint32_t)meta.width.high),
-      std::clamp(
-        props.height, (uint32_t)meta.height.low, (uint32_t)meta.height.high));
+    shard_dims_chunks_.push_back({ std::clamp(props.width,
+                                              (uint32_t)meta.width.low,
+                                              (uint32_t)meta.width.high),
+                                   std::clamp(props.height,
+                                              (uint32_t)meta.height.low,
+                                              (uint32_t)meta.height.high) });
 }
 
 void

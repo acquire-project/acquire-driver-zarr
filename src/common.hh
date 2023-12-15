@@ -38,12 +38,6 @@ struct ImageDims
     uint32_t cols;
     uint32_t rows;
 
-    ImageDims(uint32_t cols, uint32_t rows) noexcept
-      : cols{ cols }
-      , rows{ rows }
-    {
-    }
-
     friend bool operator<=(const ImageDims& lhs, const ImageDims& rhs) noexcept
     {
         return (lhs.cols <= rhs.cols) && (lhs.rows <= rhs.rows);
