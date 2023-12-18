@@ -21,7 +21,7 @@ using json = nlohmann::json;
 /// Helper for passing size static strings as function args.
 /// For a function: `f(char*,size_t)` use `f(SIZED("hello"))`.
 /// Expands to `f("hello",5)`.
-#define SIZED(str) str, sizeof(str) - 1
+#define SIZED(str) str, sizeof(str)
 
 #define L (aq_logger)
 #define LOG(...) L(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
