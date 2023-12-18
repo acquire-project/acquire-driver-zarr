@@ -352,11 +352,10 @@ zarr::Zarr::set(const StorageProperties* props)
 void
 zarr::Zarr::get(StorageProperties* props) const
 {
-    if (!dataset_root_.empty()) {
-        CHECK(
-          storage_properties_set_filename(props,
-                                          dataset_root_.string().c_str(),
-                                          dataset_root_.string().size() + 1));
+    if (const auto dataset_root = dataset_root_.string();
+        !dataset_root.empty()) {
+        CHECK(storage_properties_set_filename(
+          props, dataset_root.c_str(), dataset_root.size() + 1));
     }
     if (!external_metadata_json_.empty()) {
         CHECK(storage_properties_set_external_metadata(
