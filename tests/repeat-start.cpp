@@ -113,8 +113,10 @@ validate(AcquireRuntime* runtime)
     AcquireProperties props = { 0 };
     OK(acquire_get_configuration(runtime, &props));
 
-    const fs::path test_path(TEST ".zarr");
-    CHECK(fs::is_directory(test_path));
+    const fs::path test_path(props.video[0].storage.settings.filename.str);
+    EXPECT(fs::is_directory(test_path),
+           "Expected %s to be a directory",
+           test_path.string().c_str());
 
     // check the zarr.json metadata file
     fs::path metadata_path = test_path / "zarr.json";
