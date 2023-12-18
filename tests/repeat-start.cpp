@@ -82,11 +82,11 @@ configure(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("ZarrV3") + 1,
+                                SIZED("ZarrV3"),
                                 &props.video[0].storage.identifier));
     CHECK(storage_properties_init(&props.video[0].storage.settings,
                                   0,
-                                  SIZED(TEST ".zarr") + 1,
+                                  SIZED(TEST ".zarr"),
                                   nullptr,
                                   0,
                                   { 1, 1 }));
@@ -110,7 +110,7 @@ acquire(AcquireRuntime* runtime)
 void
 validate(AcquireRuntime* runtime)
 {
-    AcquireProperties props;
+    AcquireProperties props = { 0 };
     OK(acquire_get_configuration(runtime, &props));
 
     const fs::path test_path(TEST ".zarr");
