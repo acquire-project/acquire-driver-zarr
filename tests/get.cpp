@@ -1,6 +1,5 @@
-/// @brief Check that Zarr devices implement the get_meta function.
-/// Also check that both chunking and multiscale are marked as supported and
-/// that the metadata for each is correct.
+/// @file get.cpp
+/// Check that Zarr devices correctly implement the `get` Storage API function.
 
 #include "platform.h"
 #include "logger.h"
