@@ -18,7 +18,7 @@
 /// Helper for passing size static strings as function args.
 /// For a function: `f(char*,size_t)` use `f(SIZED("hello"))`.
 /// Expands to `f("hello",5)`.
-#define SIZED(str) str, strlen(str) + 1
+#define SIZED(str) str, sizeof(str)
 
 #define L aq_logger
 #define LOG(...) L(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
@@ -92,7 +92,7 @@ main()
                 storage_properties_init(&props,
                                         13,
                                         SIZED(TEST ".zarr"),
-                                        SIZED(R"({"foo": "bar"})"),
+                                        SIZED(R"({"foo":"bar"})"),
                                         { 1, 1 });
                 props.chunk_dims_px = {
                     .width = 64,
@@ -113,7 +113,7 @@ main()
 
                 CHECK(strcmp(props.filename.str, TEST ".zarr") == 0);
                 CHECK(strcmp(props.external_metadata_json.str,
-                             R"({"foo": "bar"})") == 0);
+                             R"({"foo":"bar"})") == 0);
 
                 CHECK(props.first_frame_id == 0); // this is ignored
 
