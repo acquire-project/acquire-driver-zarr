@@ -17,8 +17,10 @@ else ()
     set(tests
             list-devices
             external-metadata-with-whitespace-ok
+            get
             get-meta
             restart-stopped-zarr-resets-threadpool
+            repeat-start
             unit-tests
             multiscale-with-trivial-tile-size
             no-set-chunking

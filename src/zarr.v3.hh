@@ -13,6 +13,7 @@ struct ZarrV3 final : public Zarr
 
     /// Storage interface
     void set(const StorageProperties* props) override;
+    void get(StorageProperties* props) const override;
     void get_meta(StoragePropertyMetadata* meta) const override;
     void reserve_image_shape(const ImageShape* shape) override;
 
@@ -21,7 +22,7 @@ struct ZarrV3 final : public Zarr
     using ShardingMeta =
       StoragePropertyMetadata::storage_property_metadata_sharding_s;
 
-    std::vector<ImageDims> shard_dims_;
+    std::vector<ImageDims> shard_dims_chunks_;
 
     /// Setup
     void set_sharding(const ShardingProps& props, const ShardingMeta& meta);

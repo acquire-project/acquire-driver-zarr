@@ -127,12 +127,11 @@ DeviceState
 zarr_start(Storage* self_) noexcept
 {
     DeviceState state{ DeviceState_AwaitingConfiguration };
-
     try {
         CHECK(self_);
         auto* self = (zarr::Zarr*)self_;
         self->start();
-        state = DeviceState_Running;
+        state = self->state;
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
     } catch (...) {
@@ -145,20 +144,18 @@ zarr_start(Storage* self_) noexcept
 DeviceState
 zarr_append(Storage* self_, const VideoFrame* frames, size_t* nbytes) noexcept
 {
-    DeviceState state;
+    DeviceState state{ DeviceState_AwaitingConfiguration };
     try {
         CHECK(self_);
         auto* self = (zarr::Zarr*)self_;
         *nbytes = self->append(frames, *nbytes);
-        state = DeviceState_Running;
+        state = self->state;
     } catch (const std::exception& exc) {
         *nbytes = 0;
         LOGE("Exception: %s\n", exc.what());
-        state = DeviceState_AwaitingConfiguration;
     } catch (...) {
         *nbytes = 0;
         LOGE("Exception: (unknown)");
-        state = DeviceState_AwaitingConfiguration;
     }
 
     return state;
@@ -172,8 +169,8 @@ zarr_stop(Storage* self_) noexcept
     try {
         CHECK(self_);
         auto* self = (zarr::Zarr*)self_;
-        CHECK(self->stop());
-        state = DeviceState_Armed;
+        CHECK(self->stop()); // state is set to DeviceState_Armed here
+        state = self->state;
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
     } catch (...) {
@@ -320,6 +317,8 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
 void
 zarr::Zarr::set(const StorageProperties* props)
 {
+    EXPECT(state != DeviceState_Running,
+           "Cannot set properties while running.");
     CHECK(props);
 
     StoragePropertyMetadata meta{};
@@ -353,11 +352,18 @@ zarr::Zarr::set(const StorageProperties* props)
 void
 zarr::Zarr::get(StorageProperties* props) const
 {
-    CHECK(storage_properties_set_filename(
-      props, dataset_root_.string().c_str(), dataset_root_.string().size()));
-    CHECK(storage_properties_set_external_metadata(
-      props, external_metadata_json_.c_str(), external_metadata_json_.size()));
-    props->pixel_scale_um = pixel_scale_um_;
+    if (const auto dataset_root = dataset_root_.string();
+        !dataset_root.empty()) {
+        CHECK(storage_properties_set_filename(
+          props, dataset_root.c_str(), dataset_root.size() + 1));
+    }
+    if (!external_metadata_json_.empty()) {
+        CHECK(storage_properties_set_external_metadata(
+          props,
+          external_metadata_json_.c_str(),
+          external_metadata_json_.size() + 1));
+        props->pixel_scale_um = pixel_scale_um_;
+    }
 
     if (!image_tile_shapes_.empty()) {
         props->chunk_dims_px.width = image_tile_shapes_.at(0).second.cols;
@@ -421,6 +427,7 @@ zarr::Zarr::start()
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
 
+    state = DeviceState_Running;
     error_ = false;
 }
 
@@ -440,12 +447,25 @@ zarr::Zarr::stop() noexcept
             for (auto& writer : writers_) {
                 writer->finalize();
             }
-            writers_.clear();
 
             // call await_stop() before destroying to give jobs a chance to
             // finish
             thread_pool_->await_stop();
             thread_pool_ = nullptr;
+
+            // don't clear before all working threads have shut down
+            writers_.clear();
+
+            // should be empty, but just in case
+            for (auto& [_, frame] : scaled_frames_) {
+                if (frame.has_value() && frame.value()) {
+                    free(frame.value());
+                }
+            }
+            scaled_frames_.clear();
+
+            error_ = false;
+            error_msg_.clear();
 
             is_ok = 1;
         } catch (const std::exception& exc) {
@@ -461,6 +481,7 @@ zarr::Zarr::stop() noexcept
 size_t
 zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 {
+    CHECK(DeviceState_Running == state);
     EXPECT(!error_, "%s", error_msg_.c_str());
 
     if (0 == nbytes) {
@@ -488,6 +509,9 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 void
 zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 {
+    EXPECT(state == DeviceState_Running,
+           "Can only reserve image shape while running.");
+
     // `shape` should be verified nonnull in storage_reserve_image_shape, but
     // let's check anyway
     CHECK(shape);
