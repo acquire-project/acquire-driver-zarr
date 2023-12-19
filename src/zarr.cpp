@@ -453,7 +453,19 @@ zarr::Zarr::stop() noexcept
             thread_pool_->await_stop();
             thread_pool_ = nullptr;
 
-            reset_state_();
+            // don't clear before all working threads have shut down
+            writers_.clear();
+
+            // should be empty, but just in case
+            for (auto& [_, frame] : scaled_frames_) {
+                if (frame.has_value() && frame.value()) {
+                    free(frame.value());
+                }
+            }
+            scaled_frames_.clear();
+
+            error_ = false;
+            error_msg_.clear();
 
             is_ok = 1;
         } catch (const std::exception& exc) {
@@ -597,24 +609,6 @@ zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
       props.planes, (uint32_t)meta.planes.low, (uint32_t)meta.planes.high);
 
     CHECK(planes_per_chunk_ > 0);
-}
-
-void
-zarr::Zarr::reset_state_()
-{
-    // reset state variables
-    writers_.clear();
-
-    // should be empty, but just in case
-    for (auto& [_, frame] : scaled_frames_) {
-        if (frame.has_value() && frame.value()) {
-            free(frame.value());
-        }
-    }
-    scaled_frames_.clear();
-
-    error_ = false;
-    error_msg_.clear();
 }
 
 void

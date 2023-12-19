@@ -76,7 +76,6 @@ struct Zarr : public Storage
     /// Setup
     void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
     virtual void allocate_writers_() = 0;
-    void reset_state_();
 
     /// Metadata
     void write_all_array_metadata_() const;
