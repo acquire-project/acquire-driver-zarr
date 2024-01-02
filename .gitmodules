@@ -1,12 +1,3 @@
-[submodule "tests/acquire-video-runtime"]
-	path = tests/acquire-video-runtime
-	url = ../acquire-video-runtime/
-	branch = main
-[submodule "tests/acquire-driver-common"]
-	path = tests/acquire-driver-common
-	url = ../acquire-driver-common.git
-	branch = main
-[submodule "src/acquire-core-libs"]
-	path = src/acquire-core-libs
-	url = ../acquire-core-libs.git
-	branch = main
+[submodule "acquire-common"]
+	path = acquire-common
+	url = git@github.com:aliddell/acquire-common.git
