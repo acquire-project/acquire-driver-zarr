@@ -2,8 +2,8 @@ if (${NOTEST})
     message(STATUS "Skipping test targets")
 else ()
     set(NOTEST "TRUE")
-    aq_require(acquire-driver-common)
-    aq_require(acquire-video-runtime)
+    add_subdirectory(../acquire-common/acquire-driver-common ${CMAKE_CURRENT_BINARY_DIR}/acquire-driver-common)
+    add_subdirectory(../acquire-common/acquire-video-runtime ${CMAKE_CURRENT_BINARY_DIR}/acquire-video-runtime)
     set(NOTEST "FALSE")
 
     #
