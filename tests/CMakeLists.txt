@@ -33,7 +33,7 @@ else ()
             #            write-zarr-raw-with-ragged-tiling
             #            write-zarr-v3-compressed
             #            write-zarr-v3-raw
-            #            write-zarr-with-defaults
+            write-zarr-with-defaults
             #            write-zarr-with-lz4-compression
             #            write-zarr-with-zstd-compression
     )
