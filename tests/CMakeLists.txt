@@ -21,7 +21,7 @@ else ()
             get-meta
             restart-stopped-zarr-resets-threadpool
             repeat-start
-            #            unit-tests
+            unit-tests
             #            multiscale-with-trivial-tile-size
             #            no-set-chunking
             #            write-zarr-compressed-multiscale
