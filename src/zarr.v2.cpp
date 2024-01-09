@@ -34,7 +34,7 @@ zarr::ZarrV2::get_meta(StoragePropertyMetadata* meta) const
 {
     Zarr::get_meta(meta);
 
-    meta->shard_dims_chunks = { 0 };
+    meta->shard_size_chunks = { 0 };
     meta->multiscale = {
         .is_supported = 1,
     };

@@ -18,14 +18,14 @@ struct ZarrV3 final : public Zarr
     void reserve_image_shape(const ImageShape* shape) override;
 
   private:
-    using ShardingProps = StorageProperties::storage_properties_sharding_s;
+    using ShardSize = StorageProperties::storage_properties_shard_size_s;
     using ShardingMeta =
       StoragePropertyMetadata::storage_property_metadata_sharding_s;
 
-    std::vector<ImageDims> shard_dims_chunks_;
+    std::vector<ShardSize> shard_size_chunks_;
 
     /// Setup
-    void set_sharding(const ShardingProps& props, const ShardingMeta& meta);
+    void set_sharding(const ShardSize& size, const ShardingMeta& meta);
     void allocate_writers_() override;
 
     /// Metadata

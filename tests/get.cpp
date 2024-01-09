@@ -93,16 +93,10 @@ main()
                                         SIZED(TEST ".zarr"),
                                         SIZED(R"({"foo":"bar"})"),
                                         { 1, 1 });
-                props.chunk_dims_px = {
-                    .width = 64,
-                    .height = 48,
-                    .planes = 6,
-                };
-                props.shard_dims_chunks = {
-                    .width = 3,
-                    .height = 2,
-                    .planes = 1,
-                };
+                CHECK(storage_properties_set_chunking_props(
+                  &props, 64, 48, 0, 0, 6, AppendDimension_t));
+                CHECK(
+                  storage_properties_set_sharding_props(&props, 3, 2, 0, 1, 1));
                 props.enable_multiscale = true;
 
                 CHECK(Device_Ok == storage_set(storage, &props));
@@ -116,19 +110,24 @@ main()
 
                 CHECK(props.first_frame_id == 0); // this is ignored
 
-                CHECK(props.chunk_dims_px.width == 64);
-                CHECK(props.chunk_dims_px.height == 48);
-                // 32 is the minimum value for planes
-                CHECK(props.chunk_dims_px.planes == 32);
+                CHECK(props.chunk_size.x == 64);
+                CHECK(props.chunk_size.y == 48);
+                CHECK(props.chunk_size.z == 0);
+                CHECK(props.chunk_size.c == 0);
+                CHECK(props.chunk_size.t == 6);
 
                 if (name.starts_with("ZarrV3")) {
-                    CHECK(props.shard_dims_chunks.width == 3);
-                    CHECK(props.shard_dims_chunks.height == 2);
-                    CHECK(props.shard_dims_chunks.planes == 1);
+                    CHECK(props.shard_size_chunks.x == 3);
+                    CHECK(props.shard_size_chunks.y == 2);
+                    CHECK(props.shard_size_chunks.z == 0);
+                    CHECK(props.shard_size_chunks.c == 1);
+                    CHECK(props.shard_size_chunks.t == 1);
                 } else {
-                    CHECK(props.shard_dims_chunks.width == 0);
-                    CHECK(props.shard_dims_chunks.height == 0);
-                    CHECK(props.shard_dims_chunks.planes == 0);
+                    CHECK(props.shard_size_chunks.x == 0);
+                    CHECK(props.shard_size_chunks.y == 0);
+                    CHECK(props.shard_size_chunks.z == 0);
+                    CHECK(props.shard_size_chunks.c == 0);
+                    CHECK(props.shard_size_chunks.t == 0);
                 }
 
                 CHECK(props.enable_multiscale == !name.starts_with("ZarrV3"));

@@ -123,7 +123,10 @@ acquire(AcquireRuntime* runtime, const char* filename)
     storage_properties_set_chunking_props(&props.video[0].storage.settings,
                                           frame_width,
                                           frame_height,
-                                          frames_per_chunk);
+                                          0,
+                                          0,
+                                          frames_per_chunk,
+                                          AppendDimension_t);
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u16;

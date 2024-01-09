@@ -31,18 +31,13 @@ zarr::ZarrV3::ZarrV3(BloscCompressionParams&& compression_params)
 }
 
 void
-zarr::ZarrV3::set_sharding(const ShardingProps& props, const ShardingMeta& meta)
+zarr::ZarrV3::set_sharding(const ShardSize& size, const ShardingMeta& meta)
 {
     // we can't validate and convert until we know the image shape and corrected
     // tile shape (see reserve_image_shape) so we need to store the raw (i.e.,
     // per chunk) values.
-    shard_dims_chunks_.clear();
-    shard_dims_chunks_.push_back({ std::clamp(props.width,
-                                              (uint32_t)meta.width.low,
-                                              (uint32_t)meta.width.high),
-                                   std::clamp(props.height,
-                                              (uint32_t)meta.height.low,
-                                              (uint32_t)meta.height.high) });
+    shard_size_chunks_.clear();
+    shard_size_chunks_.push_back(size);
 }
 
 void
@@ -53,10 +48,10 @@ zarr::ZarrV3::allocate_writers_()
     for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
         const auto& frame_dims = image_tile_shapes_.at(i).first;
         const auto& tile_dims = image_tile_shapes_.at(i).second;
-        const auto& shard_dims_chunks = shard_dims_chunks_.at(i);
+        const auto& shard_size_chunks = shard_size_chunks_.at(i);
         ImageDims shard_dims{
-            .cols = shard_dims_chunks.cols * tile_dims.cols,
-            .rows = shard_dims_chunks.rows * tile_dims.rows,
+            .cols = shard_size_chunks.x * tile_dims.cols,
+            .rows = shard_size_chunks.y * tile_dims.rows,
         };
 
         if (blosc_compression_params_.has_value()) {
@@ -88,8 +83,8 @@ zarr::ZarrV3::set(const StorageProperties* props)
     StoragePropertyMetadata meta{};
     get_meta(&meta);
 
-    const auto sharding_props = props->shard_dims_chunks;
-    const auto sharding_meta = meta.shard_dims_chunks;
+    const auto sharding_props = props->shard_size_chunks;
+    const auto sharding_meta = meta.shard_size_chunks;
 
     set_sharding(sharding_props, sharding_meta);
 }
@@ -98,15 +93,17 @@ void
 zarr::ZarrV3::get(StorageProperties* props) const
 {
     Zarr::get(props);
-    if (shard_dims_chunks_.empty()) {
-        props->shard_dims_chunks.width = 1;
-        props->shard_dims_chunks.height = 1;
+    if (shard_size_chunks_.empty()) {
+        props->shard_size_chunks = {
+            .x = 1,
+            .y = 1,
+            .z = 1,
+            .c = 1,
+            .t = 1,
+        };
     } else {
-        const auto& shard_dims_chunks = shard_dims_chunks_.at(0);
-        props->shard_dims_chunks.width = shard_dims_chunks.cols;
-        props->shard_dims_chunks.height = shard_dims_chunks.rows;
+        props->shard_size_chunks = shard_size_chunks_.at(0);
     }
-    props->shard_dims_chunks.planes = 1;
 }
 
 void
@@ -114,20 +111,29 @@ zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
 {
     Zarr::get_meta(meta);
 
-    meta->shard_dims_chunks = {
+    meta->shard_size_chunks = {
         .is_supported = 1,
-        .width = { .writable = 1,
-                   .low = 1.f,
-                   .high = (float)std::numeric_limits<uint16_t>::max(),
-                   .type = PropertyType_FixedPrecision },
-        .height = { .writable = 1,
-                    .low = 1.f,
-                    .high = (float)std::numeric_limits<uint16_t>::max(),
-                    .type = PropertyType_FixedPrecision },
-        .planes = { .writable = 1,
-                    .low = 1.f,
-                    .high = 1.f,
-                    .type = PropertyType_FixedPrecision },
+        .x = { .writable = 1,
+               .low = 1.f,
+               .high = (float)std::numeric_limits<uint16_t>::max(),
+               .type = PropertyType_FixedPrecision },
+        .y = { .writable = 1,
+               .low = 1.f,
+               .high = (float)std::numeric_limits<uint16_t>::max(),
+               .type = PropertyType_FixedPrecision },
+        .z = { .writable = 1,
+               .low = 0.f,
+               .high = (float)std::numeric_limits<uint16_t>::max(),
+               .type = PropertyType_FixedPrecision },
+        .c = { .writable = 1,
+               .low = 0.f,
+               .high = (float)std::numeric_limits<uint16_t>::max(),
+               .type = PropertyType_FixedPrecision },
+        .t = { .writable = 1,
+               .low = 0.f,
+               .high = (float)std::numeric_limits<uint16_t>::max(),
+               .type = PropertyType_FixedPrecision },
+
     };
     meta->multiscale = {
         .is_supported = 0,
@@ -153,7 +159,7 @@ zarr::ZarrV3::reserve_image_shape(const ImageShape* shape)
     {
         StorageProperties props = { 0 };
         get(&props);
-        uint32_t tile_width = props.chunk_dims_px.width;
+        uint32_t tile_width = props.chunk_size.x;
         if (image_shape.cols > 0 &&
             (tile_width == 0 || tile_width > image_shape.cols)) {
             LOGE("%s. Setting width to %u.",
@@ -164,7 +170,7 @@ zarr::ZarrV3::reserve_image_shape(const ImageShape* shape)
         }
         tile_shape.cols = tile_width;
 
-        uint32_t tile_height = props.chunk_dims_px.height;
+        uint32_t tile_height = props.chunk_size.y;
         if (image_shape.rows > 0 &&
             (tile_height == 0 || tile_height > image_shape.rows)) {
             LOGE("%s. Setting height to %u.",
@@ -178,18 +184,18 @@ zarr::ZarrV3::reserve_image_shape(const ImageShape* shape)
         storage_properties_destroy(&props);
     }
 
-    const auto& shard_dims_chunks = shard_dims_chunks_.at(0);
+    const auto& shard_size_chunks = shard_size_chunks_.at(0);
 
     StoragePropertyMetadata meta = { 0 };
     get_meta(&meta);
 
-    const auto shard_width_px = shard_dims_chunks.cols * tile_shape.cols;
+    const auto shard_width_px = shard_size_chunks.x * tile_shape.cols;
     EXPECT(shard_width_px <= image_shape.cols,
            "Shard width %d exceeds frame width %d",
            shard_width_px,
            image_shape.cols);
 
-    const auto shard_height_px = shard_dims_chunks.rows * tile_shape.rows;
+    const auto shard_height_px = shard_size_chunks.y * tile_shape.rows;
     EXPECT(shard_height_px <= image_shape.rows,
            "Shard height %d exceeds frame height %d",
            shard_height_px,
@@ -210,7 +216,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
 
     const ImageDims& image_dims = image_tile_shapes_.at(level).first;
     const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
-    const ImageDims& shard_dims = shard_dims_chunks_.at(level);
+    const ShardSize& shard_dims = shard_size_chunks_.at(level);
 
     const auto frame_count = writers_.at(level)->frames_written();
     const auto frames_per_chunk = std::min(frame_count, planes_per_chunk_);
@@ -265,10 +271,10 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
         json::object({
           { "chunks_per_shard",
             json::array({
-              1,               // t
-              1,               // c
-              shard_dims.rows, // y
-              shard_dims.cols, // x
+              1,            // t
+              1,            // c
+              shard_dims.y, // y
+              shard_dims.x, // x
             }) },
         }) },
     });

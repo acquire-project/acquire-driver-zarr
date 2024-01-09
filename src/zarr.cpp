@@ -338,7 +338,7 @@ zarr::Zarr::set(const StorageProperties* props)
     image_tile_shapes_.clear();
     image_tile_shapes_.emplace_back();
 
-    set_chunking(props->chunk_dims_px, meta.chunk_dims_px);
+    set_chunking(props->chunk_size, meta.chunk_size, props->append_dimension);
 
     if (props->enable_multiscale && !meta.multiscale.is_supported) {
         // TODO (aliddell): https://github.com/ome/ngff/pull/206
@@ -365,11 +365,9 @@ zarr::Zarr::get(StorageProperties* props) const
         props->pixel_scale_um = pixel_scale_um_;
     }
 
-    if (!image_tile_shapes_.empty()) {
-        props->chunk_dims_px.width = image_tile_shapes_.at(0).second.cols;
-        props->chunk_dims_px.height = image_tile_shapes_.at(0).second.rows;
+    if (!chunk_sizes_.empty()) {
+        props->chunk_size = chunk_sizes_.at(0);
     }
-    props->chunk_dims_px.planes = planes_per_chunk_;
 
     props->enable_multiscale = enable_multiscale_;
 }
@@ -380,23 +378,35 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
     CHECK(meta);
 
     *meta = {
-        .chunk_dims_px = {
+        .chunk_size = {
           .is_supported = 1,
-          .width = {
+          .x = {
             .writable = 1,
             .low = 32.f,
             .high = (float)std::numeric_limits<uint16_t>::max(),
             .type = PropertyType_FixedPrecision
           },
-          .height = {
+          .y = {
             .writable = 1,
             .low = 32.f,
             .high = (float)std::numeric_limits<uint16_t>::max(),
             .type = PropertyType_FixedPrecision
           },
-          .planes = {
+          .z = {
             .writable = 1,
-            .low = 32.f,
+            .low = 0.f,
+            .high = (float)std::numeric_limits<uint16_t>::max(),
+            .type = PropertyType_FixedPrecision
+          },
+          .c = {
+            .writable = 1,
+            .low = 0.f,
+            .high = (float)std::numeric_limits<uint16_t>::max(),
+            .type = PropertyType_FixedPrecision
+          },
+          .t = {
+            .writable = 1,
+            .low = 0.f,
             .high = (float)std::numeric_limits<uint16_t>::max(),
             .type = PropertyType_FixedPrecision
           },
@@ -515,6 +525,10 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     // `shape` should be verified nonnull in storage_reserve_image_shape, but
     // let's check anyway
     CHECK(shape);
+
+    image_shapes_.clear();
+    image_shapes_.push_back(*shape);
+
     image_tile_shapes_.at(0).first = {
         .cols = shape->dims.width,
         .rows = shape->dims.height,
@@ -528,7 +542,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     {
         StorageProperties props = { 0 };
         get(&props);
-        uint32_t tile_width = props.chunk_dims_px.width;
+        uint32_t tile_width = props.chunk_size.x;
         if (image_shape.cols > 0 &&
             (tile_width == 0 || tile_width > image_shape.cols)) {
             LOGE("%s. Setting width to %u.",
@@ -539,7 +553,7 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
         }
         tile_shape.cols = tile_width;
 
-        uint32_t tile_height = props.chunk_dims_px.height;
+        uint32_t tile_height = props.chunk_size.y;
         if (image_shape.rows > 0 &&
             (tile_height == 0 || tile_height > image_shape.rows)) {
             LOGE("%s. Setting height to %u.",
@@ -595,18 +609,35 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 }
 
 void
-zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
+zarr::Zarr::set_chunking(const ChunkSize& size,
+                         const ChunkingMeta& meta,
+                         AppendDimension append_dimension)
 {
     // image shape is set *after* this is set so we verify it later
     image_tile_shapes_.at(0).second = {
-        .cols = std::clamp(
-          props.width, (uint32_t)meta.width.low, (uint32_t)meta.width.high),
-        .rows = std::clamp(
-          props.height, (uint32_t)meta.height.low, (uint32_t)meta.height.high),
+        .cols = std::clamp(size.x, (uint32_t)meta.x.low, (uint32_t)meta.x.high),
+        .rows = std::clamp(size.y, (uint32_t)meta.y.low, (uint32_t)meta.y.high),
     };
 
-    planes_per_chunk_ = std::clamp(
-      props.planes, (uint32_t)meta.planes.low, (uint32_t)meta.planes.high);
+    chunk_sizes_.push_back(size);
+
+    // set the append dimension
+    append_dimension_ = append_dimension;
+
+    switch (append_dimension) {
+        case AppendDimension_z:
+            planes_per_chunk_ =
+              std::clamp(size.z, (uint32_t)meta.z.low, (uint32_t)meta.z.high);
+            break;
+        case AppendDimension_c:
+            planes_per_chunk_ =
+              std::clamp(size.c, (uint32_t)meta.c.low, (uint32_t)meta.c.high);
+            break;
+        default:
+            planes_per_chunk_ =
+              std::clamp(size.t, (uint32_t)meta.t.low, (uint32_t)meta.t.high);
+            break;
+    }
 
     CHECK(planes_per_chunk_ > 0);
 }
