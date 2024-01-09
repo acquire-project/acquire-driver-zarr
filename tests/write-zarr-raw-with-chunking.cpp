@@ -98,7 +98,10 @@ acquire(AcquireRuntime* runtime, const char* filename)
       storage_properties_set_chunking_props(&props.video[0].storage.settings,
                                             chunk_width,
                                             chunk_height,
-                                            chunk_planes));
+                                            0,
+                                            1,
+                                            chunk_planes,
+                                            AppendDimension_t));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
