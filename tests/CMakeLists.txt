@@ -18,7 +18,7 @@ else ()
             list-devices
             external-metadata-with-whitespace-ok
             get
-            #            get-meta
+            get-meta
             #            restart-stopped-zarr-resets-threadpool
             #            repeat-start
             #            unit-tests
