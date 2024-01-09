@@ -92,9 +92,9 @@ configure(AcquireRuntime* runtime)
                                   { 1, 1 }));
 
     CHECK(storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, 32, 32, 32));
+      &props.video[0].storage.settings, 32, 32, 0, 1, 32, AppendDimension_t));
     CHECK(storage_properties_set_sharding_props(
-      &props.video[0].storage.settings, 2, 1, 1));
+      &props.video[0].storage.settings, 2, 1, 0, 1, 1));
     props.video[0].max_frame_count = 10;
 
     OK(acquire_configure(runtime, &props));
