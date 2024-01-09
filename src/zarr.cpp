@@ -622,8 +622,6 @@ zarr::Zarr::set_chunking(const ChunkSize& size,
     chunk_sizes_.push_back(size);
 
     // set the append dimension
-    append_dimension_ = append_dimension;
-
     const auto z = std::clamp(
                  size.z, (uint32_t)meta.z.low, (uint32_t)meta.z.high),
                c = std::clamp(
@@ -631,10 +629,7 @@ zarr::Zarr::set_chunking(const ChunkSize& size,
                t = std::clamp(
                  size.t, (uint32_t)meta.t.low, (uint32_t)meta.t.high);
 
-    EXPECT(z > 0 || c > 0 || t > 0,
-           "At least one of z, c, or t must be greater than zero.");
-
-    switch (append_dimension) {
+    switch (append_dimension_ = append_dimension) {
         case AppendDimension_z:
             planes_per_chunk_ = z;
             break;
@@ -645,6 +640,8 @@ zarr::Zarr::set_chunking(const ChunkSize& size,
             planes_per_chunk_ = t;
             break;
     }
+
+    planes_per_chunk_ = std::max(planes_per_chunk_, 32u);
 }
 
 void
