@@ -92,6 +92,8 @@ configure(struct Storage* zarr)
 {
     struct StorageProperties props = { 0 };
     storage_properties_init(&props, 0, SIZED(TEST ".zarr"), nullptr, 0, { 0 });
+    storage_properties_set_chunking_props(
+      &props, 64, 48, 0, 0, 1, AppendDimension_t);
 
     CHECK(DeviceState_Armed == zarr->set(zarr, &props));
 }
