@@ -175,6 +175,21 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y)
 }
 
 /// Writer
+zarr::Writer::Writer(const ImageShape& image_shape,
+                     const ChunkShape& chunk_size,
+                     const std::string& data_root,
+                     std::shared_ptr<common::ThreadPool> thread_pool)
+  : image_shape_{ image_shape }
+  , chunk_size_{ chunk_size }
+  , data_root_{ data_root }
+  , frames_written_{ 0 }
+  , bytes_to_flush_{ 0 }
+  , current_chunk_{ 0 }
+  , thread_pool_{ thread_pool }
+  , file_creator_{ thread_pool }
+{
+}
+
 zarr::Writer::Writer(const ImageDims& frame_dims,
                      const ImageDims& tile_dims,
                      uint32_t frames_per_chunk,

@@ -42,7 +42,6 @@ struct Zarr : public Storage
     void set_error(const std::string& msg) noexcept;
 
   protected:
-    using ChunkSize = StorageProperties::storage_properties_chunk_size_s;
     using ChunkingMeta =
       StoragePropertyMetadata::storage_property_metadata_chunking_s;
 
@@ -59,7 +58,7 @@ struct Zarr : public Storage
     /// changes on reserve_image_shape
     std::vector<std::pair<ImageDims, ImageDims>> image_tile_shapes_;
     std::vector<ImageShape> image_shapes_;
-    std::vector<ChunkSize> chunk_sizes_;
+    std::vector<ChunkShape> chunk_sizes_;
     AppendDimension append_dimension_;
     SampleType pixel_type_;
     std::vector<std::shared_ptr<Writer>> writers_;
@@ -77,7 +76,7 @@ struct Zarr : public Storage
     std::string error_msg_;
 
     /// Setup
-    void set_chunking(const ChunkSize& size,
+    void set_chunking(const ChunkShape& size,
                       const ChunkingMeta& meta,
                       AppendDimension append_dimension);
     virtual void allocate_writers_() = 0;

@@ -609,7 +609,7 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 }
 
 void
-zarr::Zarr::set_chunking(const ChunkSize& size,
+zarr::Zarr::set_chunking(const ChunkShape& size,
                          const ChunkingMeta& meta,
                          AppendDimension append_dimension)
 {

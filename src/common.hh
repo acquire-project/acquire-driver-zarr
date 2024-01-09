@@ -3,6 +3,7 @@
 
 #include "logger.h"
 #include "device/props/components.h"
+#include "device/props/storage.h"
 
 #include <condition_variable>
 #include <filesystem>
@@ -43,6 +44,8 @@ struct ImageDims
         return (lhs.cols <= rhs.cols) && (lhs.rows <= rhs.rows);
     }
 };
+
+using ChunkShape = StorageProperties::storage_properties_chunk_size_s;
 
 struct Zarr;
 

@@ -112,7 +112,10 @@ acquire(AcquireRuntime* runtime, const char* filename)
       storage_properties_set_chunking_props(&props.video[0].storage.settings,
                                             chunk_width,
                                             chunk_height,
-                                            chunk_planes));
+                                            0,
+                                            1,
+                                            chunk_planes,
+                                            AppendDimension_t));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -142,9 +145,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
         do {
             struct clock throttle;
             clock_init(&throttle);
-            //            EXPECT(clock_cmp_now(&clock) < 0,
-            //                   "Timeout at %f ms",
-            //                   clock_toc_ms(&clock) + time_limit_ms);
+            EXPECT(clock_cmp_now(&clock) < 0,
+                   "Timeout at %f ms",
+                   clock_toc_ms(&clock) + time_limit_ms);
             OK(acquire_map_read(runtime, 0, &beg, &end));
             for (cur = beg; cur < end; cur = next(cur)) {
                 LOG("stream %d counting frame w id %d", 0, cur->frame_id);

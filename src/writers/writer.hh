@@ -43,6 +43,10 @@ struct Writer
 {
   public:
     Writer() = delete;
+    Writer(const ImageShape& image_shape,
+           const ChunkShape& chunk_size,
+           const std::string& data_root,
+           std::shared_ptr<common::ThreadPool> thread_pool);
     Writer(const ImageDims& frame_dims,
            const ImageDims& tile_dims,
            uint32_t frames_per_chunk,
@@ -65,6 +69,8 @@ struct Writer
 
   protected:
     /// Tiling/chunking
+    ImageShape image_shape_;
+    ChunkShape chunk_size_;
     ImageDims frame_dims_;
     ImageDims tile_dims_;
     uint16_t tiles_per_frame_x_;

@@ -30,7 +30,7 @@ else ()
             #            write-zarr-raw-multiscale
             write-zarr-raw-with-chunking
             #            write-zarr-raw-with-chunking-and-rollover
-            #            write-zarr-raw-with-ragged-tiling
+            write-zarr-raw-with-ragged-tiling
             #            write-zarr-v3-compressed
             #            write-zarr-v3-raw
             write-zarr-with-defaults
