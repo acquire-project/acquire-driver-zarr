@@ -22,7 +22,7 @@ else ()
             restart-stopped-zarr-resets-threadpool
             repeat-start
             unit-tests
-            #            multiscale-with-trivial-tile-size
+            multiscale-with-trivial-tile-size
             #            no-set-chunking
             #            write-zarr-compressed-multiscale
             #            write-zarr-compressed-with-chunking

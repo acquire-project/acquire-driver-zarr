@@ -108,7 +108,10 @@ setup(AcquireRuntime* runtime)
     storage_properties_set_chunking_props(&props.video[0].storage.settings,
                                           frame_width,
                                           frame_height,
-                                          chunk_planes);
+                                          0,
+                                          1,
+                                          chunk_planes,
+                                          AppendDimension_t);
 
     storage_properties_set_enable_multiscale(&props.video[0].storage.settings,
                                              1);
