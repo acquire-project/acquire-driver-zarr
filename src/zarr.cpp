@@ -427,6 +427,8 @@ zarr::Zarr::start()
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
 
+    allocate_writers_();
+
     state = DeviceState_Running;
     error_ = false;
 }
@@ -509,8 +511,8 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 void
 zarr::Zarr::reserve_image_shape(const ImageShape* shape)
 {
-    EXPECT(state == DeviceState_Running,
-           "Can only reserve image shape while running.");
+    EXPECT(state != DeviceState_Running,
+           "Cannot reserve image shape while running.");
 
     // `shape` should be verified nonnull in storage_reserve_image_shape, but
     // let's check anyway
@@ -557,10 +559,8 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
         make_scales(image_tile_shapes_);
     }
 
-    allocate_writers_();
-
     // multiscale
-    for (auto i = 1; i < writers_.size(); ++i) {
+    for (auto i = 1; i < image_tile_shapes_.size(); ++i) {
         scaled_frames_.insert_or_assign(i, std::nullopt);
     }
 }
