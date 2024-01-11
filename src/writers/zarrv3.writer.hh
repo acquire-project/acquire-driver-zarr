@@ -24,6 +24,20 @@ struct ZarrV3Writer final : public Writer
 {
   public:
     ZarrV3Writer() = delete;
+
+    ZarrV3Writer(const ImageShape& image_shape,
+                 const ChunkShape& chunk_shape,
+                 const ShardShape& shard_shape,
+                 const std::string& data_root,
+                 std::shared_ptr<common::ThreadPool> thread_pool);
+
+    ZarrV3Writer(const ImageShape& image_shape,
+                 const ChunkShape& chunk_shape,
+                 const ShardShape& shard_shape,
+                 const std::string& data_root,
+                 std::shared_ptr<common::ThreadPool> thread_pool,
+                 const BloscCompressionParams& compression_params);
+
     ZarrV3Writer(const ImageDims& frame_dims,
                  const ImageDims& shard_dims,
                  const ImageDims& tile_dims,
@@ -42,12 +56,13 @@ struct ZarrV3Writer final : public Writer
     ~ZarrV3Writer() override = default;
 
   private:
+    ShardShape shard_shape_;
     ImageDims shard_dims_;
-    uint16_t shards_per_frame_x_;
-    uint16_t shards_per_frame_y_;
 
     uint16_t chunks_per_shard_() const;
     uint16_t shards_per_frame_() const;
+    uint16_t shards_in_x_() const;
+    uint16_t shards_in_y_() const;
 
     void flush_() override;
 };

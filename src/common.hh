@@ -47,6 +47,8 @@ struct ImageDims
 
 using ChunkShape = StorageProperties::storage_properties_chunk_size_s;
 
+using ShardShape = StorageProperties::storage_properties_shard_size_s;
+
 struct Zarr;
 
 namespace common {

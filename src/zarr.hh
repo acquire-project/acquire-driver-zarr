@@ -76,7 +76,7 @@ struct Zarr : public Storage
     std::string error_msg_;
 
     /// Setup
-    void set_chunking(const ChunkShape& size,
+    void set_chunking(const ChunkShape& shape,
                       const ChunkingMeta& meta,
                       AppendDimension append_dimension);
     virtual void allocate_writers_() = 0;

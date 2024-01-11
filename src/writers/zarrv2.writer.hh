@@ -24,6 +24,18 @@ struct ZarrV2Writer final : public Writer
 {
   public:
     ZarrV2Writer() = delete;
+
+    ZarrV2Writer(const ImageShape& image_shape,
+                 const ChunkShape& chunk_shape,
+                 const std::string& data_root,
+                 std::shared_ptr<common::ThreadPool> thread_pool);
+
+    ZarrV2Writer(const ImageShape& image_shape,
+                 const ChunkShape& chunk_shape,
+                 const std::string& data_root,
+                 std::shared_ptr<common::ThreadPool> thread_pool,
+                 const BloscCompressionParams& compression_params);
+
     ZarrV2Writer(const ImageDims& frame_dims,
                  const ImageDims& tile_dims,
                  uint32_t frames_per_chunk,

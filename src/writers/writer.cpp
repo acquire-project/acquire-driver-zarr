@@ -176,11 +176,11 @@ zarr::FileCreator::create_y_dirs_(int n_c, int n_y)
 
 /// Writer
 zarr::Writer::Writer(const ImageShape& image_shape,
-                     const ChunkShape& chunk_size,
+                     const ChunkShape& chunk_shape,
                      const std::string& data_root,
                      std::shared_ptr<common::ThreadPool> thread_pool)
   : image_shape_{ image_shape }
-  , chunk_size_{ chunk_size }
+  , chunk_shape_{ chunk_shape }
   , data_root_{ data_root }
   , frames_written_{ 0 }
   , bytes_to_flush_{ 0 }
@@ -188,6 +188,16 @@ zarr::Writer::Writer(const ImageShape& image_shape,
   , thread_pool_{ thread_pool }
   , file_creator_{ thread_pool }
 {
+}
+
+zarr::Writer::Writer(const ImageShape& image_shape,
+                     const ChunkShape& chunk_shape,
+                     const std::string& data_root,
+                     std::shared_ptr<common::ThreadPool> thread_pool,
+                     const BloscCompressionParams& compression_params)
+  : Writer(image_shape, chunk_shape, data_root, thread_pool)
+{
+    blosc_compression_params_ = compression_params;
 }
 
 zarr::Writer::Writer(const ImageDims& frame_dims,

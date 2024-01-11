@@ -7,6 +7,37 @@
 namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV3Writer::ZarrV3Writer(
+  const ImageShape& image_shape,
+  const ChunkShape& chunk_shape,
+  const ShardShape& shard_shape,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool)
+  : Writer(image_shape, chunk_shape, data_root, thread_pool)
+  , shard_shape_{ shard_shape }
+{
+    EXPECT(shard_shape_.x > 0 && shard_shape_.y > 0,
+           "Expected shard dimensions to be non-zero. x: %d, y: %d",
+           shard_shape_.x,
+           shard_shape_.y);
+}
+
+zarr::ZarrV3Writer::ZarrV3Writer(
+  const ImageShape& image_shape,
+  const ChunkShape& chunk_shape,
+  const ShardShape& shard_shape,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  const BloscCompressionParams& compression_params)
+  : Writer(image_shape, chunk_shape, data_root, thread_pool, compression_params)
+  , shard_shape_{ shard_shape }
+{
+    EXPECT(shard_shape_.x > 0 && shard_shape_.y > 0,
+           "Expected shard dimensions to be non-zero. x: %d, y: %d",
+           shard_shape_.x,
+           shard_shape_.y);
+}
+
+zarr::ZarrV3Writer::ZarrV3Writer(
   const ImageDims& frame_dims,
   const ImageDims& shard_dims,
   const ImageDims& tile_dims,
@@ -16,10 +47,6 @@ zarr::ZarrV3Writer::ZarrV3Writer(
   : Writer(frame_dims, tile_dims, frames_per_chunk, data_root, thread_pool)
   , shard_dims_{ shard_dims }
 {
-    shards_per_frame_x_ =
-      std::ceil((float)frame_dims.cols / (float)shard_dims.cols);
-    shards_per_frame_y_ =
-      std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
 }
 
 zarr::ZarrV3Writer::ZarrV3Writer(
@@ -38,10 +65,6 @@ zarr::ZarrV3Writer::ZarrV3Writer(
            compression_params)
   , shard_dims_{ shard_dims }
 {
-    shards_per_frame_x_ =
-      std::ceil((float)frame_dims.cols / (float)shard_dims.cols);
-    shards_per_frame_y_ =
-      std::ceil((float)frame_dims.rows / (float)shard_dims.rows);
 }
 
 uint16_t
@@ -56,7 +79,19 @@ zarr::ZarrV3Writer::chunks_per_shard_() const
 uint16_t
 zarr::ZarrV3Writer::shards_per_frame_() const
 {
-    return shards_per_frame_x_ * shards_per_frame_y_;
+    return shards_in_x_() * shards_in_y_();
+}
+
+uint16_t
+zarr::ZarrV3Writer::shards_in_x_() const
+{
+    return image_shape_.dims.width / (chunk_shape_.x * shard_shape_.x);
+}
+
+uint16_t
+zarr::ZarrV3Writer::shards_in_y_() const
+{
+    return image_shape_.dims.height / (chunk_shape_.y * shard_shape_.y);
 }
 
 void

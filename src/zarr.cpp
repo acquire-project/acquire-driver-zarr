@@ -312,6 +312,15 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
         dst->data[i] = (T)(((float)dst->data[i] + (float)src->data[i]) / 2.0f);
     }
 }
+
+void
+validate_chunk_shape(const acquire::sink::zarr::ChunkShape& shape)
+{
+    EXPECT(shape.x > 0, "Chunk width must be greater than zero.");
+    EXPECT(shape.y > 0, "Chunk height must be greater than zero.");
+    EXPECT(shape.z > 0 || shape.c > 0 || shape.t > 0,
+           "Chunk must have at least one plane, channel, or time point.");
+}
 } // end ::{anonymous} namespace
 
 void
@@ -609,25 +618,29 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 }
 
 void
-zarr::Zarr::set_chunking(const ChunkShape& size,
+zarr::Zarr::set_chunking(const ChunkShape& shape,
                          const ChunkingMeta& meta,
                          AppendDimension append_dimension)
 {
+    validate_chunk_shape(shape);
+
     // image shape is set *after* this is set so we verify it later
     image_tile_shapes_.at(0).second = {
-        .cols = std::clamp(size.x, (uint32_t)meta.x.low, (uint32_t)meta.x.high),
-        .rows = std::clamp(size.y, (uint32_t)meta.y.low, (uint32_t)meta.y.high),
+        .cols =
+          std::clamp(shape.x, (uint32_t)meta.x.low, (uint32_t)meta.x.high),
+        .rows =
+          std::clamp(shape.y, (uint32_t)meta.y.low, (uint32_t)meta.y.high),
     };
 
-    chunk_sizes_.push_back(size);
+    chunk_sizes_.push_back(shape);
 
     // set the append dimension
     const auto z = std::clamp(
-                 size.z, (uint32_t)meta.z.low, (uint32_t)meta.z.high),
+                 shape.z, (uint32_t)meta.z.low, (uint32_t)meta.z.high),
                c = std::clamp(
-                 size.c, (uint32_t)meta.c.low, (uint32_t)meta.c.high),
+                 shape.c, (uint32_t)meta.c.low, (uint32_t)meta.c.high),
                t = std::clamp(
-                 size.t, (uint32_t)meta.t.low, (uint32_t)meta.t.high);
+                 shape.t, (uint32_t)meta.t.low, (uint32_t)meta.t.high);
 
     switch (append_dimension_ = append_dimension) {
         case AppendDimension_z:

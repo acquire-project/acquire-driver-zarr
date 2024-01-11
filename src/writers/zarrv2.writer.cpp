@@ -8,6 +8,25 @@
 namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV2Writer::ZarrV2Writer(
+  const ImageShape& image_shape,
+  const ChunkShape& chunk_shape,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool)
+  : Writer(image_shape, chunk_shape, data_root, thread_pool)
+{
+}
+
+zarr::ZarrV2Writer::ZarrV2Writer(
+  const ImageShape& image_shape,
+  const ChunkShape& chunk_shape,
+  const std::string& data_root,
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  const BloscCompressionParams& compression_params)
+  : Writer(image_shape, chunk_shape, data_root, thread_pool, compression_params)
+{
+}
+
+zarr::ZarrV2Writer::ZarrV2Writer(
   const ImageDims& frame_dims,
   const ImageDims& tile_dims,
   uint32_t frames_per_chunk,
