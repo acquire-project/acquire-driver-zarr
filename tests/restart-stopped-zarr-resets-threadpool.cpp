@@ -101,7 +101,6 @@ configure(struct Storage* zarr)
 void
 start_write_stop(struct Storage* zarr)
 {
-    CHECK(DeviceState_Running == zarr->start(zarr));
     struct ImageShape shape = {
         .dims = {
           .channels = 1,
@@ -118,6 +117,7 @@ start_write_stop(struct Storage* zarr)
         .type = SampleType_u8,
     };
     zarr->reserve_image_shape(zarr, &shape);
+    CHECK(DeviceState_Running == zarr->start(zarr));
 
     auto* frame = (struct VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
     frame->bytes_of_frame = sizeof(*frame) + 64 * 48;
