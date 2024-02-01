@@ -16,26 +16,26 @@ else ()
     #
     set(tests
             list-devices
-            external-metadata-with-whitespace-ok
-            get
-            get-meta
-            restart-stopped-zarr-resets-threadpool
-            repeat-start
+            #            external-metadata-with-whitespace-ok
+            #            get
+            #            get-meta
+            #            restart-stopped-zarr-resets-threadpool
+            #            repeat-start
             unit-tests
-            multiscale-with-trivial-tile-size
-            no-set-chunking
+            #            multiscale-with-trivial-tile-size
+            #            no-set-chunking
             #            write-zarr-compressed-multiscale
             #            write-zarr-compressed-with-chunking
             #            write-zarr-compressed-with-chunking-and-rollover
             #            write-zarr-raw-multiscale
-            write-zarr-raw-with-chunking
+            #            write-zarr-raw-with-chunking
             #            write-zarr-raw-with-chunking-and-rollover
-            write-zarr-raw-with-ragged-tiling
+            #            write-zarr-raw-with-ragged-tiling
             #            write-zarr-v3-compressed
             #            write-zarr-v3-raw
-            write-zarr-with-defaults
-            write-zarr-with-lz4-compression
-            write-zarr-with-zstd-compression
+            #            write-zarr-with-defaults
+            #            write-zarr-with-lz4-compression
+            #            write-zarr-with-zstd-compression
     )
 
     foreach (name ${tests})

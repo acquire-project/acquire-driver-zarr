@@ -34,20 +34,22 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
-struct ImageDims
+struct Dimension
 {
-    uint32_t cols;
-    uint32_t rows;
+  public:
+    explicit Dimension(const std::string& name,
+                       DimensionType kind,
+                       uint32_t array_size_px,
+                       uint32_t chunk_size_px,
+                       uint32_t shard_size_chunks);
+    explicit Dimension(const StorageDimension& dim);
 
-    friend bool operator<=(const ImageDims& lhs, const ImageDims& rhs) noexcept
-    {
-        return (lhs.cols <= rhs.cols) && (lhs.rows <= rhs.rows);
-    }
+    const std::string name;
+    const DimensionType kind;
+    const uint32_t array_size_px;
+    const uint32_t chunk_size_px;
+    const uint32_t shard_size_chunks;
 };
-
-using ChunkShape = StorageProperties::storage_properties_chunk_size_s;
-
-using ShardShape = StorageProperties::storage_properties_shard_size_s;
 
 struct Zarr;
 
@@ -88,33 +90,34 @@ struct ThreadPool final
     [[nodiscard]] bool should_stop_() const noexcept;
     void thread_worker_();
 };
-size_t
-bytes_per_tile(const ImageDims& tile_shape, const SampleType& type);
 
 size_t
-frames_per_chunk(const ImageDims& tile_shape,
-                 SampleType type,
-                 uint64_t max_bytes_per_chunk);
+chunks_along_dimension(const Dimension& dimension);
 
 size_t
-bytes_per_chunk(const ImageDims& tile_shape,
-                const SampleType& type,
-                uint64_t max_bytes_per_chunk);
+shards_along_dimension(const Dimension& dimension);
 
-/// \brief Get the Zarr dtype for a given SampleType.
-/// \param t An enumerated sample type.
-/// \throw std::runtime_error if \par t is not a valid SampleType.
-/// \return A representation of the SampleType \par t expected by a Zarr reader.
+size_t
+bytes_of_image(const ImageShape& shape);
+
+size_t
+bytes_per_chunk(const std::vector<Dimension>& dimensions,
+                const SampleType& dtype);
+
+/// @brief Get the Zarr dtype for a given SampleType.
+/// @param t An enumerated sample type.
+/// @throw std::runtime_error if @par t is not a valid SampleType.
+/// @return A representation of the SampleType @par t expected by a Zarr reader.
 const char*
 sample_type_to_dtype(SampleType t);
 
-/// \brief Get a string representation of the SampleType enum.
-/// \param t An enumerated sample type.
-/// \return A human-readable representation of the SampleType \par t.
+/// @brief Get a string representation of the SampleType enum.
+/// @param t An enumerated sample type.
+/// @return A human-readable representation of the SampleType @par t.
 const char*
 sample_type_to_string(SampleType t) noexcept;
 
-/// \brief Write a string to a file.
+/// @brief Write a string to a file.
 /// @param path The path of the file to write.
 /// @param str The string to write.
 void

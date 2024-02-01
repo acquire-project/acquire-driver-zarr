@@ -42,9 +42,6 @@ struct Zarr : public Storage
     void set_error(const std::string& msg) noexcept;
 
   protected:
-    using ChunkingMeta =
-      StoragePropertyMetadata::storage_property_metadata_chunking_s;
-
     /// static - set on construction
     std::optional<BloscCompressionParams> blosc_compression_params_;
 
@@ -56,11 +53,8 @@ struct Zarr : public Storage
     bool enable_multiscale_;
 
     /// changes on reserve_image_shape
-    std::vector<std::pair<ImageDims, ImageDims>> image_tile_shapes_;
-    std::vector<ImageShape> image_shapes_;
-    std::vector<ChunkShape> chunk_sizes_;
-    AppendDimension append_dimension_;
-    SampleType pixel_type_;
+    struct ImageShape image_shape_;
+    std::vector<Dimension> acquisition_dimensions_;
     std::vector<std::shared_ptr<Writer>> writers_;
 
     /// changes on append
@@ -76,9 +70,7 @@ struct Zarr : public Storage
     std::string error_msg_;
 
     /// Setup
-    void set_chunking(const ChunkShape& shape,
-                      const ChunkingMeta& meta,
-                      AppendDimension append_dimension);
+    void set_dimensions_(const StorageProperties* props);
     virtual void allocate_writers_() = 0;
 
     /// Metadata

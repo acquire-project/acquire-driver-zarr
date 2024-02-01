@@ -4,6 +4,7 @@
 #include "json.hpp"
 
 namespace zarr = acquire::sink::zarr;
+namespace common = zarr::common;
 using json = nlohmann::json;
 
 namespace {
@@ -211,36 +212,36 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
     }
 }
 
-void
-make_scales(std::vector<std::pair<zarr::ImageDims, zarr::ImageDims>>& shapes)
-{
-    CHECK(shapes.size() == 1);
-    const auto base_image_shape = shapes.at(0).first;
-    const auto base_tile_shape = shapes.at(0).second;
-
-    const int downscale = 2;
-
-    uint32_t w = base_image_shape.cols;
-    uint32_t h = base_image_shape.rows;
-
-    while (w > base_tile_shape.cols || h > base_tile_shape.rows) {
-        w = (w + (w % downscale)) / downscale;
-        h = (h + (h % downscale)) / downscale;
-
-        zarr::ImageDims im_shape = base_image_shape;
-        im_shape.cols = w;
-        im_shape.rows = h;
-
-        zarr::ImageDims tile_shape = base_tile_shape;
-        if (tile_shape.cols > w)
-            tile_shape.cols = w;
-
-        if (tile_shape.rows > h)
-            tile_shape.rows = h;
-
-        shapes.emplace_back(im_shape, tile_shape);
-    }
-}
+// void
+// make_scales(std::vector<std::pair<zarr::ImageDims, zarr::ImageDims>>& shapes)
+//{
+//     CHECK(shapes.size() == 1);
+//     const auto base_image_shape = shapes.at(0).first;
+//     const auto base_tile_shape = shapes.at(0).second;
+//
+//     const int downscale = 2;
+//
+//     uint32_t w = base_image_shape.cols;
+//     uint32_t h = base_image_shape.rows;
+//
+//     while (w > base_tile_shape.cols || h > base_tile_shape.rows) {
+//         w = (w + (w % downscale)) / downscale;
+//         h = (h + (h % downscale)) / downscale;
+//
+//         zarr::ImageDims im_shape = base_image_shape;
+//         im_shape.cols = w;
+//         im_shape.rows = h;
+//
+//         zarr::ImageDims tile_shape = base_tile_shape;
+//         if (tile_shape.cols > w)
+//             tile_shape.cols = w;
+//
+//         if (tile_shape.rows > h)
+//             tile_shape.rows = h;
+//
+//         shapes.emplace_back(im_shape, tile_shape);
+//     }
+// }
 
 template<typename T>
 VideoFrame*
@@ -314,12 +315,38 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
 }
 
 void
-validate_chunk_shape(const acquire::sink::zarr::ChunkShape& shape)
+validate_dimension(const zarr::Dimension& dim, bool is_append)
 {
-    EXPECT(shape.x > 0, "Chunk width must be greater than zero.");
-    EXPECT(shape.y > 0, "Chunk height must be greater than zero.");
-    EXPECT(shape.z > 0 || shape.c > 0 || shape.t > 0,
-           "Chunk must have at least one plane, channel, or time point.");
+    if (!is_append) {
+        EXPECT(dim.array_size_px > 0, "Dimension array size must be positive.");
+        EXPECT(dim.chunk_size_px > 0 && dim.chunk_size_px <= dim.array_size_px,
+               "Dimension chunk size must be positive and less than or equal "
+               "to array size.");
+
+        // The number of shards must evenly divide the number of chunks.
+        if (dim.shard_size_chunks > 0) {
+            const auto n_chunks = common::chunks_along_dimension(dim);
+            EXPECT(n_chunks % dim.shard_size_chunks == 0,
+                   "Dimension shard size must evenly divide the number of "
+                   "chunks.");
+        }
+    } else {
+        EXPECT(dim.array_size_px == 0,
+               "Append dimension array size must be 0.");
+        EXPECT(dim.chunk_size_px > 0,
+               "Append dimension chunk size must be "
+               "positive.");
+
+        // The number of shards must evenly divide the number of chunks. But
+        // because we don't know a priori how many chunks we will have in the
+        // append dimension, we can't a priori set the number of chunks per
+        // shard in such a way that the number of shards evenly divides the
+        // number of chunks, EXCEPT in the case where the shard size is 1.
+        if (dim.shard_size_chunks > 0) {
+            EXPECT(dim.shard_size_chunks == 1,
+                   "Append dimension shard size must be 1.");
+        }
+    }
 }
 } // end ::{anonymous} namespace
 
@@ -343,11 +370,7 @@ zarr::Zarr::set(const StorageProperties* props)
 
     pixel_scale_um_ = props->pixel_scale_um;
 
-    // chunking
-    image_tile_shapes_.clear();
-    image_tile_shapes_.emplace_back();
-
-    set_chunking(props->chunk_size, meta.chunk_size, props->append_dimension);
+    set_dimensions_(props);
 
     if (props->enable_multiscale && !meta.multiscale.is_supported) {
         // TODO (aliddell): https://github.com/ome/ngff/pull/206
@@ -366,16 +389,30 @@ zarr::Zarr::get(StorageProperties* props) const
         CHECK(storage_properties_set_filename(
           props, dataset_root.c_str(), dataset_root.size() + 1));
     }
+
     if (!external_metadata_json_.empty()) {
         CHECK(storage_properties_set_external_metadata(
           props,
           external_metadata_json_.c_str(),
           external_metadata_json_.size() + 1));
-        props->pixel_scale_um = pixel_scale_um_;
     }
 
-    if (!chunk_sizes_.empty()) {
-        props->chunk_size = chunk_sizes_.at(0);
+    props->pixel_scale_um = pixel_scale_um_;
+
+    // reset acquisition_dimensions
+    CHECK(storage_properties_dimensions_destroy(props));
+    CHECK(storage_properties_dimensions_init(props,
+                                             acquisition_dimensions_.size()));
+
+    for (auto i = 0; i < acquisition_dimensions_.size(); ++i) {
+        const auto dim = acquisition_dimensions_.at(i);
+        CHECK(storage_dimension_init(&props->acquisition_dimensions.data[i],
+                                     dim.name.c_str(),
+                                     dim.name.length(),
+                                     dim.kind,
+                                     dim.array_size_px,
+                                     dim.chunk_size_px,
+                                     dim.shard_size_chunks));
     }
 
     props->enable_multiscale = enable_multiscale_;
@@ -385,41 +422,10 @@ void
 zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
 {
     CHECK(meta);
+    memset(meta, 0, sizeof(*meta));
 
-    *meta = {
-        .chunk_size = {
-          .is_supported = 1,
-          .x = {
-            .writable = 1,
-            .low = 32.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-          .y = {
-            .writable = 1,
-            .low = 32.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-          .z = {
-            .writable = 1,
-            .low = 0.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-          .c = {
-            .writable = 1,
-            .low = 0.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-          .t = {
-            .writable = 1,
-            .low = 0.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-        },
+    meta->chunking = {
+        .is_supported = 1,
     };
 }
 
@@ -537,55 +543,24 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     // let's check anyway
     CHECK(shape);
 
-    image_shapes_.clear();
-    image_shapes_.push_back(*shape);
+    // image shape should be compatible with first two acquisition dimensions
+    EXPECT(shape->dims.width == acquisition_dimensions_.at(0).array_size_px,
+           "Image width must match first acquisition dimension.");
+    EXPECT(shape->dims.height == acquisition_dimensions_.at(1).array_size_px,
+           "Image height must match second acquisition dimension.");
 
-    image_tile_shapes_.at(0).first = {
-        .cols = shape->dims.width,
-        .rows = shape->dims.height,
-    };
-    pixel_type_ = shape->type;
+    image_shape_ = *shape;
 
-    ImageDims& image_shape = image_tile_shapes_.at(0).first;
-    ImageDims& tile_shape = image_tile_shapes_.at(0).second;
+    EXPECT(!enable_multiscale_,
+           "Come back to handle multiscale here."); // FIXME (aliddell)
 
-    // ensure that tile dimensions are compatible with the image shape
-    {
-        StorageProperties props = { 0 };
-        get(&props);
-        uint32_t tile_width = props.chunk_size.x;
-        if (image_shape.cols > 0 &&
-            (tile_width == 0 || tile_width > image_shape.cols)) {
-            LOGE("%s. Setting width to %u.",
-                 tile_width == 0 ? "Tile width not specified"
-                                 : "Specified tile width is too large",
-                 image_shape.cols);
-            tile_width = image_shape.cols;
-        }
-        tile_shape.cols = tile_width;
-
-        uint32_t tile_height = props.chunk_size.y;
-        if (image_shape.rows > 0 &&
-            (tile_height == 0 || tile_height > image_shape.rows)) {
-            LOGE("%s. Setting height to %u.",
-                 tile_height == 0 ? "Tile height not specified"
-                                  : "Specified tile height is too large",
-                 image_shape.rows);
-            tile_height = image_shape.rows;
-        }
-        tile_shape.rows = tile_height;
-
-        storage_properties_destroy(&props);
-    }
-
-    if (enable_multiscale_) {
-        make_scales(image_tile_shapes_);
-    }
-
-    // multiscale
-    for (auto i = 1; i < image_tile_shapes_.size(); ++i) {
-        scaled_frames_.insert_or_assign(i, std::nullopt);
-    }
+    //    if (enable_multiscale_) {
+    //        make_scales(image_tile_shapes_);
+    //    }
+    //
+    //    for (auto i = 1; i < image_tile_shapes_.size(); ++i) {
+    //        scaled_frames_.insert_or_assign(i, std::nullopt);
+    //    }
 }
 
 /// Zarr
@@ -606,7 +581,6 @@ zarr::Zarr::Zarr()
   , pixel_scale_um_{ 1, 1 }
   , planes_per_chunk_{ 0 }
   , enable_multiscale_{ false }
-  , pixel_type_{ SampleType_u8 }
   , error_{ false }
 {
 }
@@ -618,43 +592,17 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 }
 
 void
-zarr::Zarr::set_chunking(const ChunkShape& shape,
-                         const ChunkingMeta& meta,
-                         AppendDimension append_dimension)
+zarr::Zarr::set_dimensions_(const StorageProperties* props)
 {
-    validate_chunk_shape(shape);
+    const auto dimension_count = props->acquisition_dimensions.size;
+    EXPECT(dimension_count > 2, "Expected at least 3 dimensions.");
 
-    // image shape is set *after* this is set so we verify it later
-    image_tile_shapes_.at(0).second = {
-        .cols =
-          std::clamp(shape.x, (uint32_t)meta.x.low, (uint32_t)meta.x.high),
-        .rows =
-          std::clamp(shape.y, (uint32_t)meta.y.low, (uint32_t)meta.y.high),
-    };
+    for (auto i = 0; i < dimension_count; ++i) {
+        Dimension dim(props->acquisition_dimensions.data[i]);
+        validate_dimension(dim, i == dimension_count - 1);
 
-    chunk_sizes_.push_back(shape);
-
-    // set the append dimension
-    const auto z = std::clamp(
-                 shape.z, (uint32_t)meta.z.low, (uint32_t)meta.z.high),
-               c = std::clamp(
-                 shape.c, (uint32_t)meta.c.low, (uint32_t)meta.c.high),
-               t = std::clamp(
-                 shape.t, (uint32_t)meta.t.low, (uint32_t)meta.t.high);
-
-    switch (append_dimension_ = append_dimension) {
-        case AppendDimension_z:
-            planes_per_chunk_ = z;
-            break;
-        case AppendDimension_c:
-            planes_per_chunk_ = c;
-            break;
-        default:
-            planes_per_chunk_ = t;
-            break;
+        acquisition_dimensions_.push_back(dim);
     }
-
-    planes_per_chunk_ = std::max(planes_per_chunk_, 32u);
 }
 
 void
@@ -672,11 +620,12 @@ zarr::Zarr::set_error(const std::string& msg) noexcept
 void
 zarr::Zarr::write_all_array_metadata_() const
 {
-    namespace fs = std::filesystem;
-
-    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
-        write_array_metadata_(i);
-    }
+    // FIXME (aliddell)
+    //    namespace fs = std::filesystem;
+    //
+    //    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
+    //        write_array_metadata_(i);
+    //    }
 }
 
 void
