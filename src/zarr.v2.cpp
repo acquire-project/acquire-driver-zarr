@@ -33,12 +33,8 @@ void
 zarr::ZarrV2::get_meta(StoragePropertyMetadata* meta) const
 {
     Zarr::get_meta(meta);
-    meta->sharding = {
-        .is_supported = 0,
-    };
-    meta->multiscale = {
-        .is_supported = 1,
-    };
+    meta->sharding_is_supported = 0;
+    meta->multiscale_is_supported = 1;
 }
 
 void

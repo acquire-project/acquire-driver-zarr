@@ -372,13 +372,13 @@ zarr::Zarr::set(const StorageProperties* props)
 
     set_dimensions_(props);
 
-    if (props->enable_multiscale && !meta.multiscale.is_supported) {
+    if (props->enable_multiscale && !meta.multiscale_is_supported) {
         // TODO (aliddell): https://github.com/ome/ngff/pull/206
         LOGE("OME-Zarr multiscale not yet supported in Zarr v3. "
              "Multiscale arrays will not be written.");
     }
     enable_multiscale_ =
-      meta.multiscale.is_supported && props->enable_multiscale;
+      meta.multiscale_is_supported && props->enable_multiscale;
 }
 
 void
@@ -424,9 +424,7 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
     CHECK(meta);
     memset(meta, 0, sizeof(*meta));
 
-    meta->chunking = {
-        .is_supported = 1,
-    };
+    meta->chunking_is_supported = 1;
 }
 
 void
