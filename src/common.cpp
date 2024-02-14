@@ -153,6 +153,28 @@ common::shards_along_dimension(const Dimension& dimension)
 }
 
 size_t
+common::number_of_chunks(const std::vector<Dimension>& dimensions)
+{
+    size_t n_chunks = 1;
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        n_chunks *= chunks_along_dimension(dimensions[i]);
+    }
+
+    return n_chunks;
+}
+
+size_t
+common::number_of_shards(const std::vector<Dimension>& dimensions)
+{
+    size_t n_shards = 1;
+    for (const auto& d : dimensions) {
+        n_shards *= shards_along_dimension(d);
+    }
+
+    return n_shards;
+}
+
+size_t
 common::bytes_of_image(const ImageShape& shape)
 {
     return shape.dims.width * shape.dims.height * bytes_of_type(shape.type);

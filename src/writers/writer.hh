@@ -31,7 +31,6 @@ struct FileCreator
                                     std::vector<file>& files);
 
   private:
-    fs::path base_dir_;
     std::shared_ptr<common::ThreadPool> thread_pool_;
 
     [[nodiscard]] bool make_dirs_(std::queue<fs::path>& dir_paths);
@@ -43,7 +42,6 @@ struct ArraySpec
 {
     ImageShape image_shape;
     std::vector<Dimension> dimensions;
-    uint32_t append_dimension;
     std::string data_root;
     std::optional<BloscCompressionParams> compression_params;
 };
@@ -77,9 +75,10 @@ struct Writer
     std::mutex buffers_mutex_;
 
     /// Bookkeeping
-    std::vector<uint64_t> chunk_counters_;
     std::vector<uint64_t> chunks_per_dim_;
     std::vector<uint64_t> chunk_strides_;
+    std::vector<uint32_t> chunk_counters_;
+    uint32_t chunk_offset_;
 
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
@@ -90,15 +89,17 @@ struct Writer
 
     void make_buffers_() noexcept;
 
-    size_t frames_per_chunk_() const noexcept;
-
     void finalize_chunks_() noexcept;
     void compress_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept;
-    void increment_chunk_counters_() noexcept;
-    virtual void flush_() = 0;
+
+    /// Bookkeeping
+    size_t n_chunks_() const noexcept;
+    size_t tiles_per_frame_() const noexcept;
+    size_t frames_per_chunk_() const noexcept; // TODO (aliddell): better name
 
     /// Files
+    virtual void flush_() = 0;
     void close_files_();
     void rollover_();
 };

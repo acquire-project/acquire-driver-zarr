@@ -85,6 +85,9 @@ main()
         CASE(unit_test__average_frame),
         CASE(unit_test__file_creator__make_chunk_files),
         CASE(unit_test__file_creator__make_shard_files),
+        CASE(unit_test__writer__write_frame_to_chunks),
+        CASE(unit_test__zarrv2_writer__write),
+//            CASE(unit_test__zarrv3_writer__write),
 #undef CASE
     };
 

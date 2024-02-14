@@ -95,7 +95,13 @@ size_t
 chunks_along_dimension(const Dimension& dimension);
 
 size_t
+number_of_chunks(const std::vector<Dimension>& dimensions);
+
+size_t
 shards_along_dimension(const Dimension& dimension);
+
+size_t
+number_of_shards(const std::vector<Dimension>& dimensions);
 
 size_t
 bytes_of_image(const ImageShape& shape);

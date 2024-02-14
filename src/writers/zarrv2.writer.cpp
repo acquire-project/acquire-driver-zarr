@@ -21,14 +21,15 @@ zarr::ZarrV2Writer::flush_()
         return;
     }
 
-    // create chunk files if necessary
-    if (files_.empty() &&
-        !file_creator_.create_files(data_root_ / std::to_string(current_chunk_),
+    // create chunk files
+    CHECK(files_.empty());
+    if (!file_creator_.create_files(data_root_ / std::to_string(current_chunk_),
                                     array_spec_.dimensions,
                                     false,
                                     files_)) {
         return;
     }
+    CHECK(files_.size() == chunk_buffers_.size());
 
     // compress buffers and write out
     compress_buffers_();
@@ -80,3 +81,109 @@ zarr::ZarrV2Writer::flush_()
     }
     bytes_to_flush_ = 0;
 }
+
+#ifndef NO_UNIT_TESTS
+#ifdef _WIN32
+#define acquire_export __declspec(dllexport)
+#else
+#define acquire_export
+#endif
+
+namespace common = zarr::common;
+
+extern "C"
+{
+    acquire_export int unit_test__zarrv2_writer__write()
+    {
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
+        struct VideoFrame* frame = nullptr;
+        int retval = 0;
+
+        try {
+            auto thread_pool = std::make_shared<common::ThreadPool>(
+              std::thread::hardware_concurrency(),
+              [](const std::string& err) { throw std::runtime_error(err); });
+
+            std::vector<zarr::Dimension> dims;
+            dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
+            dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
+            dims.emplace_back("z", DimensionType_Space, 6, 2, 0);   // 3 chunks
+            dims.emplace_back("c", DimensionType_Channel, 8, 4, 0); // 2 chunks
+            dims.emplace_back(
+              "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
+
+            ImageShape shape {
+                .dims = {
+                  .width = 64,
+                  .height = 48,
+                },
+                .type = SampleType_u16,
+            };
+
+            zarr::ArraySpec array_spec = {
+                .image_shape = shape,
+                .dimensions = dims,
+                .data_root = base_dir.string(),
+                .compression_params = std::nullopt,
+            };
+
+            zarr::ZarrV2Writer writer(array_spec, thread_pool);
+
+            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
+            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
+            frame->shape = shape;
+            memset(frame->data, 0, 64 * 48 * 2);
+
+            for (auto i = 0; i < 6 * 8 * 5; ++i) {
+                CHECK(writer.write(frame));
+            }
+            writer.finalize();
+
+            const auto expected_file_size = 16 * // x
+                                            16 * // y
+                                            2 *  // z
+                                            4 *  // c
+                                            5 *  // t
+                                            2;   // bytes per pixel
+
+            CHECK(fs::is_directory(base_dir));
+            for (auto c = 0; c < 2; ++c) {
+                CHECK(fs::is_directory(base_dir / "0" / std::to_string(c)));
+                for (auto z = 0; z < 3; ++z) {
+                    CHECK(fs::is_directory(base_dir / "0" / std::to_string(c) /
+                                           std::to_string(z)));
+                    for (auto y = 0; y < 3; ++y) {
+                        CHECK(fs::is_directory(
+                          base_dir / "0" / std::to_string(c) /
+                          std::to_string(z) / std::to_string(y)));
+                        for (auto x = 0; x < 4; ++x) {
+                            const auto filename =
+                              base_dir / "0" / std::to_string(c) /
+                              std::to_string(z) / std::to_string(y) /
+                              std::to_string(x);
+                            CHECK(fs::is_regular_file(filename));
+                            const auto file_size = fs::file_size(filename);
+                            CHECK(file_size == expected_file_size);
+                        }
+                    }
+                }
+            }
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        // cleanup
+        if (fs::exists(base_dir)) {
+            fs::remove_all(base_dir);
+        }
+        if (frame) {
+            free(frame);
+        }
+        return retval;
+    }
+}
+#endif

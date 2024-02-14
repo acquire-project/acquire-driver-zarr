@@ -738,25 +738,23 @@ test_average_frame_inner(const SampleType& stype)
     free(dst);
 }
 
-extern "C"
+extern "C" acquire_export int
+unit_test__average_frame()
 {
-    acquire_export int unit_test__average_frame()
-    {
-        try {
-            test_average_frame_inner<uint8_t>(SampleType_u8);
-            test_average_frame_inner<int8_t>(SampleType_i8);
-            test_average_frame_inner<uint16_t>(SampleType_u16);
-            test_average_frame_inner<int16_t>(SampleType_i16);
-            test_average_frame_inner<float>(SampleType_f32);
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-            return 0;
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-            return 0;
-        }
-
-        return 1;
+    try {
+        test_average_frame_inner<uint8_t>(SampleType_u8);
+        test_average_frame_inner<int8_t>(SampleType_i8);
+        test_average_frame_inner<uint16_t>(SampleType_u16);
+        test_average_frame_inner<int16_t>(SampleType_i16);
+        test_average_frame_inner<float>(SampleType_f32);
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
+        return 0;
+    } catch (...) {
+        LOGE("Exception: (unknown)");
+        return 0;
     }
+
+    return 1;
 }
 #endif
