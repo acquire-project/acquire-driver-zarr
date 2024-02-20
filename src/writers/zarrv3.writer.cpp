@@ -14,15 +14,8 @@ zarr::ZarrV3Writer::ZarrV3Writer(
 }
 
 void
-zarr::ZarrV3Writer::flush_()
+zarr::ZarrV3Writer::flush_impl_()
 {
-    if (bytes_to_flush_ == 0) {
-        return;
-    }
-    //    if (bytes_to_flush_ == 0) {
-    //        return;
-    //    }
-    //
     //    // create shard files if necessary
     //    if (files_.empty() && !file_creator_.create_files(
     //                            data_root_ / ("c" +
@@ -98,13 +91,6 @@ zarr::ZarrV3Writer::flush_()
     //
     //    // wait for all threads to finish
     //    latch.wait();
-    //
-    //    // reset buffers
-    //    for (auto& buf : chunk_buffers_) {
-    //        buf.clear();
-    //        buf.reserve(max_bytes_per_chunk);
-    //    }
-    //    bytes_to_flush_ = 0;
 }
 
 #ifndef NO_UNIT_TESTS
@@ -118,7 +104,7 @@ namespace common = zarr::common;
 
 extern "C"
 {
-    acquire_export int unit_test__zarrv3_writer__write()
+    acquire_export int unit_test__zarrv3_writer__write_even()
     {
         const fs::path base_dir = fs::temp_directory_path() / "acquire";
         struct VideoFrame* frame = nullptr;

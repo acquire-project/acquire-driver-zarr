@@ -86,8 +86,9 @@ main()
         CASE(unit_test__file_creator__make_chunk_files),
         CASE(unit_test__file_creator__make_shard_files),
         CASE(unit_test__writer__write_frame_to_chunks),
-        CASE(unit_test__zarrv2_writer__write),
-//            CASE(unit_test__zarrv3_writer__write),
+        CASE(unit_test__zarrv2_writer__write_even),
+        CASE(unit_test__zarrv2_writer__write_ragged_append_dim),
+        CASE(unit_test__zarrv2_writer__write_ragged_internal_dim),
 #undef CASE
     };
 

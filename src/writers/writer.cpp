@@ -193,6 +193,8 @@ zarr::Writer::Writer(const ArraySpec& array_spec,
   , frames_written_{ 0 }
   , current_chunk_{ 0 }
   , chunk_offset_{ 0 }
+  , should_flush_{ false }
+  , array_counters_(array_spec_.dimensions.size() - 2, 0)
   , chunk_counters_(array_spec_.dimensions.size() - 2, 0)
 {
     chunk_strides_.push_back(1);
@@ -202,7 +204,7 @@ zarr::Writer::Writer(const ArraySpec& array_spec,
         chunk_strides_.push_back(chunks_per_dim_.back() *
                                  chunk_strides_.back());
     }
-    chunks_per_dim_.push_back(0);
+    chunks_per_dim_.push_back(1);
 
     data_root_ = fs::path(array_spec_.data_root);
 }
@@ -225,16 +227,11 @@ zarr::Writer::write(const VideoFrame* frame)
     bytes_to_flush_ += bytes_written;
 
     // increment chunk offset
-    const auto fpc = frames_per_chunk_();
-    if (++frames_written_ % frames_per_chunk_() == 0) {
-        chunk_offset_ += tiles_per_frame_();
-    }
 
-    const auto nc = common::number_of_chunks(dimensions);
-    if (chunk_offset_ == nc) {
-        chunk_offset_ = 0;
+    increment_counters_();
+
+    if (should_flush_) {
         flush_();
-        rollover_();
     }
 
     return true;
@@ -244,10 +241,7 @@ void
 zarr::Writer::finalize()
 {
     finalize_chunks_();
-    if (bytes_to_flush_ > 0) {
-        flush_();
-    }
-
+    flush_();
     close_files_();
 }
 
@@ -294,6 +288,33 @@ zarr::Writer::make_buffers_() noexcept
         chunk_buffers_.emplace_back();
         chunk_buffers_.back().reserve(bytes_to_reserve);
     }
+}
+
+void
+zarr::Writer::fill_chunks_(uint32_t dim_idx)
+{
+    const auto dimensions = array_spec_.dimensions;
+    const auto& dim = dimensions.at(dim_idx);
+
+    auto tiles_to_fill = 1;
+    for (auto i = 2; i < dim_idx + 2 - 1; ++i) {
+        tiles_to_fill *= dimensions.at(i).chunk_size_px;
+    }
+    tiles_to_fill *=
+      (dimensions.at(dim_idx + 2).chunk_size_px - chunk_counters_.at(dim_idx));
+
+    const auto bytes_per_tile = dimensions.at(0).chunk_size_px *
+                                dimensions.at(1).chunk_size_px *
+                                bytes_of_type(array_spec_.image_shape.type);
+    const auto bytes_to_fill = tiles_to_fill * bytes_per_tile;
+
+    for (auto i = chunk_offset_; i < chunk_offset_ + tiles_per_frame_(); ++i) {
+        auto& chunk = chunk_buffers_.at(i);
+        std::fill_n(std::back_inserter(chunk), bytes_to_fill, 0);
+    }
+    chunk_counters_.at(dim_idx) = 0;
+    chunk_offset_ = 0;
+    bytes_to_flush_ += chunk_buffers_.size() * bytes_to_fill;
 }
 
 void
@@ -480,6 +501,103 @@ zarr::Writer::frames_per_chunk_() const noexcept
 }
 
 void
+zarr::Writer::increment_counters_()
+{
+    // to be called after writing a frame to the chunk buffers
+    ++frames_written_;
+    const auto& dimensions = array_spec_.dimensions;
+
+    bool increment_chunk_offset = false;
+
+    // increment chunk counter(s)
+    for (auto i = 0; i < chunk_counters_.size(); ++i) {
+        const auto counter = ++chunk_counters_.at(i);
+        const auto threshold = dimensions.at(i + 2).chunk_size_px;
+        if (counter == threshold) {
+            chunk_counters_.at(i) = 0;
+            increment_chunk_offset = true;
+        } else {
+            break;
+        }
+    }
+
+    if (increment_chunk_offset) {
+        chunk_offset_ =
+          (chunk_offset_ + tiles_per_frame_()) % chunk_buffers_.size();
+    }
+
+    // increment array counter(s)
+    for (auto i = 0; i < array_counters_.size(); ++i) {
+        const auto counter = ++array_counters_.at(i);
+        const auto threshold = i == array_counters_.size() - 1
+                                 ? dimensions.back().chunk_size_px
+                                 : dimensions.at(i + 2).array_size_px;
+        if (counter == threshold) {
+            array_counters_.at(i) = 0;
+        } else {
+            break;
+        }
+    }
+
+    // fill ragged dimensions
+    for (auto i = 0; i < chunk_counters_.size(); ++i) {
+        const auto array = array_counters_.at(i), chunk = chunk_counters_.at(i);
+        if (array != 0) {
+            break;
+        }
+
+        if (chunk != 0) {
+            LOG("Ragged dimension of size %d", chunk_counters_.at(i));
+            fill_chunks_(i);
+        }
+    }
+
+    should_flush_ = std::all_of(array_counters_.begin(),
+                                array_counters_.end(),
+                                [](const auto& c) { return c == 0; });
+}
+
+void
+zarr::Writer::flush_()
+{
+    if (bytes_to_flush_ == 0) {
+        return;
+    }
+
+    // fill in any unfilled chunks
+    const auto bytes_per_chunk = common::bytes_per_chunk(
+      array_spec_.dimensions, array_spec_.image_shape.type);
+
+    // fill in last frames
+    for (auto& chunk : chunk_buffers_) {
+        EXPECT(bytes_per_chunk >= chunk.size(),
+               "Chunk buffer size exceeds expected size.");
+        std::fill_n(
+          std::back_inserter(chunk), bytes_per_chunk - chunk.size(), 0);
+    }
+
+    // compress buffers and write out
+    compress_buffers_();
+    flush_impl_();
+    rollover_();
+
+    // reset buffers
+    const auto bytes_to_reserve =
+      bytes_per_chunk +
+      (array_spec_.compression_params.has_value() ? BLOSC_MAX_OVERHEAD : 0);
+
+    for (auto& buf : chunk_buffers_) {
+        buf.clear();
+        buf.reserve(bytes_to_reserve);
+    }
+
+    // reset state
+    bytes_to_flush_ = 0;
+    chunk_offset_ = 0;
+    should_flush_ = false;
+}
+
+void
 zarr::Writer::close_files_()
 {
     for (auto& file : files_) {
@@ -515,7 +633,7 @@ class TestWriter : public zarr::Writer
     {
     }
 
-    void flush_() override {}
+    void flush_impl_() override {}
 };
 
 extern "C"
@@ -636,7 +754,8 @@ extern "C"
             dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
             dims.emplace_back("z", DimensionType_Space, 2, 1, 0);   // 2 chunks
             dims.emplace_back("c", DimensionType_Channel, 1, 1, 0); // 1 chunk
-            dims.emplace_back("t", DimensionType_Time, 2, 1, 0);    // 2 chunks
+            dims.emplace_back(
+              "t", DimensionType_Time, 2, 1, 0); // 1 timepoint/chunk
 
             ImageShape shape {
                 .dims = {
@@ -660,7 +779,7 @@ extern "C"
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48 * 2);
 
-            for (auto i = 0; i < 4 * 3 * 2 * 1 * 2; ++i) {
+            for (auto i = 0; i < 2 * 1 * 2; ++i) {
                 CHECK(writer.write(frame));
             }
 
