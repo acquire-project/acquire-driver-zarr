@@ -8,6 +8,65 @@
 
 namespace zarr = acquire::sink::zarr;
 
+namespace {
+/// Returns the index of the chunk in the lattice of chunks for the given frame
+/// and dimension.
+size_t
+chunk_lattice_index(size_t frame_id,
+                    size_t dimension_idx,
+                    const std::vector<zarr::Dimension>& dims)
+{
+    CHECK(dimension_idx >= 2 && dimension_idx < dims.size());
+
+    // the last dimension is a special case
+    if (dimension_idx == dims.size() - 1) {
+        size_t divisor = dims.back().chunk_size_px;
+        for (auto i = 2; i < dims.size() - 1; ++i) {
+            const auto& dim = dims.at(i);
+            divisor *= dim.array_size_px;
+        }
+
+        CHECK(divisor);
+        return frame_id / divisor;
+    }
+
+    size_t mod_divisor = 1, div_divisor = 1;
+    for (auto i = 2; i <= dimension_idx; ++i) {
+        const auto& dim = dims.at(i);
+        mod_divisor *= dim.array_size_px;
+        div_divisor *=
+          (i < dimension_idx ? dim.array_size_px : dim.chunk_size_px);
+    }
+
+    CHECK(mod_divisor);
+    CHECK(div_divisor);
+
+    return (frame_id % mod_divisor) / div_divisor;
+}
+
+size_t
+chunk_group_offset(size_t frame_id, const std::vector<zarr::Dimension>& dims)
+{
+    std::vector<size_t> strides;
+    strides.push_back(1);
+    for (auto i = 0; i < dims.size() - 1; ++i) {
+        const auto& dim = dims.at(i);
+        CHECK(dim.chunk_size_px);
+        const auto a = dim.array_size_px, c = dim.chunk_size_px;
+        strides.push_back(strides.back() * ((a + c - 1) / c));
+    }
+
+    size_t offset = 0;
+    for (auto i = 2; i < dims.size() - 1; ++i) {
+        const auto idx = chunk_lattice_index(frame_id, i, dims);
+        const auto stride = strides.at(i);
+        offset += idx * stride;
+    }
+
+    return offset;
+}
+} // namespace
+
 /// FileCreator
 zarr::FileCreator::FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
   : thread_pool_{ thread_pool }
