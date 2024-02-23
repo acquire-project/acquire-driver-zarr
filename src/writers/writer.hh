@@ -25,10 +25,14 @@ struct FileCreator
     explicit FileCreator(std::shared_ptr<common::ThreadPool> thread_pool);
     ~FileCreator() noexcept = default;
 
-    [[nodiscard]] bool create_files(const fs::path& base_dir,
-                                    const std::vector<Dimension>& dimensions,
-                                    bool make_shards,
-                                    std::vector<file>& files);
+    [[nodiscard]] bool create_chunk_files(
+      const fs::path& base_dir,
+      const std::vector<Dimension>& dimensions,
+      std::vector<file>& files);
+    [[nodiscard]] bool create_shard_files(
+      const fs::path& base_dir,
+      const std::vector<Dimension>& dimensions,
+      std::vector<file>& files);
 
   private:
     std::shared_ptr<common::ThreadPool> thread_pool_;

@@ -16,10 +16,9 @@ zarr::FileCreator::FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
 }
 
 bool
-zarr::FileCreator::create_files(const fs::path& base_dir,
-                                const std::vector<Dimension>& dimensions,
-                                bool make_shards,
-                                std::vector<file>& files)
+zarr::FileCreator::create_chunk_files(const fs::path& base_dir,
+                                      const std::vector<Dimension>& dimensions,
+                                      std::vector<file>& files)
 {
     std::queue<fs::path> paths;
     paths.push(base_dir);
@@ -32,8 +31,59 @@ zarr::FileCreator::create_files(const fs::path& base_dir,
     for (auto i = dimensions.size() - 2; i >= 1; --i) {
         const auto& dim = dimensions.at(i);
         const auto n_chunks = common::chunks_along_dimension(dim);
-        const auto n_dirs =
-          make_shards ? n_chunks / dim.shard_size_chunks : n_chunks;
+        const auto n_dirs = n_chunks;
+
+        auto n_paths = paths.size();
+        for (auto j = 0; j < n_paths; ++j) {
+            const auto path = paths.front();
+            paths.pop();
+
+            for (auto k = 0; k < n_chunks; ++k) {
+                paths.push(path / std::to_string(k));
+            }
+        }
+
+        if (!make_dirs_(paths)) {
+            return false;
+        }
+    }
+
+    // create files
+    {
+        const auto& dim = dimensions.front();
+        const auto n_chunks = common::chunks_along_dimension(dim);
+        const auto n_files = n_chunks;
+
+        auto n_paths = paths.size();
+        for (auto i = 0; i < n_paths; ++i) {
+            const auto path = paths.front();
+            paths.pop();
+            for (auto j = 0; j < n_files; ++j) {
+                paths.push(path / std::to_string(j));
+            }
+        }
+    }
+
+    return make_files_(paths, files);
+}
+
+bool
+zarr::FileCreator::create_shard_files(const fs::path& base_dir,
+                                      const std::vector<Dimension>& dimensions,
+                                      std::vector<file>& files)
+{
+    std::queue<fs::path> paths;
+    paths.push(base_dir);
+
+    if (!make_dirs_(paths)) {
+        return false;
+    }
+
+    // create directories
+    for (auto i = dimensions.size() - 2; i >= 1; --i) {
+        const auto& dim = dimensions.at(i);
+        const auto n_chunks = common::chunks_along_dimension(dim);
+        const auto n_dirs = n_chunks / dim.shard_size_chunks;
 
         auto n_paths = paths.size();
         for (auto j = 0; j < n_paths; ++j) {
@@ -51,15 +101,18 @@ zarr::FileCreator::create_files(const fs::path& base_dir,
     }
 
     // create files
-    auto n_paths = paths.size();
-    const auto n_chunks = common::chunks_along_dimension(dimensions.front());
-    const auto n_files =
-      make_shards ? n_chunks / dimensions.front().shard_size_chunks : n_chunks;
-    for (auto i = 0; i < n_paths; ++i) {
-        const auto path = paths.front();
-        paths.pop();
-        for (auto j = 0; j < n_files; ++j) {
-            paths.push(path / std::to_string(j));
+    {
+        const auto& dim = dimensions.front();
+        const auto n_chunks = common::chunks_along_dimension(dim);
+        const auto n_files = n_chunks / dim.shard_size_chunks;
+
+        auto n_paths = paths.size();
+        for (auto i = 0; i < n_paths; ++i) {
+            const auto path = paths.front();
+            paths.pop();
+            for (auto j = 0; j < n_files; ++j) {
+                paths.push(path / std::to_string(j));
+            }
         }
     }
 
