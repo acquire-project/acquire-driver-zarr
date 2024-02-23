@@ -44,6 +44,16 @@ chunk_lattice_index(size_t frame_id,
     return (frame_id % mod_divisor) / div_divisor;
 }
 
+std::vector<size_t>
+chunk_lattice_indices(size_t frame_id, const std::vector<zarr::Dimension>& dims)
+{
+    std::vector<size_t> indices;
+    for (auto i = 2; i < dims.size(); ++i) {
+        indices.push_back(chunk_lattice_index(frame_id, i, dims));
+    }
+    return indices;
+}
+
 size_t
 chunk_group_offset(size_t frame_id, const std::vector<zarr::Dimension>& dims)
 {
@@ -304,10 +314,6 @@ zarr::Writer::Writer(const ArraySpec& array_spec,
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
   , current_chunk_{ 0 }
-  , chunk_offset_{ 0 }
-  , should_flush_{ false }
-  , array_counters_(array_spec_.dimensions.size() - 2, 0)
-  , chunk_counters_(array_spec_.dimensions.size() - 2, 0)
 {
     chunk_strides_.push_back(1);
     for (auto i = 0; i < array_spec_.dimensions.size() - 1; ++i) {
@@ -337,12 +343,9 @@ zarr::Writer::write(const VideoFrame* frame)
       frame->data, frame->bytes_of_frame - sizeof(*frame));
     CHECK(bytes_written == frame->bytes_of_frame - sizeof(*frame));
     bytes_to_flush_ += bytes_written;
+    ++frames_written_;
 
-    // increment chunk offset
-
-    increment_counters_();
-
-    if (should_flush_) {
+    if (should_flush_()) {
         flush_();
     }
 
@@ -392,41 +395,38 @@ zarr::Writer::make_buffers_() noexcept
     const auto bytes_per_chunk = common::bytes_per_chunk(
       array_spec_.dimensions, array_spec_.image_shape.type);
 
-    const auto bytes_to_reserve =
-      bytes_per_chunk +
-      (array_spec_.compression_params.has_value() ? BLOSC_MAX_OVERHEAD : 0);
-
     for (auto i = 0; i < n_chunks; ++i) {
-        chunk_buffers_.emplace_back();
-        chunk_buffers_.back().reserve(bytes_to_reserve);
+        chunk_buffers_.emplace_back(bytes_per_chunk);
     }
 }
 
 void
 zarr::Writer::fill_chunks_(uint32_t dim_idx)
 {
-    const auto dimensions = array_spec_.dimensions;
-    const auto& dim = dimensions.at(dim_idx);
-
-    auto tiles_to_fill = 1;
-    for (auto i = 2; i < dim_idx + 2 - 1; ++i) {
-        tiles_to_fill *= dimensions.at(i).chunk_size_px;
-    }
-    tiles_to_fill *=
-      (dimensions.at(dim_idx + 2).chunk_size_px - chunk_counters_.at(dim_idx));
-
-    const auto bytes_per_tile = dimensions.at(0).chunk_size_px *
-                                dimensions.at(1).chunk_size_px *
-                                bytes_of_type(array_spec_.image_shape.type);
-    const auto bytes_to_fill = tiles_to_fill * bytes_per_tile;
-
-    for (auto i = chunk_offset_; i < chunk_offset_ + tiles_per_frame_(); ++i) {
-        auto& chunk = chunk_buffers_.at(i);
-        std::fill_n(std::back_inserter(chunk), bytes_to_fill, 0);
-    }
-    chunk_counters_.at(dim_idx) = 0;
-    chunk_offset_ = 0;
-    bytes_to_flush_ += chunk_buffers_.size() * bytes_to_fill;
+    //    const auto dimensions = array_spec_.dimensions;
+    //    const auto& dim = dimensions.at(dim_idx);
+    //
+    //    auto tiles_to_fill = 1;
+    //    for (auto i = 2; i < dim_idx + 2 - 1; ++i) {
+    //        tiles_to_fill *= dimensions.at(i).chunk_size_px;
+    //    }
+    //    tiles_to_fill *=
+    //      (dimensions.at(dim_idx + 2).chunk_size_px -
+    //      chunk_counters_.at(dim_idx));
+    //
+    //    const auto bytes_per_tile = dimensions.at(0).chunk_size_px *
+    //                                dimensions.at(1).chunk_size_px *
+    //                                bytes_of_type(array_spec_.image_shape.type);
+    //    const auto bytes_to_fill = tiles_to_fill * bytes_per_tile;
+    //
+    //    for (auto i = chunk_offset_; i < chunk_offset_ + tiles_per_frame_();
+    //    ++i) {
+    //        auto& chunk = chunk_buffers_.at(i);
+    //        std::fill_n(std::back_inserter(chunk), bytes_to_fill, 0);
+    //    }
+    //    chunk_counters_.at(dim_idx) = 0;
+    //    chunk_offset_ = 0;
+    //    bytes_to_flush_ += chunk_buffers_.size() * bytes_to_fill;
 }
 
 void
@@ -527,27 +527,27 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf,
     const auto frame_cols = image_shape.dims.width;
     const auto frame_rows = image_shape.dims.height;
 
-    const auto frames_this_chunk = frames_written_ % frames_per_chunk_();
-
-    const auto tile_cols = array_spec_.dimensions.at(0).chunk_size_px;
-    const auto tile_rows = array_spec_.dimensions.at(1).chunk_size_px;
+    const auto& dimensions = array_spec_.dimensions;
+    const auto tile_cols = dimensions.at(0).chunk_size_px;
+    const auto tile_rows = dimensions.at(1).chunk_size_px;
     const auto bytes_per_row = tile_cols * bytes_per_px;
-    const auto bytes_per_tile = tile_rows * tile_cols * bytes_per_px;
 
     size_t bytes_written = 0;
 
-    const auto tiles_per_frame_x =
-      common::chunks_along_dimension(array_spec_.dimensions.at(0));
-    const auto tiles_per_frame_y =
-      common::chunks_along_dimension(array_spec_.dimensions.at(1));
+    const auto n_tiles_x = (frame_cols + tile_cols - 1) / tile_cols;
+    const auto n_tiles_y = (frame_rows + tile_rows - 1) / tile_rows;
 
-    for (auto i = 0; i < tiles_per_frame_y; ++i) {
-        // TODO (aliddell): we can optimize this when tiles_per_frame_x_
-        for (auto j = 0; j < tiles_per_frame_x; ++j) {
-            size_t offset = bytes_per_tile * frames_this_chunk;
+    const auto frame_idx = frames_written_;
+    // offset among the chunks in the lattice
+    const auto group_offset = chunk_group_offset(frame_idx, dimensions);
 
-            const auto c = chunk_offset_ + i * tiles_per_frame_x + j;
+    for (auto i = 0; i < n_tiles_y; ++i) {
+        // TODO (aliddell): we can optimize this when tiles_per_frame_x_ is 1
+        for (auto j = 0; j < n_tiles_x; ++j) {
+            const auto c = group_offset + i * n_tiles_x + j;
             auto& chunk = chunk_buffers_.at(c);
+
+            // TODO (aliddell): pick up here
 
             for (auto k = 0; k < tile_rows; ++k) {
                 const auto frame_row = i * tile_rows + k;
@@ -576,97 +576,11 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf,
                     std::fill_n(std::back_inserter(chunk), bytes_per_row, 0);
                     bytes_written += bytes_per_row;
                 }
-                offset += tile_cols * bytes_per_px;
             }
         }
     }
 
     return bytes_written;
-}
-
-size_t
-zarr::Writer::n_chunks_() const noexcept
-{
-    return common::number_of_chunks(array_spec_.dimensions);
-}
-
-size_t
-zarr::Writer::tiles_per_frame_() const noexcept
-{
-    const auto tiles_per_frame_x =
-      common::chunks_along_dimension(array_spec_.dimensions.at(0));
-    const auto tiles_per_frame_y =
-      common::chunks_along_dimension(array_spec_.dimensions.at(1));
-
-    return tiles_per_frame_x * tiles_per_frame_y;
-}
-
-size_t
-zarr::Writer::frames_per_chunk_() const noexcept
-{
-    size_t frames_per_chunk = 1;
-    for (auto i = 2; i < array_spec_.dimensions.size(); ++i) {
-        frames_per_chunk *= array_spec_.dimensions.at(i).chunk_size_px;
-    }
-
-    return frames_per_chunk;
-}
-
-void
-zarr::Writer::increment_counters_()
-{
-    // to be called after writing a frame to the chunk buffers
-    ++frames_written_;
-    const auto& dimensions = array_spec_.dimensions;
-
-    bool increment_chunk_offset = false;
-
-    // increment chunk counter(s)
-    for (auto i = 0; i < chunk_counters_.size(); ++i) {
-        const auto counter = ++chunk_counters_.at(i);
-        const auto threshold = dimensions.at(i + 2).chunk_size_px;
-        if (counter == threshold) {
-            chunk_counters_.at(i) = 0;
-            increment_chunk_offset = true;
-        } else {
-            break;
-        }
-    }
-
-    if (increment_chunk_offset) {
-        chunk_offset_ =
-          (chunk_offset_ + tiles_per_frame_()) % chunk_buffers_.size();
-    }
-
-    // increment array counter(s)
-    for (auto i = 0; i < array_counters_.size(); ++i) {
-        const auto counter = ++array_counters_.at(i);
-        const auto threshold = i == array_counters_.size() - 1
-                                 ? dimensions.back().chunk_size_px
-                                 : dimensions.at(i + 2).array_size_px;
-        if (counter == threshold) {
-            array_counters_.at(i) = 0;
-        } else {
-            break;
-        }
-    }
-
-    // fill ragged dimensions
-    for (auto i = 0; i < chunk_counters_.size(); ++i) {
-        const auto array = array_counters_.at(i), chunk = chunk_counters_.at(i);
-        if (array != 0) {
-            break;
-        }
-
-        if (chunk != 0) {
-            LOG("Ragged dimension of size %d", chunk_counters_.at(i));
-            fill_chunks_(i);
-        }
-    }
-
-    should_flush_ = std::all_of(array_counters_.begin(),
-                                array_counters_.end(),
-                                [](const auto& c) { return c == 0; });
 }
 
 void
@@ -690,7 +604,7 @@ zarr::Writer::flush_()
 
     // compress buffers and write out
     compress_buffers_();
-    flush_impl_();
+    CHECK(flush_impl_());
     rollover_();
 
     // reset buffers
@@ -705,8 +619,6 @@ zarr::Writer::flush_()
 
     // reset state
     bytes_to_flush_ = 0;
-    chunk_offset_ = 0;
-    should_flush_ = false;
 }
 
 void
@@ -745,12 +657,187 @@ class TestWriter : public zarr::Writer
     {
     }
 
-    void flush_impl_() override {}
+  private:
+    bool should_flush_() const noexcept override { return false; }
+    bool flush_impl_() override { return true; }
 };
 
 extern "C"
 {
-    acquire_export int unit_test__file_creator__make_chunk_files()
+    acquire_export int unit_test__chunk_lattice_index()
+    {
+        int retval = 0;
+        try {
+            std::vector<zarr::Dimension> dims;
+            dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
+            dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
+            dims.emplace_back("z", DimensionType_Space, 5, 2, 0);   // 3 chunks
+            dims.emplace_back("c", DimensionType_Channel, 3, 2, 0); // 2 chunks
+            dims.emplace_back(
+              "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
+
+            CHECK(chunk_lattice_index(0, 2, dims) == 0);
+            CHECK(chunk_lattice_index(0, 3, dims) == 0);
+            CHECK(chunk_lattice_index(0, 4, dims) == 0);
+            CHECK(chunk_lattice_index(1, 2, dims) == 0);
+            CHECK(chunk_lattice_index(1, 3, dims) == 0);
+            CHECK(chunk_lattice_index(1, 4, dims) == 0);
+            CHECK(chunk_lattice_index(2, 2, dims) == 1);
+            CHECK(chunk_lattice_index(2, 3, dims) == 0);
+            CHECK(chunk_lattice_index(2, 4, dims) == 0);
+            CHECK(chunk_lattice_index(3, 2, dims) == 1);
+            CHECK(chunk_lattice_index(3, 3, dims) == 0);
+            CHECK(chunk_lattice_index(3, 4, dims) == 0);
+            CHECK(chunk_lattice_index(4, 2, dims) == 2);
+            CHECK(chunk_lattice_index(4, 3, dims) == 0);
+            CHECK(chunk_lattice_index(4, 4, dims) == 0);
+            CHECK(chunk_lattice_index(5, 2, dims) == 0);
+            CHECK(chunk_lattice_index(5, 3, dims) == 0);
+            CHECK(chunk_lattice_index(5, 4, dims) == 0);
+            CHECK(chunk_lattice_index(12, 2, dims) == 1);
+            CHECK(chunk_lattice_index(12, 3, dims) == 1);
+            CHECK(chunk_lattice_index(12, 4, dims) == 0);
+            CHECK(chunk_lattice_index(19, 2, dims) == 2);
+            CHECK(chunk_lattice_index(19, 3, dims) == 0);
+            CHECK(chunk_lattice_index(19, 4, dims) == 0);
+            CHECK(chunk_lattice_index(26, 2, dims) == 0);
+            CHECK(chunk_lattice_index(26, 3, dims) == 1);
+            CHECK(chunk_lattice_index(26, 4, dims) == 0);
+            CHECK(chunk_lattice_index(33, 2, dims) == 1);
+            CHECK(chunk_lattice_index(33, 3, dims) == 0);
+            CHECK(chunk_lattice_index(33, 4, dims) == 0);
+            CHECK(chunk_lattice_index(40, 2, dims) == 0);
+            CHECK(chunk_lattice_index(40, 3, dims) == 1);
+            CHECK(chunk_lattice_index(40, 4, dims) == 0);
+            CHECK(chunk_lattice_index(47, 2, dims) == 1);
+            CHECK(chunk_lattice_index(47, 3, dims) == 0);
+            CHECK(chunk_lattice_index(47, 4, dims) == 0);
+            CHECK(chunk_lattice_index(54, 2, dims) == 2);
+            CHECK(chunk_lattice_index(54, 3, dims) == 0);
+            CHECK(chunk_lattice_index(54, 4, dims) == 0);
+            CHECK(chunk_lattice_index(61, 2, dims) == 0);
+            CHECK(chunk_lattice_index(61, 3, dims) == 0);
+            CHECK(chunk_lattice_index(61, 4, dims) == 0);
+            CHECK(chunk_lattice_index(68, 2, dims) == 1);
+            CHECK(chunk_lattice_index(68, 3, dims) == 0);
+            CHECK(chunk_lattice_index(68, 4, dims) == 0);
+            CHECK(chunk_lattice_index(74, 2, dims) == 2);
+            CHECK(chunk_lattice_index(74, 3, dims) == 1);
+            CHECK(chunk_lattice_index(74, 4, dims) == 0);
+            CHECK(chunk_lattice_index(75, 2, dims) == 0);
+            CHECK(chunk_lattice_index(75, 3, dims) == 0);
+            CHECK(chunk_lattice_index(75, 4, dims) == 1);
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+        return retval;
+    }
+
+    acquire_export int unit_test__chunk_group_offset()
+    {
+        int retval = 0;
+
+        std::vector<zarr::Dimension> dims;
+        dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
+        dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
+        dims.emplace_back("z", DimensionType_Space, 5, 2, 0);   // 3 chunks
+        dims.emplace_back("c", DimensionType_Channel, 3, 2, 0); // 2 chunks
+        dims.emplace_back(
+          "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
+
+        try {
+            CHECK(chunk_group_offset(0, dims) == 0);
+            CHECK(chunk_group_offset(1, dims) == 0);
+            CHECK(chunk_group_offset(2, dims) == 12);
+            CHECK(chunk_group_offset(3, dims) == 12);
+            CHECK(chunk_group_offset(4, dims) == 24);
+            CHECK(chunk_group_offset(5, dims) == 0);
+            CHECK(chunk_group_offset(6, dims) == 0);
+            CHECK(chunk_group_offset(7, dims) == 12);
+            CHECK(chunk_group_offset(8, dims) == 12);
+            CHECK(chunk_group_offset(9, dims) == 24);
+            CHECK(chunk_group_offset(10, dims) == 36);
+            CHECK(chunk_group_offset(11, dims) == 36);
+            CHECK(chunk_group_offset(12, dims) == 48);
+            CHECK(chunk_group_offset(13, dims) == 48);
+            CHECK(chunk_group_offset(14, dims) == 60);
+            CHECK(chunk_group_offset(15, dims) == 0);
+            CHECK(chunk_group_offset(16, dims) == 0);
+            CHECK(chunk_group_offset(17, dims) == 12);
+            CHECK(chunk_group_offset(18, dims) == 12);
+            CHECK(chunk_group_offset(19, dims) == 24);
+            CHECK(chunk_group_offset(20, dims) == 0);
+            CHECK(chunk_group_offset(21, dims) == 0);
+            CHECK(chunk_group_offset(22, dims) == 12);
+            CHECK(chunk_group_offset(23, dims) == 12);
+            CHECK(chunk_group_offset(24, dims) == 24);
+            CHECK(chunk_group_offset(25, dims) == 36);
+            CHECK(chunk_group_offset(26, dims) == 36);
+            CHECK(chunk_group_offset(27, dims) == 48);
+            CHECK(chunk_group_offset(28, dims) == 48);
+            CHECK(chunk_group_offset(29, dims) == 60);
+            CHECK(chunk_group_offset(30, dims) == 0);
+            CHECK(chunk_group_offset(31, dims) == 0);
+            CHECK(chunk_group_offset(32, dims) == 12);
+            CHECK(chunk_group_offset(33, dims) == 12);
+            CHECK(chunk_group_offset(34, dims) == 24);
+            CHECK(chunk_group_offset(35, dims) == 0);
+            CHECK(chunk_group_offset(36, dims) == 0);
+            CHECK(chunk_group_offset(37, dims) == 12);
+            CHECK(chunk_group_offset(38, dims) == 12);
+            CHECK(chunk_group_offset(39, dims) == 24);
+            CHECK(chunk_group_offset(40, dims) == 36);
+            CHECK(chunk_group_offset(41, dims) == 36);
+            CHECK(chunk_group_offset(42, dims) == 48);
+            CHECK(chunk_group_offset(43, dims) == 48);
+            CHECK(chunk_group_offset(44, dims) == 60);
+            CHECK(chunk_group_offset(45, dims) == 0);
+            CHECK(chunk_group_offset(46, dims) == 0);
+            CHECK(chunk_group_offset(47, dims) == 12);
+            CHECK(chunk_group_offset(48, dims) == 12);
+            CHECK(chunk_group_offset(49, dims) == 24);
+            CHECK(chunk_group_offset(50, dims) == 0);
+            CHECK(chunk_group_offset(51, dims) == 0);
+            CHECK(chunk_group_offset(52, dims) == 12);
+            CHECK(chunk_group_offset(53, dims) == 12);
+            CHECK(chunk_group_offset(54, dims) == 24);
+            CHECK(chunk_group_offset(55, dims) == 36);
+            CHECK(chunk_group_offset(56, dims) == 36);
+            CHECK(chunk_group_offset(57, dims) == 48);
+            CHECK(chunk_group_offset(58, dims) == 48);
+            CHECK(chunk_group_offset(59, dims) == 60);
+            CHECK(chunk_group_offset(60, dims) == 0);
+            CHECK(chunk_group_offset(61, dims) == 0);
+            CHECK(chunk_group_offset(62, dims) == 12);
+            CHECK(chunk_group_offset(63, dims) == 12);
+            CHECK(chunk_group_offset(64, dims) == 24);
+            CHECK(chunk_group_offset(65, dims) == 0);
+            CHECK(chunk_group_offset(66, dims) == 0);
+            CHECK(chunk_group_offset(67, dims) == 12);
+            CHECK(chunk_group_offset(68, dims) == 12);
+            CHECK(chunk_group_offset(69, dims) == 24);
+            CHECK(chunk_group_offset(70, dims) == 36);
+            CHECK(chunk_group_offset(71, dims) == 36);
+            CHECK(chunk_group_offset(72, dims) == 48);
+            CHECK(chunk_group_offset(73, dims) == 48);
+            CHECK(chunk_group_offset(74, dims) == 60);
+            CHECK(chunk_group_offset(75, dims) == 0);
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        return retval;
+    }
+
+    acquire_export int unit_test__file_creator__create_chunk_files()
     {
         const auto base_dir = fs::temp_directory_path() / "acquire";
         int retval = 0;
@@ -768,7 +855,7 @@ extern "C"
               "z", DimensionType_Space, 0, 3, 0); // 3 timepoints per chunk
 
             std::vector<struct file> files;
-            CHECK(file_creator.create_files(base_dir, dims, false, files));
+            CHECK(file_creator.create_chunk_files(base_dir, dims, files));
 
             CHECK(files.size() == 5 * 2);
             std::for_each(files.begin(), files.end(), [](const struct file& f) {
@@ -797,7 +884,7 @@ extern "C"
         return retval;
     }
 
-    acquire_export int unit_test__file_creator__make_shard_files()
+    acquire_export int unit_test__file_creator__create_shard_files()
     {
         const auto base_dir = fs::temp_directory_path() / "acquire";
         int retval = 0;
@@ -817,7 +904,7 @@ extern "C"
               "z", DimensionType_Space, 8, 2, 2); // 4 chunks, 2 shards
 
             std::vector<struct file> files;
-            CHECK(file_creator.create_files(base_dir, dims, true, files));
+            CHECK(file_creator.create_shard_files(base_dir, dims, files));
 
             CHECK(files.size() == 2);
             std::for_each(files.begin(), files.end(), [](const struct file& f) {

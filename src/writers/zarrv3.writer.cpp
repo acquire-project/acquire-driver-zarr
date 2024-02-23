@@ -13,19 +13,26 @@ zarr::ZarrV3Writer::ZarrV3Writer(
 {
 }
 
-void
+bool
+zarr::ZarrV3Writer::should_flush_() const noexcept
+{
+    return true;
+}
+
+bool
 zarr::ZarrV3Writer::flush_impl_()
 {
-    //    // create shard files if necessary
-    //    if (files_.empty() && !file_creator_.create_files(
-    //                            data_root_ / ("c" +
-    //                            std::to_string(current_chunk_)),
-    //                            array_spec_.dimensions,
-    //                            true,
-    //                            files_)) {
-    //        return;
-    //    }
-    //
+    // create shard files
+    CHECK(files_.empty());
+    if (files_.empty() && !file_creator_.create_shard_files(
+                            data_root_ / ("c" + std::to_string(current_chunk_)),
+                            array_spec_.dimensions,
+                            files_)) {
+        return false;
+    }
+
+    return true;
+
     //    const auto chunks_per_shard = chunks_per_shard_();
     //
     //    // compress buffers
@@ -117,29 +124,29 @@ extern "C"
             std::vector<zarr::Dimension> dims;
             dims.emplace_back("x",
                               DimensionType_Space,
-                              20,
-                              5,  // 20 / 5 = 4 chunks
+                              64,
+                              16, // 64 / 16 = 4 chunks
                               2); // 4 / 2 = 2 shards
             dims.emplace_back("y",
+                              DimensionType_Space,
+                              48,
+                              16, // 48 / 16 = 3 chunks
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("z",
                               DimensionType_Space,
                               6,
                               2,  // 6 / 2 = 3 chunks
                               1); // 3 / 1 = 3 shards
-            dims.emplace_back("z",
-                              DimensionType_Space,
-                              15,
-                              3,  // 15 / 3 = 5 chunks
-                              1); // 5 / 1 = 5 shards
             dims.emplace_back("c",
                               DimensionType_Channel,
-                              1,
-                              1,  // 1 / 1 = 1 chunk
-                              1); // 1 / 1 = 1 shard
+                              8,
+                              4,  // 8 / 4 = 2 chunks
+                              2); // 2 / 2 = 1 shard
             dims.emplace_back("t",
                               DimensionType_Time,
                               0,
-                              2,
-                              2); // 2 timepoints per chunk, 2 chunks per shard
+                              5,  // 5 timepoints / chunk
+                              5); // 5 / 5 = 1 shard
 
             ImageShape shape {
                 .dims = {
@@ -164,32 +171,45 @@ extern "C"
             memset(frame->data, 0, 64 * 48 * 2);
 
             for (auto i = 0; i < 5 * 1 * 2; ++i) {
+                frame->frame_id = i;
                 CHECK(writer.write(frame));
             }
 
             CHECK(fs::is_directory(base_dir));
-            for (auto c = 0; c < 1; ++c) {
-                CHECK(fs::is_directory(base_dir / "0" / std::to_string(c)));
-                for (auto z = 0; z < 5; ++z) {
-                    CHECK(fs::is_directory(base_dir / "0" / std::to_string(c) /
-                                           std::to_string(z)));
-                    for (auto y = 0; y < 3; ++y) {
-                        CHECK(fs::is_directory(
-                          base_dir / "0" / std::to_string(c) /
-                          std::to_string(z) / std::to_string(y)));
-                        for (auto x = 0; x < 2; ++x) {
-                            CHECK(fs::is_regular_file(
-                              base_dir / "0" / std::to_string(c) /
-                              std::to_string(z) / std::to_string(y) /
-                              std::to_string(x)));
+            for (auto t = 0; t < 1; ++t) {
+                const auto t_dir = base_dir / ("c" + std::to_string(t));
+                CHECK(fs::is_directory(t_dir));
+
+                for (auto c = 0; c < 1; ++c) {
+                    const auto c_dir = t_dir / std::to_string(c);
+                    CHECK(fs::is_directory(c_dir));
+
+                    for (auto z = 0; z < 3; ++z) {
+                        const auto z_dir = c_dir / std::to_string(z);
+                        CHECK(fs::is_directory(z_dir));
+
+                        for (auto y = 0; y < 3; ++y) {
+                            const auto y_dir = z_dir / std::to_string(y);
+                            CHECK(fs::is_directory(y_dir));
+
+                            for (auto x = 0; x < 2; ++x) {
+                                const auto x_file = y_dir / std::to_string(x);
+                                CHECK(fs::is_regular_file(x_file));
+                            }
+
+                            CHECK(!fs::is_regular_file(y_dir / "2"));
                         }
+
+                        CHECK(!fs::is_directory(z_dir / "3"));
                     }
+
+                    CHECK(!fs::is_directory(c_dir / "3"));
                 }
+
+                CHECK(!fs::is_directory(t_dir / "1"));
             }
 
-            // cleanup
-            fs::remove_all(base_dir);
-            free(frame);
+            CHECK(!fs::is_directory(base_dir / "c1"));
 
             return 1;
         } catch (const std::exception& exc) {

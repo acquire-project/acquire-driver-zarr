@@ -14,16 +14,28 @@ zarr::ZarrV2Writer::ZarrV2Writer(
 {
 }
 
-void
+bool
+zarr::ZarrV2Writer::should_flush_() const noexcept
+{
+    size_t frames_before_flush = array_spec_.dimensions.back().chunk_size_px;
+    for (auto i = 2; i < array_spec_.dimensions.size() - 1; ++i) {
+        frames_before_flush *= array_spec_.dimensions.at(i).array_size_px;
+    }
+
+    CHECK(frames_before_flush);
+    return frames_written_ % frames_before_flush == 0;
+}
+
+bool
 zarr::ZarrV2Writer::flush_impl_()
 {
     // create chunk files
     CHECK(files_.empty());
-    if (!file_creator_.create_files(data_root_ / std::to_string(current_chunk_),
-                                    array_spec_.dimensions,
-                                    false,
-                                    files_)) {
-        return;
+    if (!file_creator_.create_chunk_files(data_root_ /
+                                            std::to_string(current_chunk_),
+                                          array_spec_.dimensions,
+                                          files_)) {
+        return false;
     }
     CHECK(files_.size() == chunk_buffers_.size());
 
@@ -60,6 +72,8 @@ zarr::ZarrV2Writer::flush_impl_()
 
     // wait for all threads to finish
     latch.wait();
+
+    return true;
 }
 
 #ifndef NO_UNIT_TESTS
@@ -115,6 +129,7 @@ extern "C"
             memset(frame->data, 0, 64 * 48 * 2);
 
             for (auto i = 0; i < 6 * 8 * 10; ++i) { // 2 time points
+                frame->frame_id = i;
                 CHECK(writer.write(frame));
             }
             writer.finalize();
@@ -128,39 +143,40 @@ extern "C"
 
             CHECK(fs::is_directory(base_dir));
             for (auto t = 0; t < 2; ++t) {
+                const auto t_dir = base_dir / std::to_string(t);
+                CHECK(fs::is_directory(t_dir));
+
                 for (auto c = 0; c < 2; ++c) {
-                    CHECK(fs::is_directory(base_dir / std::to_string(t) /
-                                           std::to_string(c)));
+                    const auto c_dir = t_dir / std::to_string(c);
+                    CHECK(fs::is_directory(c_dir));
+
                     for (auto z = 0; z < 3; ++z) {
-                        CHECK(fs::is_directory(base_dir / std::to_string(t) /
-                                               std::to_string(c) /
-                                               std::to_string(z)));
+                        const auto z_dir = c_dir / std::to_string(z);
+                        CHECK(fs::is_directory(z_dir));
+
                         for (auto y = 0; y < 3; ++y) {
-                            CHECK(fs::is_directory(
-                              base_dir / std::to_string(t) / std::to_string(c) /
-                              std::to_string(z) / std::to_string(y)));
+                            const auto y_dir = z_dir / std::to_string(y);
+                            CHECK(fs::is_directory(y_dir));
+
                             for (auto x = 0; x < 4; ++x) {
-                                const auto filename =
-                                  base_dir / std::to_string(t) /
-                                  std::to_string(c) / std::to_string(z) /
-                                  std::to_string(y) / std::to_string(x);
-                                CHECK(fs::is_regular_file(filename));
-                                const auto file_size = fs::file_size(filename);
+                                const auto x_file = y_dir / std::to_string(x);
+                                CHECK(fs::is_regular_file(x_file));
+                                const auto file_size = fs::file_size(x_file);
                                 CHECK(file_size == expected_file_size);
                             }
-                            CHECK(!fs::is_regular_file(
-                              base_dir / std::to_string(t) / std::to_string(c) /
-                              std::to_string(z) / std::to_string(y) / "4"));
+
+                            CHECK(!fs::is_regular_file(y_dir / "4"));
                         }
-                        CHECK(!fs::is_directory(base_dir / std::to_string(t) /
-                                                std::to_string(c) /
-                                                std::to_string(z) / "3"));
+
+                        CHECK(!fs::is_directory(z_dir / "3"));
                     }
-                    CHECK(!fs::is_directory(base_dir / std::to_string(t) /
-                                            std::to_string(c) / "3"));
+
+                    CHECK(!fs::is_directory(c_dir / "3"));
                 }
-                CHECK(!fs::is_directory(base_dir / std::to_string(t) / "2"));
+
+                CHECK(!fs::is_directory(t_dir / "2"));
             }
+
             CHECK(!fs::is_directory(base_dir / "2"));
 
             retval = 1;

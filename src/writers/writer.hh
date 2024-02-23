@@ -81,10 +81,6 @@ struct Writer
     /// Bookkeeping
     std::vector<uint64_t> chunks_per_dim_;
     std::vector<uint64_t> chunk_strides_;
-    std::vector<uint32_t> array_counters_;
-    std::vector<uint32_t> chunk_counters_;
-    uint32_t chunk_offset_;
-    bool should_flush_;
 
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
@@ -100,15 +96,10 @@ struct Writer
     void compress_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept;
 
-    /// Bookkeeping
-    size_t n_chunks_() const noexcept;
-    size_t tiles_per_frame_() const noexcept;
-    size_t frames_per_chunk_() const noexcept; // TODO (aliddell): better name
-    void increment_counters_();
-
     /// Files
+    virtual bool should_flush_() const noexcept = 0;
     void flush_();
-    virtual void flush_impl_() = 0;
+    [[nodiscard]] virtual bool flush_impl_() = 0;
     void close_files_();
     void rollover_();
 };
