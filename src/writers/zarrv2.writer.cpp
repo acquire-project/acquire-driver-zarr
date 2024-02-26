@@ -17,12 +17,13 @@ zarr::ZarrV2Writer::ZarrV2Writer(
 bool
 zarr::ZarrV2Writer::should_flush_() const noexcept
 {
-    size_t frames_before_flush = array_spec_.dimensions.back().chunk_size_px;
-    for (auto i = 2; i < array_spec_.dimensions.size() - 1; ++i) {
-        frames_before_flush *= array_spec_.dimensions.at(i).array_size_px;
+    const auto& dims = array_spec_.dimensions;
+    size_t frames_before_flush = dims.back().chunk_size_px;
+    for (auto i = 2; i < dims.size() - 1; ++i) {
+        frames_before_flush *= dims.at(i).array_size_px;
     }
 
-    CHECK(frames_before_flush);
+    CHECK(frames_before_flush > 0);
     return frames_written_ % frames_before_flush == 0;
 }
 

@@ -16,7 +16,15 @@ zarr::ZarrV3Writer::ZarrV3Writer(
 bool
 zarr::ZarrV3Writer::should_flush_() const noexcept
 {
-    return true;
+    const auto& dims = array_spec_.dimensions;
+    size_t frames_before_flush =
+      dims.back().chunk_size_px * dims.back().shard_size_chunks;
+    for (auto i = 2; i < dims.size() - 1; ++i) {
+        frames_before_flush *= dims[i].array_size_px;
+    }
+
+    CHECK(frames_before_flush > 0);
+    return frames_written_ % frames_before_flush == 0;
 }
 
 bool
@@ -30,6 +38,14 @@ zarr::ZarrV3Writer::flush_impl_()
                             files_)) {
         return false;
     }
+    auto n_files_expected = chunk_buffers_.size();
+    for (const auto& dim : array_spec_.dimensions) {
+        CHECK(dim.shard_size_chunks > 0);
+        n_files_expected /= dim.shard_size_chunks;
+    }
+    CHECK(files_.size() == n_files_expected);
+
+    // TODO (aliddell): pick up from here
 
     return true;
 
@@ -141,12 +157,12 @@ extern "C"
                               DimensionType_Channel,
                               8,
                               4,  // 8 / 4 = 2 chunks
-                              2); // 2 / 2 = 1 shard
+                              2); // 4 / 2 = 2 shards
             dims.emplace_back("t",
                               DimensionType_Time,
                               0,
                               5,  // 5 timepoints / chunk
-                              5); // 5 / 5 = 1 shard
+                              2); // 2 chunks / shard
 
             ImageShape shape {
                 .dims = {
@@ -170,10 +186,17 @@ extern "C"
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48 * 2);
 
-            for (auto i = 0; i < 5 * 1 * 2; ++i) {
+            for (auto i = 0; i < 6 * 8 * 5 * 2; ++i) {
                 frame->frame_id = i;
                 CHECK(writer.write(frame));
             }
+            writer.finalize();
+
+            const auto expected_file_size = 16 * 2 * // x
+                                            16 * 3 * // y
+                                            2 * 3 *  // z
+                                            4 * 2 *  // c
+                                            5 * 2;   // t
 
             CHECK(fs::is_directory(base_dir));
             for (auto t = 0; t < 1; ++t) {
@@ -195,6 +218,8 @@ extern "C"
                             for (auto x = 0; x < 2; ++x) {
                                 const auto x_file = y_dir / std::to_string(x);
                                 CHECK(fs::is_regular_file(x_file));
+                                const auto file_size = fs::file_size(x_file);
+                                CHECK(file_size == expected_file_size);
                             }
 
                             CHECK(!fs::is_regular_file(y_dir / "2"));

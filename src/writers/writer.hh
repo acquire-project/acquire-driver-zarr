@@ -91,7 +91,6 @@ struct Writer
 
     void make_buffers_() noexcept;
 
-    void fill_chunks_(uint32_t dim_idx);
     void finalize_chunks_() noexcept;
     void compress_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept;
