@@ -522,8 +522,7 @@ zarr::Writer::compress_buffers_() noexcept
 }
 
 size_t
-zarr::Writer::write_frame_to_chunks_(const uint8_t* buf,
-                                     size_t buf_size) noexcept
+zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
     // break the frame into tiles and write them to the chunk buffers
     const auto image_shape = array_spec_.image_shape;
@@ -655,7 +654,7 @@ class TestWriter : public zarr::Writer
     }
 
   private:
-    bool should_flush_() const noexcept override { return false; }
+    bool should_flush_() const override { return false; }
     bool flush_impl_() override { return true; }
 };
 

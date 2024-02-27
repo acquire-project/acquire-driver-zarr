@@ -6,6 +6,53 @@
 
 namespace zarr = acquire::sink::zarr;
 
+namespace {
+size_t
+shard_index(size_t chunk_id,
+            size_t dimension_index,
+            const std::vector<zarr::Dimension>& dimensions)
+{
+    CHECK(dimension_index < dimensions.size());
+
+    // make chunk strides
+    std::vector<size_t> chunk_strides(1, 1);
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        const auto& dim = dimensions.at(i);
+        chunk_strides.push_back(chunk_strides.back() *
+                                zarr::common::chunks_along_dimension(dim));
+    }
+
+    // get chunk indices
+    std::vector<size_t> chunk_lattice_indices;
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        chunk_lattice_indices.push_back(chunk_id % chunk_strides.at(i + 1) /
+                                        chunk_strides.at(i));
+    }
+    chunk_lattice_indices.push_back(chunk_id / chunk_strides.back());
+
+    // make shard strides
+    std::vector<size_t> shard_strides(1, 1);
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        const auto& dim = dimensions.at(i);
+        shard_strides.push_back(shard_strides.back() *
+                                zarr::common::shards_along_dimension(dim));
+    }
+
+    std::vector<size_t> shard_lattice_indices;
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        shard_lattice_indices.push_back(chunk_lattice_indices.at(i) /
+                                        dimensions.at(i).shard_size_chunks);
+    }
+
+    size_t index = 0;
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        index += shard_lattice_indices.at(i) * shard_strides.at(i);
+    }
+
+    return index;
+}
+} // namespace
+
 zarr::ZarrV3Writer::ZarrV3Writer(
   const ArraySpec& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool)
@@ -14,7 +61,7 @@ zarr::ZarrV3Writer::ZarrV3Writer(
 }
 
 bool
-zarr::ZarrV3Writer::should_flush_() const noexcept
+zarr::ZarrV3Writer::should_flush_() const
 {
     const auto& dims = array_spec_.dimensions;
     size_t frames_before_flush =
@@ -100,6 +147,12 @@ zarr::ZarrV3Writer::flush_impl_()
     return true;
 }
 
+std::vector<std::vector<size_t>>
+zarr::ZarrV3Writer::chunks_by_shard_() const
+{
+    return {};
+}
+
 #ifndef NO_UNIT_TESTS
 #ifdef _WIN32
 #define acquire_export __declspec(dllexport)
@@ -111,6 +164,87 @@ namespace common = zarr::common;
 
 extern "C"
 {
+    acquire_export int unit_test__shard_index()
+    {
+        int retval = 0;
+        try {
+            std::vector<zarr::Dimension> dims;
+            dims.emplace_back("x",
+                              DimensionType_Space,
+                              64,
+                              16, // 64 / 16 = 4 chunks
+                              2); // 4 / 2 = 2 shards
+            dims.emplace_back("y",
+                              DimensionType_Space,
+                              48,
+                              16, // 48 / 16 = 3 chunks
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("z",
+                              DimensionType_Space,
+                              6,
+                              2,  // 6 / 2 = 3 chunks
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("c",
+                              DimensionType_Channel,
+                              8,
+                              4,  // 8 / 4 = 2 chunks
+                              2); // 4 / 2 = 2 shards
+            dims.emplace_back("t",
+                              DimensionType_Time,
+                              0,
+                              5,  // 5 timepoints / chunk
+                              2); // 2 chunks / shard
+
+            CHECK(shard_index(2, 0, dims) == 1);
+            CHECK(shard_index(2, 1, dims) == 1);
+            CHECK(shard_index(2, 2, dims) == 1);
+            CHECK(shard_index(2, 2, dims) == 1);
+            CHECK(shard_index(2, 4, dims) == 1);
+            CHECK(shard_index(3, 0, dims) == 1);
+            CHECK(shard_index(3, 1, dims) == 1);
+            CHECK(shard_index(3, 2, dims) == 1);
+            CHECK(shard_index(3, 2, dims) == 1);
+            CHECK(shard_index(3, 4, dims) == 1);
+            CHECK(shard_index(38, 0, dims) == 1);
+            CHECK(shard_index(38, 1, dims) == 1);
+            CHECK(shard_index(38, 2, dims) == 1);
+            CHECK(shard_index(38, 2, dims) == 1);
+            CHECK(shard_index(38, 4, dims) == 1);
+            CHECK(shard_index(39, 0, dims) == 1);
+            CHECK(shard_index(39, 1, dims) == 1);
+            CHECK(shard_index(39, 2, dims) == 1);
+            CHECK(shard_index(39, 2, dims) == 1);
+            CHECK(shard_index(39, 4, dims) == 1);
+            CHECK(shard_index(74, 0, dims) == 1);
+            CHECK(shard_index(74, 1, dims) == 1);
+            CHECK(shard_index(74, 2, dims) == 1);
+            CHECK(shard_index(74, 2, dims) == 1);
+            CHECK(shard_index(74, 4, dims) == 1);
+            CHECK(shard_index(75, 0, dims) == 1);
+            CHECK(shard_index(75, 1, dims) == 1);
+            CHECK(shard_index(75, 2, dims) == 1);
+            CHECK(shard_index(75, 2, dims) == 1);
+            CHECK(shard_index(75, 4, dims) == 1);
+            CHECK(shard_index(110, 0, dims) == 1);
+            CHECK(shard_index(110, 1, dims) == 1);
+            CHECK(shard_index(110, 2, dims) == 1);
+            CHECK(shard_index(110, 2, dims) == 1);
+            CHECK(shard_index(110, 4, dims) == 1);
+            CHECK(shard_index(111, 0, dims) == 1);
+            CHECK(shard_index(111, 1, dims) == 1);
+            CHECK(shard_index(111, 2, dims) == 1);
+            CHECK(shard_index(111, 2, dims) == 1);
+            CHECK(shard_index(111, 4, dims) == 1);
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        return retval;
+    }
     acquire_export int unit_test__zarrv3_writer__write_even()
     {
         const fs::path base_dir = fs::temp_directory_path() / "acquire";

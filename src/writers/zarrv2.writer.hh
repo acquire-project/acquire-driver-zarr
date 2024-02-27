@@ -30,7 +30,7 @@ struct ZarrV2Writer final : public Writer
     ~ZarrV2Writer() override = default;
 
   private:
-    bool should_flush_() const noexcept override;
+    bool should_flush_() const override;
     [[nodiscard]] bool flush_impl_() override;
 };
 } // namespace acquire::sink::zarr

@@ -185,7 +185,7 @@ size_t
 common::chunks_per_shard(const std::vector<Dimension>& dimensions)
 {
     size_t n_chunks = 1;
-    for (const auto& dim: dimensions) {
+    for (const auto& dim : dimensions) {
         n_chunks *= dim.shard_size_chunks;
     }
 

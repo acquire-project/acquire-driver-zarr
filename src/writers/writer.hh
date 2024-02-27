@@ -93,10 +93,10 @@ struct Writer
 
     void finalize_chunks_() noexcept;
     void compress_buffers_() noexcept;
-    size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size) noexcept;
+    size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
 
     /// Files
-    virtual bool should_flush_() const noexcept = 0;
+    virtual bool should_flush_() const = 0;
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
     void close_files_();

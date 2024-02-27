@@ -15,7 +15,7 @@ zarr::ZarrV2Writer::ZarrV2Writer(
 }
 
 bool
-zarr::ZarrV2Writer::should_flush_() const noexcept
+zarr::ZarrV2Writer::should_flush_() const
 {
     const auto& dims = array_spec_.dimensions;
     size_t frames_before_flush = dims.back().chunk_size_px;
