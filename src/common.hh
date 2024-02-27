@@ -104,6 +104,9 @@ size_t
 number_of_shards(const std::vector<Dimension>& dimensions);
 
 size_t
+chunks_per_shard(const std::vector<Dimension>& dimensions);
+
+size_t
 bytes_of_image(const ImageShape& shape);
 
 size_t

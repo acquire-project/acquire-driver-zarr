@@ -38,82 +38,66 @@ zarr::ZarrV3Writer::flush_impl_()
                             files_)) {
         return false;
     }
-    auto n_files_expected = chunk_buffers_.size();
-    for (const auto& dim : array_spec_.dimensions) {
-        CHECK(dim.shard_size_chunks > 0);
-        n_files_expected /= dim.shard_size_chunks;
-    }
-    CHECK(files_.size() == n_files_expected);
+    const auto n_shards = common::number_of_shards(array_spec_.dimensions);
+    CHECK(files_.size() == n_shards);
 
-    // TODO (aliddell): pick up from here
+    const auto chunks_per_shard =
+      common::chunks_per_shard(array_spec_.dimensions);
+
+    // compress buffers
+    compress_buffers_();
+    const size_t bytes_of_index = 2 * chunks_per_shard * sizeof(uint64_t);
+
+    // concatenate chunks into shards
+    std::latch latch(n_shards);
+    for (auto i = 0; i < n_shards; ++i) {
+        thread_pool_->push_to_job_queue(
+          [fh = &files_.at(i), chunks_per_shard, i, &latch, this](
+            std::string& err) {
+              size_t chunk_index = 0;
+              std::vector<uint64_t> chunk_indices;
+              size_t offset = 0;
+              bool success = false;
+              try {
+                  for (auto j = 0; j < chunks_per_shard; ++j) {
+                      chunk_indices.push_back(chunk_index); // chunk offset
+                      const auto k = i * chunks_per_shard + j;
+
+                      auto& chunk = chunk_buffers_.at(k);
+                      chunk_index += chunk.size();
+                      chunk_indices.push_back(chunk.size()); // chunk extent
+
+                      file_write(
+                        fh, offset, chunk.data(), chunk.data() + chunk.size());
+                      offset += chunk.size();
+                  }
+
+                  // write the indices out at the end of the shard
+                  const auto* indices =
+                    reinterpret_cast<const uint8_t*>(chunk_indices.data());
+                  success = (bool)file_write(fh,
+                                             offset,
+                                             indices,
+                                             indices + chunk_indices.size() *
+                                                         sizeof(uint64_t));
+              } catch (const std::exception& exc) {
+                  char buf[128];
+                  snprintf(
+                    buf, sizeof(buf), "Failed to write chunk: %s", exc.what());
+                  err = buf;
+              } catch (...) {
+                  err = "Unknown error";
+              }
+
+              latch.count_down();
+              return success;
+          });
+    }
+
+    // wait for all threads to finish
+    latch.wait();
 
     return true;
-
-    //    const auto chunks_per_shard = chunks_per_shard_();
-    //
-    //    // compress buffers
-    //    compress_buffers_();
-    //    const size_t bytes_of_index = 2 * chunks_per_shard * sizeof(uint64_t);
-    //
-    //    const auto max_bytes_per_chunk =
-    //      bytes_per_tile * frames_per_chunk_ +
-    //      (blosc_compression_params_.has_value() ? BLOSC_MAX_OVERHEAD : 0);
-    //
-    //    // concatenate chunks into shards
-    //    const auto n_shards = shards_per_frame_();
-    //    std::latch latch(n_shards);
-    //    for (auto i = 0; i < n_shards; ++i) {
-    //        thread_pool_->push_to_job_queue(
-    //          std::move([fh = &files_.at(i), chunks_per_shard, i, &latch,
-    //          this](
-    //                      std::string& err) {
-    //              size_t chunk_index = 0;
-    //              std::vector<uint64_t> chunk_indices;
-    //              size_t offset = 0;
-    //              bool success = false;
-    //              try {
-    //                  for (auto j = 0; j < chunks_per_shard; ++j) {
-    //                      chunk_indices.push_back(chunk_index); // chunk
-    //                      offset const auto k = i * chunks_per_shard + j;
-    //
-    //                      auto& chunk = chunk_buffers_.at(k);
-    //                      chunk_index += chunk.size();
-    //                      chunk_indices.push_back(chunk.size()); // chunk
-    //                      extent
-    //
-    //                      file_write(
-    //                        fh, offset, chunk.data(), chunk.data() +
-    //                        chunk.size());
-    //                      offset += chunk.size();
-    //                  }
-    //
-    //                  // write the indices out at the end of the shard
-    //                  const auto* indices =
-    //                    reinterpret_cast<const
-    //                    uint8_t*>(chunk_indices.data());
-    //                  success = (bool)file_write(fh,
-    //                                             offset,
-    //                                             indices,
-    //                                             indices +
-    //                                             chunk_indices.size() *
-    //                                                         sizeof(uint64_t));
-    //              } catch (const std::exception& exc) {
-    //                  char buf[128];
-    //                  snprintf(
-    //                    buf, sizeof(buf), "Failed to write chunk: %s",
-    //                    exc.what());
-    //                  err = buf;
-    //              } catch (...) {
-    //                  err = "Unknown error";
-    //              }
-    //
-    //              latch.count_down();
-    //              return success;
-    //          }));
-    //    }
-    //
-    //    // wait for all threads to finish
-    //    latch.wait();
 }
 
 #ifndef NO_UNIT_TESTS
@@ -192,11 +176,13 @@ extern "C"
             }
             writer.finalize();
 
-            const auto expected_file_size = 16 * 2 * // x
-                                            16 * 3 * // y
-                                            2 * 3 *  // z
-                                            4 * 2 *  // c
-                                            5 * 2;   // t
+            const auto expected_file_size = 16 * 2 *   // x
+                                              16 * 3 * // y
+                                              2 * 3 *  // z
+                                              4 * 2 *  // c
+                                              5 * 2 +  // t
+                                            8 * 8 +    // offsets of 8 chunks
+                                            8 * 8;     // extents of 8 chunks
 
             CHECK(fs::is_directory(base_dir));
             for (auto t = 0; t < 1; ++t) {

@@ -173,11 +173,23 @@ size_t
 common::number_of_shards(const std::vector<Dimension>& dimensions)
 {
     size_t n_shards = 1;
-    for (const auto& d : dimensions) {
-        n_shards *= shards_along_dimension(d);
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        const auto& dim = dimensions.at(i);
+        n_shards *= shards_along_dimension(dim);
     }
 
     return n_shards;
+}
+
+size_t
+common::chunks_per_shard(const std::vector<Dimension>& dimensions)
+{
+    size_t n_chunks = 1;
+    for (const auto& dim: dimensions) {
+        n_chunks *= dim.shard_size_chunks;
+    }
+
+    return n_chunks;
 }
 
 size_t
