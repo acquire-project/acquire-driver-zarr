@@ -8,12 +8,8 @@ namespace zarr = acquire::sink::zarr;
 
 namespace {
 size_t
-shard_index(size_t chunk_id,
-            size_t dimension_index,
-            const std::vector<zarr::Dimension>& dimensions)
+shard_index(size_t chunk_id, const std::vector<zarr::Dimension>& dimensions)
 {
-    CHECK(dimension_index < dimensions.size());
-
     // make chunk strides
     std::vector<size_t> chunk_strides(1, 1);
     for (auto i = 0; i < dimensions.size() - 1; ++i) {
@@ -95,9 +91,17 @@ zarr::ZarrV3Writer::flush_impl_()
     compress_buffers_();
     const size_t bytes_of_index = 2 * chunks_per_shard * sizeof(uint64_t);
 
+    // get shard indices for each chunk
+    std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
+    for (auto i = 0; i < chunk_buffers_.size(); ++i) {
+        const auto index = shard_index(i, array_spec_.dimensions);
+        chunk_in_shards.at(index).push_back(i);
+    }
+
     // concatenate chunks into shards
     std::latch latch(n_shards);
     for (auto i = 0; i < n_shards; ++i) {
+        // TODO (aliddell): pick up here
         thread_pool_->push_to_job_queue(
           [fh = &files_.at(i), chunks_per_shard, i, &latch, this](
             std::string& err) {
@@ -147,12 +151,6 @@ zarr::ZarrV3Writer::flush_impl_()
     return true;
 }
 
-std::vector<std::vector<size_t>>
-zarr::ZarrV3Writer::chunks_by_shard_() const
-{
-    return {};
-}
-
 #ifndef NO_UNIT_TESTS
 #ifdef _WIN32
 #define acquire_export __declspec(dllexport)
@@ -195,46 +193,150 @@ extern "C"
                               5,  // 5 timepoints / chunk
                               2); // 2 chunks / shard
 
-            CHECK(shard_index(2, 0, dims) == 1);
-            CHECK(shard_index(2, 1, dims) == 1);
-            CHECK(shard_index(2, 2, dims) == 1);
-            CHECK(shard_index(2, 2, dims) == 1);
-            CHECK(shard_index(2, 4, dims) == 1);
-            CHECK(shard_index(3, 0, dims) == 1);
-            CHECK(shard_index(3, 1, dims) == 1);
-            CHECK(shard_index(3, 2, dims) == 1);
-            CHECK(shard_index(3, 2, dims) == 1);
-            CHECK(shard_index(3, 4, dims) == 1);
-            CHECK(shard_index(38, 0, dims) == 1);
-            CHECK(shard_index(38, 1, dims) == 1);
-            CHECK(shard_index(38, 2, dims) == 1);
-            CHECK(shard_index(38, 2, dims) == 1);
-            CHECK(shard_index(38, 4, dims) == 1);
-            CHECK(shard_index(39, 0, dims) == 1);
-            CHECK(shard_index(39, 1, dims) == 1);
-            CHECK(shard_index(39, 2, dims) == 1);
-            CHECK(shard_index(39, 2, dims) == 1);
-            CHECK(shard_index(39, 4, dims) == 1);
-            CHECK(shard_index(74, 0, dims) == 1);
-            CHECK(shard_index(74, 1, dims) == 1);
-            CHECK(shard_index(74, 2, dims) == 1);
-            CHECK(shard_index(74, 2, dims) == 1);
-            CHECK(shard_index(74, 4, dims) == 1);
-            CHECK(shard_index(75, 0, dims) == 1);
-            CHECK(shard_index(75, 1, dims) == 1);
-            CHECK(shard_index(75, 2, dims) == 1);
-            CHECK(shard_index(75, 2, dims) == 1);
-            CHECK(shard_index(75, 4, dims) == 1);
-            CHECK(shard_index(110, 0, dims) == 1);
-            CHECK(shard_index(110, 1, dims) == 1);
-            CHECK(shard_index(110, 2, dims) == 1);
-            CHECK(shard_index(110, 2, dims) == 1);
-            CHECK(shard_index(110, 4, dims) == 1);
-            CHECK(shard_index(111, 0, dims) == 1);
-            CHECK(shard_index(111, 1, dims) == 1);
-            CHECK(shard_index(111, 2, dims) == 1);
-            CHECK(shard_index(111, 2, dims) == 1);
-            CHECK(shard_index(111, 4, dims) == 1);
+            CHECK(shard_index(0, dims) == 0);
+            CHECK(shard_index(1, dims) == 0);
+            CHECK(shard_index(2, dims) == 1);
+            CHECK(shard_index(3, dims) == 1);
+            CHECK(shard_index(4, dims) == 2);
+            CHECK(shard_index(5, dims) == 2);
+            CHECK(shard_index(6, dims) == 3);
+            CHECK(shard_index(7, dims) == 3);
+            CHECK(shard_index(8, dims) == 4);
+            CHECK(shard_index(9, dims) == 4);
+            CHECK(shard_index(10, dims) == 5);
+            CHECK(shard_index(11, dims) == 5);
+            CHECK(shard_index(12, dims) == 6);
+            CHECK(shard_index(13, dims) == 6);
+            CHECK(shard_index(14, dims) == 7);
+            CHECK(shard_index(15, dims) == 7);
+            CHECK(shard_index(16, dims) == 8);
+            CHECK(shard_index(17, dims) == 8);
+            CHECK(shard_index(18, dims) == 9);
+            CHECK(shard_index(19, dims) == 9);
+            CHECK(shard_index(20, dims) == 10);
+            CHECK(shard_index(21, dims) == 10);
+            CHECK(shard_index(22, dims) == 11);
+            CHECK(shard_index(23, dims) == 11);
+            CHECK(shard_index(24, dims) == 12);
+            CHECK(shard_index(25, dims) == 12);
+            CHECK(shard_index(26, dims) == 13);
+            CHECK(shard_index(27, dims) == 13);
+            CHECK(shard_index(28, dims) == 14);
+            CHECK(shard_index(29, dims) == 14);
+            CHECK(shard_index(30, dims) == 15);
+            CHECK(shard_index(31, dims) == 15);
+            CHECK(shard_index(32, dims) == 16);
+            CHECK(shard_index(33, dims) == 16);
+            CHECK(shard_index(34, dims) == 17);
+            CHECK(shard_index(35, dims) == 17);
+            CHECK(shard_index(36, dims) == 0);
+            CHECK(shard_index(37, dims) == 0);
+            CHECK(shard_index(38, dims) == 1);
+            CHECK(shard_index(39, dims) == 1);
+            CHECK(shard_index(40, dims) == 2);
+            CHECK(shard_index(41, dims) == 2);
+            CHECK(shard_index(42, dims) == 3);
+            CHECK(shard_index(43, dims) == 3);
+            CHECK(shard_index(44, dims) == 4);
+            CHECK(shard_index(45, dims) == 4);
+            CHECK(shard_index(46, dims) == 5);
+            CHECK(shard_index(47, dims) == 5);
+            CHECK(shard_index(48, dims) == 6);
+            CHECK(shard_index(49, dims) == 6);
+            CHECK(shard_index(50, dims) == 7);
+            CHECK(shard_index(51, dims) == 7);
+            CHECK(shard_index(52, dims) == 8);
+            CHECK(shard_index(53, dims) == 8);
+            CHECK(shard_index(54, dims) == 9);
+            CHECK(shard_index(55, dims) == 9);
+            CHECK(shard_index(56, dims) == 10);
+            CHECK(shard_index(57, dims) == 10);
+            CHECK(shard_index(58, dims) == 11);
+            CHECK(shard_index(59, dims) == 11);
+            CHECK(shard_index(60, dims) == 12);
+            CHECK(shard_index(61, dims) == 12);
+            CHECK(shard_index(62, dims) == 13);
+            CHECK(shard_index(63, dims) == 13);
+            CHECK(shard_index(64, dims) == 14);
+            CHECK(shard_index(65, dims) == 14);
+            CHECK(shard_index(66, dims) == 15);
+            CHECK(shard_index(67, dims) == 15);
+            CHECK(shard_index(68, dims) == 16);
+            CHECK(shard_index(69, dims) == 16);
+            CHECK(shard_index(70, dims) == 17);
+            CHECK(shard_index(71, dims) == 17);
+            CHECK(shard_index(72, dims) == 0);
+            CHECK(shard_index(73, dims) == 0);
+            CHECK(shard_index(74, dims) == 1);
+            CHECK(shard_index(75, dims) == 1);
+            CHECK(shard_index(76, dims) == 2);
+            CHECK(shard_index(77, dims) == 2);
+            CHECK(shard_index(78, dims) == 3);
+            CHECK(shard_index(79, dims) == 3);
+            CHECK(shard_index(80, dims) == 4);
+            CHECK(shard_index(81, dims) == 4);
+            CHECK(shard_index(82, dims) == 5);
+            CHECK(shard_index(83, dims) == 5);
+            CHECK(shard_index(84, dims) == 6);
+            CHECK(shard_index(85, dims) == 6);
+            CHECK(shard_index(86, dims) == 7);
+            CHECK(shard_index(87, dims) == 7);
+            CHECK(shard_index(88, dims) == 8);
+            CHECK(shard_index(89, dims) == 8);
+            CHECK(shard_index(90, dims) == 9);
+            CHECK(shard_index(91, dims) == 9);
+            CHECK(shard_index(92, dims) == 10);
+            CHECK(shard_index(93, dims) == 10);
+            CHECK(shard_index(94, dims) == 11);
+            CHECK(shard_index(95, dims) == 11);
+            CHECK(shard_index(96, dims) == 12);
+            CHECK(shard_index(97, dims) == 12);
+            CHECK(shard_index(98, dims) == 13);
+            CHECK(shard_index(99, dims) == 13);
+            CHECK(shard_index(100, dims) == 14);
+            CHECK(shard_index(101, dims) == 14);
+            CHECK(shard_index(102, dims) == 15);
+            CHECK(shard_index(103, dims) == 15);
+            CHECK(shard_index(104, dims) == 16);
+            CHECK(shard_index(105, dims) == 16);
+            CHECK(shard_index(106, dims) == 17);
+            CHECK(shard_index(107, dims) == 17);
+            CHECK(shard_index(108, dims) == 0);
+            CHECK(shard_index(109, dims) == 0);
+            CHECK(shard_index(110, dims) == 1);
+            CHECK(shard_index(111, dims) == 1);
+            CHECK(shard_index(112, dims) == 2);
+            CHECK(shard_index(113, dims) == 2);
+            CHECK(shard_index(114, dims) == 3);
+            CHECK(shard_index(115, dims) == 3);
+            CHECK(shard_index(116, dims) == 4);
+            CHECK(shard_index(117, dims) == 4);
+            CHECK(shard_index(118, dims) == 5);
+            CHECK(shard_index(119, dims) == 5);
+            CHECK(shard_index(120, dims) == 6);
+            CHECK(shard_index(121, dims) == 6);
+            CHECK(shard_index(122, dims) == 7);
+            CHECK(shard_index(123, dims) == 7);
+            CHECK(shard_index(124, dims) == 8);
+            CHECK(shard_index(125, dims) == 8);
+            CHECK(shard_index(126, dims) == 9);
+            CHECK(shard_index(127, dims) == 9);
+            CHECK(shard_index(128, dims) == 10);
+            CHECK(shard_index(129, dims) == 10);
+            CHECK(shard_index(130, dims) == 11);
+            CHECK(shard_index(131, dims) == 11);
+            CHECK(shard_index(132, dims) == 12);
+            CHECK(shard_index(133, dims) == 12);
+            CHECK(shard_index(134, dims) == 13);
+            CHECK(shard_index(135, dims) == 13);
+            CHECK(shard_index(136, dims) == 14);
+            CHECK(shard_index(137, dims) == 14);
+            CHECK(shard_index(138, dims) == 15);
+            CHECK(shard_index(139, dims) == 15);
+            CHECK(shard_index(140, dims) == 16);
+            CHECK(shard_index(141, dims) == 16);
+            CHECK(shard_index(142, dims) == 17);
+            CHECK(shard_index(143, dims) == 17);
 
             retval = 1;
         } catch (const std::exception& exc) {

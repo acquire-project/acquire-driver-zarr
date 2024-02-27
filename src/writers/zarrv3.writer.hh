@@ -32,8 +32,6 @@ struct ZarrV3Writer final : public Writer
   private:
     bool should_flush_() const override;
     [[nodiscard]] bool flush_impl_() override;
-
-    std::vector<std::vector<size_t>> chunks_by_shard_() const;
 };
 } // namespace acquire::sink::zarr
 
