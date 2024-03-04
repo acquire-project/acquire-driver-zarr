@@ -8,16 +8,16 @@
 namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV2Writer::ZarrV2Writer(
-  const ArraySpec& array_spec,
+  const WriterConfig& config,
   std::shared_ptr<common::ThreadPool> thread_pool)
-  : Writer(array_spec, thread_pool)
+  : Writer(config, thread_pool)
 {
 }
 
 bool
 zarr::ZarrV2Writer::should_flush_() const
 {
-    const auto& dims = array_spec_.dimensions;
+    const auto& dims = config_.dimensions;
     size_t frames_before_flush = dims.back().chunk_size_px;
     for (auto i = 2; i < dims.size() - 1; ++i) {
         frames_before_flush *= dims.at(i).array_size_px;
@@ -34,7 +34,7 @@ zarr::ZarrV2Writer::flush_impl_()
     CHECK(files_.empty());
     if (!file_creator_.create_chunk_files(data_root_ /
                                             std::to_string(current_chunk_),
-                                          array_spec_.dimensions,
+                                          config_.dimensions,
                                           files_)) {
         return false;
     }
@@ -115,7 +115,7 @@ extern "C"
                 .type = SampleType_u16,
             };
 
-            zarr::ArraySpec array_spec = {
+            zarr::WriterConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
@@ -222,7 +222,7 @@ extern "C"
             dims.emplace_back(
               "z", DimensionType_Space, 5, 2, 0); // 3 chunks, ragged
 
-            zarr::ArraySpec array_spec = {
+            zarr::WriterConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
@@ -314,7 +314,7 @@ extern "C"
             dims.emplace_back(
               "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
 
-            zarr::ArraySpec array_spec = {
+            zarr::WriterConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),

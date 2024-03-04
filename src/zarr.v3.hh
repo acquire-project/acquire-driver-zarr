@@ -13,7 +13,6 @@ struct ZarrV3 final : public Zarr
 
     /// Storage interface
     void get_meta(StoragePropertyMetadata* meta) const override;
-    void reserve_image_shape(const ImageShape* shape) override;
 
   private:
     /// Setup

@@ -338,10 +338,43 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
     return success;
 }
 
+std::optional<struct zarr::WriterConfig>
+zarr::downsample(const WriterConfig& config)
+{
+    return std::nullopt;
+    WriterConfig downsampled_config;
+
+    for (const auto& dim : config.dimensions) {
+        size_t downsampled_size =
+          (dim.array_size_px + (dim.array_size_px % 2)) / 2;
+
+        if (downsampled_size < dim.chunk_size_px) {
+            return std::nullopt;
+        }
+
+        size_t shard_size_chunks = 0; // TODO (aliddell)
+
+        downsampled_config.dimensions.push_back(
+          Dimension(dim.name,
+                    dim.kind,
+                    downsampled_size,
+                    dim.chunk_size_px,
+                    dim.shard_size_chunks));
+    }
+
+    const ImageShape& image_shape = config.image_shape;
+    ImageShape downsampled_shape = image_shape;
+
+    downsampled_shape.dims.width =
+      (image_shape.dims.width + (image_shape.dims.width % 2)) / 2;
+    downsampled_shape.dims.height =
+      (image_shape.dims.height + (image_shape.dims.height % 2)) / 2;
+}
+
 /// Writer
-zarr::Writer::Writer(const ArraySpec& array_spec,
+zarr::Writer::Writer(const WriterConfig& config,
                      std::shared_ptr<common::ThreadPool> thread_pool)
-  : array_spec_{ array_spec }
+  : config_{ config }
   , thread_pool_{ thread_pool }
   , file_creator_{ thread_pool }
   , bytes_to_flush_{ 0 }
@@ -349,15 +382,15 @@ zarr::Writer::Writer(const ArraySpec& array_spec,
   , current_chunk_{ 0 }
 {
     chunk_strides_.push_back(1);
-    for (auto i = 0; i < array_spec_.dimensions.size() - 1; ++i) {
-        const auto& dim = array_spec_.dimensions.at(i);
+    for (auto i = 0; i < config_.dimensions.size() - 1; ++i) {
+        const auto& dim = config_.dimensions.at(i);
         chunks_per_dim_.push_back(common::chunks_along_dimension(dim));
         chunk_strides_.push_back(chunks_per_dim_.back() *
                                  chunk_strides_.back());
     }
     chunks_per_dim_.push_back(1);
 
-    data_root_ = fs::path(array_spec_.data_root);
+    data_root_ = fs::path(config_.data_root);
 }
 
 bool
@@ -369,7 +402,7 @@ zarr::Writer::write(const VideoFrame* frame)
     }
 
     // split the incoming frame into tiles and write them to the chunk buffers
-    const auto& dimensions = array_spec_.dimensions;
+    const auto& dimensions = config_.dimensions;
 
     const auto bytes_written = write_frame_to_chunks_(
       frame->data, frame->bytes_of_frame - sizeof(*frame));
@@ -392,6 +425,12 @@ zarr::Writer::finalize()
     close_files_();
 }
 
+const zarr::WriterConfig&
+zarr::Writer::config() const noexcept
+{
+    return config_;
+}
+
 uint32_t
 zarr::Writer::frames_written() const noexcept
 {
@@ -403,30 +442,30 @@ zarr::Writer::validate_frame_(const VideoFrame* frame)
 {
     CHECK(frame);
 
-    EXPECT(frame->shape.dims.width == array_spec_.image_shape.dims.width,
+    EXPECT(frame->shape.dims.width == config_.image_shape.dims.width,
            "Expected frame to have %d columns. Got %d.",
-           array_spec_.image_shape.dims.width,
+           config_.image_shape.dims.width,
            frame->shape.dims.width);
 
-    EXPECT(frame->shape.dims.height == array_spec_.image_shape.dims.height,
+    EXPECT(frame->shape.dims.height == config_.image_shape.dims.height,
            "Expected frame to have %d rows. Got %d.",
-           array_spec_.image_shape.dims.height,
+           config_.image_shape.dims.height,
            frame->shape.dims.height);
 
-    EXPECT(frame->shape.type == array_spec_.image_shape.type,
+    EXPECT(frame->shape.type == config_.image_shape.type,
            "Expected frame to have pixel type %s. Got %s.",
-           common::sample_type_to_string(array_spec_.image_shape.type),
+           common::sample_type_to_string(config_.image_shape.type),
            common::sample_type_to_string(frame->shape.type));
 }
 
 void
 zarr::Writer::make_buffers_() noexcept
 {
-    const size_t n_chunks = common::number_of_chunks(array_spec_.dimensions);
+    const size_t n_chunks = common::number_of_chunks(config_.dimensions);
     chunk_buffers_.resize(n_chunks); // no-op if already the correct size
 
-    const auto bytes_per_chunk = common::bytes_per_chunk(
-      array_spec_.dimensions, array_spec_.image_shape.type);
+    const auto bytes_per_chunk =
+      common::bytes_per_chunk(config_.dimensions, config_.image_shape.type);
 
     for (auto& buf : chunk_buffers_) {
         buf.resize(bytes_per_chunk);
@@ -464,14 +503,14 @@ zarr::Writer::compress_buffers_() noexcept
     const auto n_chunks = chunk_buffers_.size();
 
     const size_t bytes_per_chunk = bytes_to_flush_ / n_chunks;
-    if (!array_spec_.compression_params.has_value()) {
+    if (!config_.compression_params.has_value()) {
         return;
     }
 
     TRACE("Compressing");
 
-    BloscCompressionParams params = array_spec_.compression_params.value();
-    const auto bytes_per_px = bytes_of_type(array_spec_.image_shape.type);
+    BloscCompressionParams params = config_.compression_params.value();
+    const auto bytes_per_px = bytes_of_type(config_.image_shape.type);
 
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
@@ -525,13 +564,13 @@ size_t
 zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
     // break the frame into tiles and write them to the chunk buffers
-    const auto image_shape = array_spec_.image_shape;
+    const auto image_shape = config_.image_shape;
     const auto bytes_per_px = bytes_of_type(image_shape.type);
 
     const auto frame_cols = image_shape.dims.width;
     const auto frame_rows = image_shape.dims.height;
 
-    const auto& dimensions = array_spec_.dimensions;
+    const auto& dimensions = config_.dimensions;
     const auto tile_cols = dimensions.at(0).chunk_size_px;
     const auto tile_rows = dimensions.at(1).chunk_size_px;
     const auto bytes_per_row = tile_cols * bytes_per_px;
@@ -594,8 +633,8 @@ zarr::Writer::flush_()
     }
 
     // fill in any unfilled chunks
-    const auto bytes_per_chunk = common::bytes_per_chunk(
-      array_spec_.dimensions, array_spec_.image_shape.type);
+    const auto bytes_per_chunk =
+      common::bytes_per_chunk(config_.dimensions, config_.image_shape.type);
 
     // fill in last frames
     for (auto& chunk : chunk_buffers_) {
@@ -647,7 +686,7 @@ namespace common = zarr::common;
 class TestWriter : public zarr::Writer
 {
   public:
-    TestWriter(const zarr::ArraySpec& array_spec,
+    TestWriter(const zarr::WriterConfig& array_spec,
                std::shared_ptr<common::ThreadPool> thread_pool)
       : zarr::Writer(array_spec, thread_pool)
     {
@@ -1060,7 +1099,7 @@ extern "C"
                 .type = SampleType_u16,
             };
 
-            zarr::ArraySpec array_spec = {
+            zarr::WriterConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),

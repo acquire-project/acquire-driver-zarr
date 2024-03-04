@@ -16,12 +16,14 @@ else ()
     #
     set(tests
             list-devices
+            unit-tests
+            write-zarr-v2-raw
+            write-zarr-v3-raw
             #            external-metadata-with-whitespace-ok
             #            get
             #            get-meta
             #            restart-stopped-zarr-resets-threadpool
             #            repeat-start
-            unit-tests
             #            multiscale-with-trivial-tile-size
             #            no-set-chunking
             #            write-zarr-compressed-multiscale
@@ -32,8 +34,6 @@ else ()
             #            write-zarr-raw-with-chunking-and-rollover
             #            write-zarr-raw-with-ragged-tiling
             #            write-zarr-v3-compressed
-            #            write-zarr-v3-raw
-            #            write-zarr-with-defaults
             #            write-zarr-with-lz4-compression
             #            write-zarr-with-zstd-compression
     )

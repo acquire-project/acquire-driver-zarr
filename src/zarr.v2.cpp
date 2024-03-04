@@ -41,28 +41,22 @@ void
 zarr::ZarrV2::allocate_writers_()
 {
     writers_.clear();
-    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
-        const auto& image_shape = image_tile_shapes_.at(i).first;
-        const auto& tile_shape = image_tile_shapes_.at(i).second;
 
-        const uint64_t bytes_per_tile =
-          common::bytes_per_tile(tile_shape, pixel_type_);
+    const WriterConfig config = {
+        .image_shape = image_shape_,
+        .dimensions = acquisition_dimensions_,
+        .data_root = (dataset_root_ / "0").string(),
+        .compression_params = blosc_compression_params_,
+    };
+    writers_.push_back(std::make_shared<ZarrV2Writer>(config, thread_pool_));
 
-        if (blosc_compression_params_.has_value()) {
+    if (enable_multiscale_) {
+        auto downsampled_config = downsample(config);
+        while (downsampled_config.has_value()) {
             writers_.push_back(std::make_shared<ZarrV2Writer>(
-              image_shape,
-              tile_shape,
-              planes_per_chunk_,
-              (get_data_directory_() / std::to_string(i)).string(),
-              thread_pool_,
-              blosc_compression_params_.value()));
-        } else {
-            writers_.push_back(std::make_shared<ZarrV2Writer>(
-              image_shape,
-              tile_shape,
-              planes_per_chunk_,
-              (get_data_directory_() / std::to_string(i)).string(),
-              thread_pool_));
+              downsampled_config.value(), thread_pool_));
+
+            downsampled_config = downsample(downsampled_config.value());
         }
     }
 }
@@ -70,52 +64,47 @@ zarr::ZarrV2::allocate_writers_()
 void
 zarr::ZarrV2::write_array_metadata_(size_t level) const
 {
-    //    namespace fs = std::filesystem;
-    //    using json = nlohmann::json;
-    //
-    //    if (writers_.size() <= level) {
-    //        return;
-    //    }
-    //
-    //    const ImageDims& image_dims = image_tile_shapes_.at(level).first;
-    //    const ImageDims& tile_dims = image_tile_shapes_.at(level).second;
-    //
-    //    const auto frame_count = writers_.at(level)->frames_written();
-    //    const auto frames_per_chunk = std::min(frame_count,
-    //    planes_per_chunk_);
-    //
-    //    json zarray_attrs = {
-    //        { "zarr_format", 2 },
-    //        { "shape",
-    //          {
-    //            frame_count,     // t
-    //            1,               // c
-    //            image_dims.rows, // y
-    //            image_dims.cols, // x
-    //          } },
-    //        { "chunks",
-    //          {
-    //            frames_per_chunk, // t
-    //            1,                // c
-    //            tile_dims.rows,   // y
-    //            tile_dims.cols,   // x
-    //          } },
-    //        { "dtype", common::sample_type_to_dtype(pixel_type_) },
-    //        { "fill_value", 0 },
-    //        { "order", "C" },
-    //        { "filters", nullptr },
-    //        { "dimension_separator", "/" },
-    //    };
-    //
-    //    if (blosc_compression_params_.has_value()) {
-    //        zarray_attrs["compressor"] = blosc_compression_params_.value();
-    //    } else {
-    //        zarray_attrs["compressor"] = nullptr;
-    //    }
-    //
-    //    std::string zarray_path =
-    //      (dataset_root_ / std::to_string(level) / ".zarray").string();
-    //    common::write_string(zarray_path, zarray_attrs.dump());
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    CHECK(level < writers_.size());
+    const auto& writer = writers_.at(level);
+
+    const WriterConfig& config = writer->config();
+    const auto& image_shape = config.image_shape;
+
+    std::vector<size_t> array_shape;
+    array_shape.push_back(writer->frames_written());
+    for (auto dim = config.dimensions.rbegin() + 1;
+         dim != config.dimensions.rend();
+         ++dim) {
+        array_shape.push_back(dim->array_size_px);
+    }
+
+    std::vector<size_t> chunk_shape;
+    for (auto dim = config.dimensions.rbegin(); dim != config.dimensions.rend();
+         ++dim) {
+        chunk_shape.push_back(dim->chunk_size_px);
+    }
+
+    json metadata;
+    metadata["zarr_format"] = 2;
+    metadata["shape"] = array_shape;
+    metadata["chunks"] = chunk_shape;
+    metadata["dtype"] = common::sample_type_to_dtype(image_shape.type);
+    metadata["fill_value"] = 0;
+    metadata["order"] = "C";
+    metadata["filters"] = nullptr;
+    metadata["dimension_separator"] = "/";
+
+    if (config.compression_params.has_value()) {
+        metadata["compressor"] = config.compression_params.value();
+    } else {
+        metadata["compressor"] = nullptr;
+    }
+
+    std::string zarray_path = (fs::path(config.data_root) / ".zarray").string();
+    common::write_string(zarray_path, metadata.dump());
 }
 
 void

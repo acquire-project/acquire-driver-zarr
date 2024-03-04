@@ -36,7 +36,7 @@ struct Zarr : public Storage
     void start();
     int stop() noexcept;
     size_t append(const VideoFrame* frames, size_t nbytes);
-    virtual void reserve_image_shape(const ImageShape* shape);
+    void reserve_image_shape(const ImageShape* shape);
 
     /// Error state
     void set_error(const std::string& msg) noexcept;

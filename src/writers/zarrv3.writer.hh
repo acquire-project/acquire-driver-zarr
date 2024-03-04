@@ -24,7 +24,7 @@ struct ZarrV3Writer final : public Writer
 {
   public:
     ZarrV3Writer() = delete;
-    ZarrV3Writer(const ArraySpec& array_spec,
+    ZarrV3Writer(const WriterConfig& array_spec,
                  std::shared_ptr<common::ThreadPool> thread_pool);
 
     ~ZarrV3Writer() override = default;

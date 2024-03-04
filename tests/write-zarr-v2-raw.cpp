@@ -9,6 +9,9 @@
 
 #include "json.hpp"
 
+namespace fs = std::filesystem;
+using json = nlohmann::json;
+
 namespace {
 void
 init_array(struct StorageDimension** data, size_t size)
@@ -24,9 +27,6 @@ destroy_array(struct StorageDimension* data)
     delete[] data;
 }
 }
-
-namespace fs = std::filesystem;
-using json = nlohmann::json;
 
 void
 reporter(int is_error,

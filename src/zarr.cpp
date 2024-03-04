@@ -618,12 +618,9 @@ zarr::Zarr::set_error(const std::string& msg) noexcept
 void
 zarr::Zarr::write_all_array_metadata_() const
 {
-    // FIXME (aliddell)
-    //    namespace fs = std::filesystem;
-    //
-    //    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
-    //        write_array_metadata_(i);
-    //    }
+    for (auto i = 0; i < writers_.size(); ++i) {
+        write_array_metadata_(i);
+    }
 }
 
 void

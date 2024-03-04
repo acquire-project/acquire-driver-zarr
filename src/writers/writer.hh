@@ -42,7 +42,7 @@ struct FileCreator
                                    std::vector<struct file>& files);
 };
 
-struct ArraySpec
+struct WriterConfig
 {
     ImageShape image_shape;
     std::vector<Dimension> dimensions;
@@ -50,11 +50,14 @@ struct ArraySpec
     std::optional<BloscCompressionParams> compression_params;
 };
 
+std::optional<struct WriterConfig>
+downsample(const WriterConfig& config);
+
 struct Writer
 {
   public:
     Writer() = delete;
-    Writer(const ArraySpec& array_spec,
+    Writer(const WriterConfig& config,
            std::shared_ptr<common::ThreadPool> thread_pool);
 
     virtual ~Writer() noexcept = default;
@@ -62,10 +65,12 @@ struct Writer
     [[nodiscard]] bool write(const VideoFrame* frame);
     void finalize();
 
+    const WriterConfig& config() const noexcept;
+
     uint32_t frames_written() const noexcept;
 
   protected:
-    ArraySpec array_spec_;
+    WriterConfig config_;
 
     /// Chunking
     std::vector<std::vector<uint8_t>> chunk_buffers_;
