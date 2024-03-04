@@ -400,7 +400,6 @@ zarr::Zarr::get(StorageProperties* props) const
     props->pixel_scale_um = pixel_scale_um_;
 
     // reset acquisition_dimensions
-    CHECK(storage_properties_dimensions_destroy(props));
     CHECK(storage_properties_dimensions_init(props,
                                              acquisition_dimensions_.size()));
 
@@ -408,13 +407,15 @@ zarr::Zarr::get(StorageProperties* props) const
         const auto dim = acquisition_dimensions_.at(i);
         CHECK(storage_dimension_init(&props->acquisition_dimensions.data[i],
                                      dim.name.c_str(),
-                                     dim.name.length(),
+                                     dim.name.length() + 1,
                                      dim.kind,
                                      dim.array_size_px,
                                      dim.chunk_size_px,
                                      dim.shard_size_chunks));
     }
+    props->acquisition_dimensions.size = acquisition_dimensions_.size();
 
+    props->first_frame_id = 0;
     props->enable_multiscale = enable_multiscale_;
 }
 

@@ -17,11 +17,11 @@ else ()
     set(tests
             list-devices
             unit-tests
+            get
+            get-meta
             write-zarr-v2-raw
             write-zarr-v3-raw
             #            external-metadata-with-whitespace-ok
-            get
-            get-meta
             #            restart-stopped-zarr-resets-threadpool
             #            repeat-start
             #            multiscale-with-trivial-tile-size
