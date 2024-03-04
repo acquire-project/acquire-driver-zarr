@@ -40,31 +40,31 @@ zarr::ZarrV2::get_meta(StoragePropertyMetadata* meta) const
 void
 zarr::ZarrV2::allocate_writers_()
 {
-    //    writers_.clear();
-    //    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
-    //        const auto& image_shape = image_tile_shapes_.at(i).first;
-    //        const auto& tile_shape = image_tile_shapes_.at(i).second;
-    //
-    //        const uint64_t bytes_per_tile =
-    //          common::bytes_per_tile(tile_shape, pixel_type_);
-    //
-    //        if (blosc_compression_params_.has_value()) {
-    //            writers_.push_back(std::make_shared<ZarrV2Writer>(
-    //              image_shape,
-    //              tile_shape,
-    //              planes_per_chunk_,
-    //              (get_data_directory_() / std::to_string(i)).string(),
-    //              thread_pool_,
-    //              blosc_compression_params_.value()));
-    //        } else {
-    //            writers_.push_back(std::make_shared<ZarrV2Writer>(
-    //              image_shape,
-    //              tile_shape,
-    //              planes_per_chunk_,
-    //              (get_data_directory_() / std::to_string(i)).string(),
-    //              thread_pool_));
-    //        }
-    //    }
+    writers_.clear();
+    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
+        const auto& image_shape = image_tile_shapes_.at(i).first;
+        const auto& tile_shape = image_tile_shapes_.at(i).second;
+
+        const uint64_t bytes_per_tile =
+          common::bytes_per_tile(tile_shape, pixel_type_);
+
+        if (blosc_compression_params_.has_value()) {
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
+              image_shape,
+              tile_shape,
+              planes_per_chunk_,
+              (get_data_directory_() / std::to_string(i)).string(),
+              thread_pool_,
+              blosc_compression_params_.value()));
+        } else {
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
+              image_shape,
+              tile_shape,
+              planes_per_chunk_,
+              (get_data_directory_() / std::to_string(i)).string(),
+              thread_pool_));
+        }
+    }
 }
 
 void
