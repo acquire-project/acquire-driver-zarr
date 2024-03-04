@@ -85,10 +85,10 @@ main()
 
                 CHECK(Device_Ok == storage_get_meta(storage, &metadata));
 
-                CHECK(metadata.chunk_size.is_supported);
-                CHECK((bool)metadata.shard_size_chunks.is_supported ==
+                CHECK(metadata.chunking_is_supported);
+                CHECK((bool)metadata.sharding_is_supported ==
                       name.starts_with("ZarrV3"));
-                CHECK((bool)metadata.multiscale.is_supported !=
+                CHECK((bool)metadata.multiscale_is_supported !=
                       name.starts_with("ZarrV3"));
 
                 CHECK(Device_Ok == driver_close_device(device));

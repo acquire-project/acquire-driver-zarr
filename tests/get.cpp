@@ -12,6 +12,22 @@
 #include <cstring>
 #include <string>
 
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+}
+
 #define containerof(P, T, F) ((T*)(((char*)(P)) - offsetof(T, F)))
 
 /// Helper for passing size static strings as function args.
@@ -93,10 +109,32 @@ main()
                                         SIZED(TEST ".zarr"),
                                         SIZED(R"({"foo":"bar"})"),
                                         { 1, 1 });
-                CHECK(storage_properties_set_chunking_props(
-                  &props, 64, 48, 0, 0, 6, AppendDimension_t));
-                CHECK(
-                  storage_properties_set_sharding_props(&props, 3, 2, 0, 1, 1));
+
+                props.acquisition_dimensions.init = init_array;
+                props.acquisition_dimensions.destroy = destroy_array;
+
+                CHECK(storage_properties_dimensions_init(&props, 4));
+                auto* acq_dims = &props.acquisition_dimensions;
+
+                CHECK(storage_dimension_init(acq_dims->data,
+                                             SIZED("x") + 1,
+                                             DimensionType_Space,
+                                             64,
+                                             16,
+                                             3));
+                CHECK(storage_dimension_init(acq_dims->data,
+                                             SIZED("y") + 1,
+                                             DimensionType_Space,
+                                             48,
+                                             24,
+                                             2));
+                CHECK(storage_dimension_init(acq_dims->data,
+                                             SIZED("z") + 1,
+                                             DimensionType_Space,
+                                             6,
+                                             6,
+                                             1));
+
                 props.enable_multiscale = true;
 
                 CHECK(Device_Ok == storage_set(storage, &props));
@@ -109,26 +147,6 @@ main()
                              R"({"foo":"bar"})") == 0);
 
                 CHECK(props.first_frame_id == 0); // this is ignored
-
-                CHECK(props.chunk_size.x == 64);
-                CHECK(props.chunk_size.y == 48);
-                CHECK(props.chunk_size.z == 0);
-                CHECK(props.chunk_size.c == 0);
-                CHECK(props.chunk_size.t == 6);
-
-                if (name.starts_with("ZarrV3")) {
-                    CHECK(props.shard_size_chunks.x == 3);
-                    CHECK(props.shard_size_chunks.y == 2);
-                    CHECK(props.shard_size_chunks.z == 0);
-                    CHECK(props.shard_size_chunks.c == 1);
-                    CHECK(props.shard_size_chunks.t == 1);
-                } else {
-                    CHECK(props.shard_size_chunks.x == 0);
-                    CHECK(props.shard_size_chunks.y == 0);
-                    CHECK(props.shard_size_chunks.z == 0);
-                    CHECK(props.shard_size_chunks.c == 0);
-                    CHECK(props.shard_size_chunks.t == 0);
-                }
 
                 CHECK(props.enable_multiscale == !name.starts_with("ZarrV3"));
 

@@ -30,8 +30,8 @@ struct Zarr : public Storage
     virtual ~Zarr() noexcept = default;
 
     /// Storage interface
-    virtual void set(const StorageProperties* props);
-    virtual void get(StorageProperties* props) const;
+    void set(const StorageProperties* props);
+    void get(StorageProperties* props) const;
     virtual void get_meta(StoragePropertyMetadata* meta) const;
     void start();
     int stop() noexcept;
