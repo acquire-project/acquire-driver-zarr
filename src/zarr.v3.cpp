@@ -35,7 +35,7 @@ zarr::ZarrV3::allocate_writers_()
 {
     writers_.clear();
 
-    const WriterConfig config = {
+    WriterConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
         .data_root = (dataset_root_ / "data" / "root" / "0").string(),
@@ -44,12 +44,13 @@ zarr::ZarrV3::allocate_writers_()
     writers_.push_back(std::make_shared<ZarrV3Writer>(config, thread_pool_));
 
     if (enable_multiscale_) {
-        auto downsampled_config = downsample(config);
-        while (downsampled_config.has_value()) {
-            writers_.push_back(std::make_shared<ZarrV3Writer>(
-              downsampled_config.value(), thread_pool_));
+        WriterConfig downsampled_config;
+        while (downsample(config, downsampled_config)) {
+            writers_.push_back(
+              std::make_shared<ZarrV3Writer>(downsampled_config, thread_pool_));
 
-            downsampled_config = downsample(downsampled_config.value());
+            config = std::move(downsampled_config);
+            downsampled_config = {};
         }
     }
 }

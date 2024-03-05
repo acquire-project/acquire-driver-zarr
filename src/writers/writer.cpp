@@ -338,37 +338,65 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
     return success;
 }
 
-std::optional<struct zarr::WriterConfig>
-zarr::downsample(const WriterConfig& config)
+bool
+zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 {
-    return std::nullopt;
-    WriterConfig downsampled_config;
-
+    // downsample dimensions
+    downsampled_config.dimensions.clear();
     for (const auto& dim : config.dimensions) {
-        size_t downsampled_size =
+        const uint32_t array_size_px =
           (dim.array_size_px + (dim.array_size_px % 2)) / 2;
 
-        if (downsampled_size < dim.chunk_size_px) {
-            return std::nullopt;
-        }
+        const uint32_t chunk_size_px =
+          dim.array_size_px == 0 ? dim.chunk_size_px
+                                 : std::min(dim.chunk_size_px, array_size_px);
 
-        size_t shard_size_chunks = 0; // TODO (aliddell)
+        const uint32_t n_chunks =
+          (array_size_px + chunk_size_px - 1) / chunk_size_px;
 
-        downsampled_config.dimensions.push_back(
-          Dimension(dim.name,
-                    dim.kind,
-                    downsampled_size,
-                    dim.chunk_size_px,
-                    dim.shard_size_chunks));
+        const uint32_t shard_size_chunks =
+          dim.array_size_px == 0 ? 1
+                                 : std::min(n_chunks, dim.shard_size_chunks);
+
+        downsampled_config.dimensions.emplace_back(
+          dim.name, dim.kind, array_size_px, chunk_size_px, shard_size_chunks);
     }
 
-    const ImageShape& image_shape = config.image_shape;
-    ImageShape downsampled_shape = image_shape;
+    // downsample image_shape
+    downsampled_config.image_shape = config.image_shape;
 
-    downsampled_shape.dims.width =
-      (image_shape.dims.width + (image_shape.dims.width % 2)) / 2;
-    downsampled_shape.dims.height =
-      (image_shape.dims.height + (image_shape.dims.height % 2)) / 2;
+    downsampled_config.image_shape.dims.width =
+      downsampled_config.dimensions.at(0).array_size_px;
+    downsampled_config.image_shape.dims.height =
+      downsampled_config.dimensions.at(1).array_size_px;
+
+    downsampled_config.image_shape.strides.height =
+      downsampled_config.image_shape.dims.width;
+    downsampled_config.image_shape.strides.planes =
+      downsampled_config.image_shape.dims.width *
+      downsampled_config.image_shape.dims.height;
+
+    // data root needs updated
+    fs::path downsampled_data_root = config.data_root;
+    downsampled_data_root.replace_filename(
+      std::to_string(std::stoi(downsampled_data_root.filename()) + 1));
+    downsampled_config.data_root = downsampled_data_root.string();
+
+    // copy the Blosc compression parameters
+    downsampled_config.compression_params = config.compression_params;
+
+    // can we downsample downsampled_config?
+    for (auto i = 0; i < config.dimensions.size(); ++i) {
+        // downsampling made the chunk size strictly smaller
+        const auto& dim = config.dimensions.at(i);
+        const auto& downsampled_dim = downsampled_config.dimensions.at(i);
+
+        if (dim.chunk_size_px > downsampled_dim.chunk_size_px) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 /// Writer
@@ -421,7 +449,6 @@ zarr::Writer::write(const VideoFrame* frame)
 void
 zarr::Writer::finalize()
 {
-    finalize_chunks_();
     flush_();
     close_files_();
 }
@@ -472,30 +499,6 @@ zarr::Writer::make_buffers_() noexcept
         buf.resize(bytes_per_chunk);
         std::fill_n(buf.begin(), bytes_per_chunk, 0);
     }
-}
-
-void
-zarr::Writer::finalize_chunks_() noexcept
-{
-    //    const auto frames_this_chunk = frames_written_ % frames_per_chunk_();
-    //
-    //    // don't write zeros if we have written less than one full chunk or if
-    //    // the last frame written was the final frame in its chunk
-    //    if (frames_written_ < frames_per_chunk_() || frames_this_chunk == 0) {
-    //        return;
-    //    }
-    //
-    //    const auto bytes_per_frame =
-    //      common::bytes_of_image(array_spec_.image_shape);
-    //    const auto frames_to_write = frames_per_chunk_() - frames_this_chunk;
-    //
-    //    const auto bytes_to_fill =
-    //      frames_to_write * common::bytes_per_tile(tile_dims_, pixel_type_);
-    //    for (auto& chunk : chunk_buffers_) {
-    //        std::fill_n(std::back_inserter(chunk), bytes_to_fill, 0);
-    //    }
-    //
-    //    bytes_to_flush_ += frames_to_write * bytes_per_frame;
 }
 
 void
@@ -1131,6 +1134,155 @@ extern "C"
         }
         if (frame) {
             free(frame);
+        }
+        return retval;
+    }
+
+    acquire_export int unit_test__downsample_writer_config()
+    {
+        int retval = 0;
+        try {
+            const fs::path base_dir = "acquire";
+
+            zarr::WriterConfig config {
+                .image_shape = {
+                    .dims = {
+                      .channels = 1,
+                      .width = 64,
+                      .height = 48,
+                      .planes = 1,
+                    },
+                    .strides = {
+                      .channels = 1,
+                      .width = 1,
+                      .height = 64,
+                      .planes = 64 * 48
+                    },
+                    .type = SampleType_u8
+                },
+                .dimensions = {},
+                .data_root = (base_dir / "data" / "root" / "0").string(),
+                .compression_params = std::nullopt
+            };
+
+            config.dimensions.emplace_back(
+              "x", DimensionType_Space, 64, 16, 2); // 4 chunks, 2 shards
+            config.dimensions.emplace_back(
+              "y", DimensionType_Space, 48, 16, 3); // 3 chunks, 1 shard
+            config.dimensions.emplace_back(
+              "z", DimensionType_Space, 7, 3, 3); // 3 chunks, 3 shards
+            config.dimensions.emplace_back(
+              "c", DimensionType_Channel, 1, 1, 1); // 1 chunk, 1 shard
+            config.dimensions.emplace_back("t",
+                                           DimensionType_Time,
+                                           0,
+                                           5,
+                                           1); // 5 timepoints / chunk, 1 shard
+
+            zarr::WriterConfig downsampled_config;
+            CHECK(zarr::downsample(config, downsampled_config));
+
+            // check dimensions
+            CHECK(downsampled_config.dimensions.size() == 5);
+            CHECK(downsampled_config.dimensions.at(0).name == "x");
+            CHECK(downsampled_config.dimensions.at(0).array_size_px == 32);
+            CHECK(downsampled_config.dimensions.at(0).chunk_size_px == 16);
+            CHECK(downsampled_config.dimensions.at(0).shard_size_chunks == 2);
+
+            CHECK(downsampled_config.dimensions.at(1).name == "y");
+            CHECK(downsampled_config.dimensions.at(1).array_size_px == 24);
+            CHECK(downsampled_config.dimensions.at(1).chunk_size_px == 16);
+            CHECK(downsampled_config.dimensions.at(1).shard_size_chunks == 2);
+
+            CHECK(downsampled_config.dimensions.at(2).name == "z");
+            CHECK(downsampled_config.dimensions.at(2).array_size_px == 4);
+            CHECK(downsampled_config.dimensions.at(2).chunk_size_px == 3);
+            CHECK(downsampled_config.dimensions.at(2).shard_size_chunks == 2);
+
+            CHECK(downsampled_config.dimensions.at(3).name == "c");
+            CHECK(downsampled_config.dimensions.at(3).array_size_px == 1);
+            CHECK(downsampled_config.dimensions.at(3).chunk_size_px == 1);
+            CHECK(downsampled_config.dimensions.at(3).shard_size_chunks == 1);
+
+            CHECK(downsampled_config.dimensions.at(4).name == "t");
+            CHECK(downsampled_config.dimensions.at(4).array_size_px == 0);
+            CHECK(downsampled_config.dimensions.at(4).chunk_size_px == 5);
+            CHECK(downsampled_config.dimensions.at(4).shard_size_chunks == 1);
+
+            // check image shape
+            CHECK(downsampled_config.image_shape.dims.channels == 1);
+            CHECK(downsampled_config.image_shape.dims.width == 32);
+            CHECK(downsampled_config.image_shape.dims.height == 24);
+            CHECK(downsampled_config.image_shape.dims.planes == 1);
+
+            CHECK(downsampled_config.image_shape.strides.channels == 1);
+            CHECK(downsampled_config.image_shape.strides.width == 1);
+            CHECK(downsampled_config.image_shape.strides.height == 32);
+            CHECK(downsampled_config.image_shape.strides.planes == 32 * 24);
+
+            // check data root
+            CHECK(downsampled_config.data_root ==
+                  (base_dir / "data" / "root" / "1").string());
+
+            // check compression params
+            CHECK(!downsampled_config.compression_params.has_value());
+
+            // downsample again
+            config = std::move(downsampled_config);
+
+            // can't downsample anymore
+            CHECK(!zarr::downsample(config, downsampled_config));
+
+            // check dimensions
+            CHECK(downsampled_config.dimensions.size() == 5);
+            CHECK(downsampled_config.dimensions.at(0).name == "x");
+            CHECK(downsampled_config.dimensions.at(0).array_size_px == 16);
+            CHECK(downsampled_config.dimensions.at(0).chunk_size_px == 16);
+            CHECK(downsampled_config.dimensions.at(0).shard_size_chunks == 1);
+
+            CHECK(downsampled_config.dimensions.at(1).name == "y");
+            CHECK(downsampled_config.dimensions.at(1).array_size_px == 12);
+            CHECK(downsampled_config.dimensions.at(1).chunk_size_px == 12);
+            CHECK(downsampled_config.dimensions.at(1).shard_size_chunks == 1);
+
+            CHECK(downsampled_config.dimensions.at(2).name == "z");
+            CHECK(downsampled_config.dimensions.at(2).array_size_px == 2);
+            CHECK(downsampled_config.dimensions.at(2).chunk_size_px == 2);
+            CHECK(downsampled_config.dimensions.at(2).shard_size_chunks == 1);
+
+            CHECK(downsampled_config.dimensions.at(3).name == "c");
+            CHECK(downsampled_config.dimensions.at(3).array_size_px == 1);
+            CHECK(downsampled_config.dimensions.at(3).chunk_size_px == 1);
+            CHECK(downsampled_config.dimensions.at(3).shard_size_chunks == 1);
+
+            CHECK(downsampled_config.dimensions.at(4).name == "t");
+            CHECK(downsampled_config.dimensions.at(4).array_size_px == 0);
+            CHECK(downsampled_config.dimensions.at(4).chunk_size_px == 5);
+            CHECK(downsampled_config.dimensions.at(4).shard_size_chunks == 1);
+
+            // check image shape
+            CHECK(downsampled_config.image_shape.dims.channels == 1);
+            CHECK(downsampled_config.image_shape.dims.width == 16);
+            CHECK(downsampled_config.image_shape.dims.height == 12);
+            CHECK(downsampled_config.image_shape.dims.planes == 1);
+
+            CHECK(downsampled_config.image_shape.strides.channels == 1);
+            CHECK(downsampled_config.image_shape.strides.width == 1);
+            CHECK(downsampled_config.image_shape.strides.height == 16);
+            CHECK(downsampled_config.image_shape.strides.planes == 16 * 12);
+
+            // check data root
+            CHECK(downsampled_config.data_root ==
+                  (base_dir / "data" / "root" / "2").string());
+
+            // check compression params
+            CHECK(!downsampled_config.compression_params.has_value());
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
         }
         return retval;
     }

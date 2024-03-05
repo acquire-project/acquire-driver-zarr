@@ -50,8 +50,16 @@ struct WriterConfig
     std::optional<BloscCompressionParams> compression_params;
 };
 
-std::optional<struct WriterConfig>
-downsample(const WriterConfig& config);
+/// @brief Downsample the writer configuration to a lower resolution.
+/// @param[in] config The original writer configuration.
+/// @param[out] downsampled_config The downsampled writer configuration.
+/// @return True if @p downsampled_config can be downsampled further.
+/// This is determined by the chunk size in @p config. This function will return
+/// false if and only if downsampling brings one or more dimensions lower than
+/// the chunk size along that dimension.
+
+[[nodiscard]] bool
+downsample(const WriterConfig& config, WriterConfig& downsampled_config);
 
 struct Writer
 {
@@ -96,7 +104,6 @@ struct Writer
 
     void make_buffers_() noexcept;
 
-    void finalize_chunks_() noexcept;
     void compress_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
 

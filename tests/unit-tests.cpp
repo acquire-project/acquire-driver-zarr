@@ -89,6 +89,7 @@ main()
         CASE(unit_test__chunk_group_offset),
         CASE(unit_test__chunk_internal_offset),
         CASE(unit_test__writer__write_frame_to_chunks),
+        CASE(unit_test__downsample_writer_config),
         CASE(unit_test__zarrv2_writer__write_even),
         CASE(unit_test__zarrv2_writer__write_ragged_append_dim),
         CASE(unit_test__shard_index),
