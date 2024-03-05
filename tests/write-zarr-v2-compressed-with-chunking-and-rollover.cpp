@@ -13,6 +13,22 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+}
+
 void
 reporter(int is_error,
          const char* file,
@@ -74,7 +90,7 @@ const static uint32_t frame_height = 1080;
 
 const static uint32_t chunk_width = frame_width / 2;
 const static uint32_t chunk_height = frame_height / 2;
-const static uint32_t chunk_planes = 64;
+const static uint32_t chunk_planes = 128;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -92,7 +108,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("ZarrBlosc1Lz4ByteShuffle"),
+                                SIZED("ZarrBlosc1ZstdByteShuffle"),
                                 &props.video[0].storage.identifier));
 
     const char external_metadata[] = R"({"hello":"world"})";
@@ -106,11 +122,34 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   sizeof(external_metadata),
                                   sample_spacing_um));
 
+    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
+    props.video[0].storage.settings.acquisition_dimensions.destroy =
+      destroy_array;
+
     CHECK(
-      storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            chunk_width,
-                                            chunk_height,
-                                            chunk_planes));
+      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
+    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
+
+    CHECK(storage_dimension_init(acq_dims->data,
+                                 SIZED("x") + 1,
+                                 DimensionType_Space,
+                                 frame_width,
+                                 chunk_width,
+                                 0));
+    CHECK(storage_dimension_init(acq_dims->data + 1,
+                                 SIZED("y") + 1,
+                                 DimensionType_Space,
+                                 frame_height,
+                                 chunk_height,
+                                 0));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 0));
+    CHECK(storage_dimension_init(acq_dims->data + 3,
+                                 SIZED("t") + 1,
+                                 DimensionType_Time,
+                                 0,
+                                 chunk_planes,
+                                 0));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -118,19 +157,17 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                              .y = frame_height };
     // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 1e4;
-    props.video[0].max_frame_count = chunk_planes;
+    // should trigger rollover
+    props.video[0].max_frame_count = chunk_planes + 1;
 
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
 }
 
-int
-main()
+void
+validate()
 {
-    auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
-
     CHECK(fs::is_directory(TEST ".zarr"));
 
     const auto external_metadata_path =
@@ -151,7 +188,7 @@ main()
     json zarray = json::parse(f);
 
     auto shape = zarray["shape"];
-    ASSERT_EQ(int, "%d", chunk_planes, shape[0]);
+    ASSERT_EQ(int, "%d", chunk_planes + 1, shape[0]);
     ASSERT_EQ(int, "%d", 1, shape[1]);
     ASSERT_EQ(int, "%d", frame_height, shape[2]);
     ASSERT_EQ(int, "%d", frame_width, shape[3]);
@@ -186,11 +223,45 @@ main()
     ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
     ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
 
-    // check that there isn't a second (empty) chunk along the time dimension
-    auto second_time_chunk_path = fs::path(TEST ".zarr/0/1");
-    CHECK(!fs::exists(second_time_chunk_path));
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/0/0");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
 
-    LOG("Done (OK)");
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/0/1");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
+
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/1/0");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
+
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/1/1");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
+}
+
+int
+main()
+{
+    int retval = 1;
+    auto runtime = acquire_init(reporter);
+
+    try {
+        acquire(runtime, TEST ".zarr");
+        validate();
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
     acquire_shutdown(runtime);
-    return 0;
+    return retval;
 }

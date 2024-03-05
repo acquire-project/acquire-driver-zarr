@@ -322,20 +322,20 @@ teardown(AcquireRuntime* runtime)
 int
 main()
 {
-    int retval = 0;
+    int retval = 1;
     auto runtime = acquire_init(reporter);
 
     try {
         setup(runtime);
         acquire(runtime);
         validate(runtime);
+
+        retval = 0;
         LOG("Done (OK)");
     } catch (const std::exception& exc) {
         ERR("Exception: %s", exc.what());
-        retval = 1;
     } catch (...) {
         ERR("Unknown exception");
-        retval = 1;
     }
 
     teardown(runtime);

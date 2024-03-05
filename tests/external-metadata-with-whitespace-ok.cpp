@@ -11,7 +11,6 @@
 
 #include <cstdio>
 #include <stdexcept>
-#include <iostream>
 
 void
 reporter(int is_error,
@@ -81,7 +80,19 @@ setup(AcquireRuntime* runtime)
 int
 main()
 {
+    int retval = 1;
     auto runtime = acquire_init(reporter);
-    setup(runtime);
-    return 0;
+    try {
+        setup(runtime);
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
+    acquire_shutdown(runtime);
+    return retval;
 }

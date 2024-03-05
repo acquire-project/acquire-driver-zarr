@@ -406,7 +406,8 @@ zarr::Writer::write(const VideoFrame* frame)
 
     const auto bytes_written = write_frame_to_chunks_(
       frame->data, frame->bytes_of_frame - sizeof(*frame));
-    CHECK(bytes_written == frame->bytes_of_frame - sizeof(*frame));
+    const auto bytes_of_frame = frame->bytes_of_frame - sizeof(*frame);
+    CHECK(bytes_written == bytes_of_frame);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
 
@@ -615,7 +616,7 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
                     EXPECT(chunk_it + nbytes <= chunk.end(), "Buffer overflow");
                     std::copy(buf + region_start, buf + region_stop, chunk_it);
 
-                    bytes_written += bytes_per_row;
+                    bytes_written += (region_stop - region_start);
                 }
                 chunk_it += bytes_per_row;
             }

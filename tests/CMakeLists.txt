@@ -19,23 +19,22 @@ else ()
             unit-tests
             get
             get-meta
+            external-metadata-with-whitespace-ok
+            restart-stopped-zarr-resets-threadpool
+            repeat-start
             write-zarr-v2-raw
+            write-zarr-v2-raw-with-even-chunking
+            write-zarr-v2-raw-with-even-chunking-and-rollover
+            write-zarr-v2-raw-with-ragged-chunking
+            write-zarr-v2-with-lz4-compression
+            write-zarr-v2-with-zstd-compression
+            write-zarr-v2-compressed-with-chunking
+            write-zarr-v2-compressed-with-chunking-and-rollover
             write-zarr-v3-raw
-            #            external-metadata-with-whitespace-ok
-            #            restart-stopped-zarr-resets-threadpool
-            #            repeat-start
+            write-zarr-v3-compressed
             #            multiscale-with-trivial-tile-size
-            #            no-set-chunking
             #            write-zarr-compressed-multiscale
-            #            write-zarr-compressed-with-chunking
-            #            write-zarr-compressed-with-chunking-and-rollover
             #            write-zarr-raw-multiscale
-            #            write-zarr-raw-with-chunking
-            #            write-zarr-raw-with-chunking-and-rollover
-            #            write-zarr-raw-with-ragged-tiling
-            #            write-zarr-v3-compressed
-            #            write-zarr-with-lz4-compression
-            #            write-zarr-with-zstd-compression
     )
 
     foreach (name ${tests})

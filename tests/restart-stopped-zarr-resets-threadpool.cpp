@@ -14,6 +14,22 @@
 #include <stdexcept>
 #include <vector>
 
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+}
+
 #define containerof(P, T, F) ((T*)(((char*)(P)) - offsetof(T, F)))
 
 /// Helper for passing size static strings as function args.
@@ -92,8 +108,19 @@ configure(struct Storage* zarr)
 {
     struct StorageProperties props = { 0 };
     storage_properties_init(&props, 0, SIZED(TEST ".zarr"), nullptr, 0, { 0 });
-    storage_properties_set_chunking_props(
-      &props, 64, 48, 0, 0, 1, AppendDimension_t);
+
+    props.acquisition_dimensions.init = init_array;
+    props.acquisition_dimensions.destroy = destroy_array;
+
+    CHECK(storage_properties_dimensions_init(&props, 3));
+    auto* acq_dims = &props.acquisition_dimensions;
+
+    CHECK(storage_dimension_init(
+      acq_dims->data, SIZED("x") + 1, DimensionType_Space, 64, 64, 0));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 1, SIZED("y") + 1, DimensionType_Space, 48, 48, 0));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 2, SIZED("t") + 1, DimensionType_Time, 0, 1, 0));
 
     CHECK(DeviceState_Armed == zarr->set(zarr, &props));
 }

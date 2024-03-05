@@ -225,61 +225,65 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_stop(runtime));
 }
 
+void
+validate()
+{
+    CHECK(fs::is_directory(TEST ".zarr"));
+
+    const auto external_metadata_path =
+      fs::path(TEST ".zarr") / "0" / ".zattrs";
+    CHECK(fs::is_regular_file(external_metadata_path));
+    ASSERT_GT(int, "%d", fs::file_size(external_metadata_path), 0);
+
+    const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
+    CHECK(fs::is_regular_file(group_zattrs_path));
+    ASSERT_GT(int, "%d", fs::file_size(group_zattrs_path), 0);
+
+    const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
+    CHECK(fs::is_regular_file(zarray_path));
+    ASSERT_GT(int, "%d", fs::file_size(zarray_path), 0);
+
+    // check metadata
+    std::ifstream f(zarray_path);
+    json zarray = json::parse(f);
+
+    auto shape = zarray["shape"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, shape[0]);
+    ASSERT_EQ(int, "%d", 1, shape[1]);
+    ASSERT_EQ(int, "%d", frame_height, shape[2]);
+    ASSERT_EQ(int, "%d", frame_width, shape[3]);
+
+    auto chunks = zarray["chunks"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0]);
+    ASSERT_EQ(int, "%d", 1, chunks[1]);
+    ASSERT_EQ(int, "%d", frame_height, chunks[2]);
+    ASSERT_EQ(int, "%d", frame_width, chunks[3]);
+
+    // check chunked data
+    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
+                      chunks[2].get<int>() * chunks[3].get<int>();
+
+    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+}
+
 int
 main()
 {
-    int retval = 0;
+    int retval = 1;
     auto runtime = acquire_init(reporter);
 
     try {
         acquire(runtime, TEST ".zarr");
+        validate();
 
-        CHECK(fs::is_directory(TEST ".zarr"));
-
-        const auto external_metadata_path =
-          fs::path(TEST ".zarr") / "0" / ".zattrs";
-        CHECK(fs::is_regular_file(external_metadata_path));
-        ASSERT_GT(int, "%d", fs::file_size(external_metadata_path), 0);
-
-        const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
-        CHECK(fs::is_regular_file(group_zattrs_path));
-        ASSERT_GT(int, "%d", fs::file_size(group_zattrs_path), 0);
-
-        const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
-        CHECK(fs::is_regular_file(zarray_path));
-        ASSERT_GT(int, "%d", fs::file_size(zarray_path), 0);
-
-        // check metadata
-        std::ifstream f(zarray_path);
-        json zarray = json::parse(f);
-
-        auto shape = zarray["shape"];
-        ASSERT_EQ(int, "%d", frames_per_chunk, shape[0]);
-        ASSERT_EQ(int, "%d", 1, shape[1]);
-        ASSERT_EQ(int, "%d", frame_height, shape[2]);
-        ASSERT_EQ(int, "%d", frame_width, shape[3]);
-
-        auto chunks = zarray["chunks"];
-        ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0]);
-        ASSERT_EQ(int, "%d", 1, chunks[1]);
-        ASSERT_EQ(int, "%d", frame_height, chunks[2]);
-        ASSERT_EQ(int, "%d", frame_width, chunks[3]);
-
-        // check chunked data
-        auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
-                          chunks[2].get<int>() * chunks[3].get<int>();
-
-        const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
-        CHECK(fs::is_regular_file(chunk_file_path));
-        ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
-
+        retval = 0;
         LOG("Done (OK)");
     } catch (const std::exception& exc) {
         ERR("Exception: %s", exc.what());
-        retval = 1;
     } catch (...) {
         ERR("Unknown exception");
-        retval = 1;
     }
 
     acquire_shutdown(runtime);

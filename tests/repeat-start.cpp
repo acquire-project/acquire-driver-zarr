@@ -16,6 +16,22 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+}
+
 #define containerof(P, T, F) ((T*)(((char*)(P)) - offsetof(T, F)))
 
 /// Helper for passing size static strings as function args.
@@ -72,7 +88,7 @@ configure(AcquireRuntime* runtime)
     auto dm = acquire_device_manager(runtime);
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*random.*"),
+                                SIZED("simulated.*random.*") - 1,
                                 &props.video[0].camera.identifier));
 
     props.video[0].camera.settings.binning = 1;
@@ -82,7 +98,7 @@ configure(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("ZarrV3"),
+                                SIZED("ZarrV3") - 1,
                                 &props.video[0].storage.identifier));
     CHECK(storage_properties_init(&props.video[0].storage.settings,
                                   0,
@@ -91,13 +107,28 @@ configure(AcquireRuntime* runtime)
                                   0,
                                   { 1, 1 }));
 
-    CHECK(storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, 32, 32, 0, 1, 32, AppendDimension_t));
-    CHECK(storage_properties_set_sharding_props(
-      &props.video[0].storage.settings, 2, 1, 0, 1, 1));
-    props.video[0].max_frame_count = 10;
+    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
+    props.video[0].storage.settings.acquisition_dimensions.destroy =
+      destroy_array;
+
+    CHECK(
+      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
+    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
+
+    CHECK(storage_dimension_init(
+      acq_dims->data, SIZED("x") + 1, DimensionType_Space, 64, 32, 1));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 1, SIZED("y") + 1, DimensionType_Space, 48, 32, 1));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 1));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 3, SIZED("t") + 1, DimensionType_Time, 0, 32, 1));
+
+    props.video[0].max_frame_count = 32;
 
     OK(acquire_configure(runtime, &props));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 void
@@ -111,6 +142,9 @@ void
 validate(AcquireRuntime* runtime)
 {
     AcquireProperties props = { 0 };
+    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
+    props.video[0].storage.settings.acquisition_dimensions.destroy =
+      destroy_array;
     OK(acquire_get_configuration(runtime, &props));
 
     const fs::path test_path(props.video[0].storage.settings.filename.str);
@@ -151,7 +185,7 @@ validate(AcquireRuntime* runtime)
     CHECK("regular" == chunk_grid["type"]);
 
     const auto chunk_shape = chunk_grid["chunk_shape"];
-    ASSERT_EQ(int, "%d", 10, chunk_shape[0]);
+    ASSERT_EQ(int, "%d", 32, chunk_shape[0]);
     ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
     ASSERT_EQ(int, "%d", 32, chunk_shape[2]);
     ASSERT_EQ(int, "%d", 32, chunk_shape[3]);
@@ -161,7 +195,7 @@ validate(AcquireRuntime* runtime)
     CHECK(metadata["extensions"].empty());
 
     const auto array_shape = metadata["shape"];
-    ASSERT_EQ(int, "%d", 10, array_shape[0]);
+    ASSERT_EQ(int, "%d", 32, array_shape[0]);
     ASSERT_EQ(int, "%d", 1, array_shape[1]);
     ASSERT_EQ(int, "%d", 48, array_shape[2]);
     ASSERT_EQ(int, "%d", 64, array_shape[3]);
@@ -173,7 +207,7 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(int, "%d", 1, cps[0]);
     ASSERT_EQ(int, "%d", 1, cps[1]);
     ASSERT_EQ(int, "%d", 1, cps[2]);
-    ASSERT_EQ(int, "%d", 2, cps[3]);
+    ASSERT_EQ(int, "%d", 1, cps[3]);
     const size_t chunks_per_shard = cps[0].get<size_t>() *
                                     cps[1].get<size_t>() *
                                     cps[2].get<size_t>() * cps[3].get<size_t>();
@@ -198,9 +232,9 @@ validate(AcquireRuntime* runtime)
 int
 main()
 {
+    int retval = 1;
     auto runtime = acquire_init(reporter);
 
-    int retval = 1;
     try {
         configure(runtime);
 
@@ -208,6 +242,7 @@ main()
             acquire(runtime);
             validate(runtime);
         }
+
         retval = 0;
         LOG("Done (OK)");
     } catch (const std::exception& e) {
