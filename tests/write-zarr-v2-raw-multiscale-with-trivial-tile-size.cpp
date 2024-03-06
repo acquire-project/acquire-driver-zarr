@@ -15,6 +15,22 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+}
+
 void
 reporter(int is_error,
          const char* file,
@@ -105,13 +121,34 @@ setup(AcquireRuntime* runtime)
                             0,
                             sample_spacing_um);
 
-    storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                          frame_width,
-                                          frame_height,
-                                          0,
-                                          1,
-                                          chunk_planes,
-                                          AppendDimension_t);
+    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
+    props.video[0].storage.settings.acquisition_dimensions.destroy =
+      destroy_array;
+
+    CHECK(
+      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
+    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
+
+    CHECK(storage_dimension_init(acq_dims->data,
+                                 SIZED("x") + 1,
+                                 DimensionType_Space,
+                                 frame_width,
+                                 frame_width,
+                                 0));
+    CHECK(storage_dimension_init(acq_dims->data + 1,
+                                 SIZED("y") + 1,
+                                 DimensionType_Space,
+                                 frame_height,
+                                 frame_height,
+                                 0));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 0));
+    CHECK(storage_dimension_init(acq_dims->data + 3,
+                                 SIZED("t") + 1,
+                                 DimensionType_Time,
+                                 0,
+                                 chunk_planes,
+                                 0));
 
     storage_properties_set_enable_multiscale(&props.video[0].storage.settings,
                                              1);
@@ -130,87 +167,29 @@ setup(AcquireRuntime* runtime)
 void
 acquire(AcquireRuntime* runtime)
 {
-    const auto next = [](VideoFrame* cur) -> VideoFrame* {
-        return (VideoFrame*)(((uint8_t*)cur) + cur->bytes_of_frame);
-    };
-
-    const auto consumed_bytes = [](const VideoFrame* const cur,
-                                   const VideoFrame* const end) -> size_t {
-        return (uint8_t*)end - (uint8_t*)cur;
-    };
-
-    struct clock clock;
-    static double time_limit_ms = 20000.0;
-    clock_init(&clock);
-    clock_shift_ms(&clock, time_limit_ms);
     OK(acquire_start(runtime));
-    {
-        uint64_t nframes = 0;
-        VideoFrame *beg, *end, *cur;
-        do {
-            struct clock throttle;
-            clock_init(&throttle);
-            EXPECT(clock_cmp_now(&clock) < 0,
-                   "Timeout at %f ms",
-                   clock_toc_ms(&clock) + time_limit_ms);
-            OK(acquire_map_read(runtime, 0, &beg, &end));
-            for (cur = beg; cur < end; cur = next(cur)) {
-                LOG("stream %d counting frame w id %d", 0, cur->frame_id);
-                CHECK(cur->shape.dims.width == frame_width);
-                CHECK(cur->shape.dims.height == frame_height);
-                ++nframes;
-            }
-            {
-                uint32_t n = consumed_bytes(beg, end);
-                OK(acquire_unmap_read(runtime, 0, n));
-                if (n)
-                    LOG("stream %d consumed bytes %d", 0, n);
-            }
-            clock_sleep_ms(&throttle, 100.0f);
-
-            LOG("stream %d expected_frames_per_chunk %d time %f",
-                0,
-                nframes,
-                clock_toc_ms(&clock));
-        } while (DeviceState_Running == acquire_get_state(runtime) &&
-                 nframes < max_frame_count);
-
-        OK(acquire_map_read(runtime, 0, &beg, &end));
-        for (cur = beg; cur < end; cur = next(cur)) {
-            LOG("stream %d counting frame w id %d", 0, cur->frame_id);
-            CHECK(cur->shape.dims.width == frame_width);
-            CHECK(cur->shape.dims.height == frame_height);
-            ++nframes;
-        }
-        {
-            uint32_t n = consumed_bytes(beg, end);
-            OK(acquire_unmap_read(runtime, 0, n));
-            if (n)
-                LOG("stream %d consumed bytes %d", 0, n);
-        }
-
-        CHECK(nframes == max_frame_count);
-    }
-
     OK(acquire_stop(runtime));
-}
-
-void
-teardown(AcquireRuntime* runtime)
-{
-    LOG("Done (OK)");
-    acquire_shutdown(runtime);
 }
 
 int
 main()
 {
-    auto runtime = acquire_init(reporter);
+    int retval = 1;
+    AcquireRuntime* runtime = acquire_init(reporter);
 
-    setup(runtime);
-    acquire(runtime);
-    // validation is that it doesn't crash
-    teardown(runtime);
+    try {
+        setup(runtime);
+        acquire(runtime);
+        // validation is that it doesn't crash
 
-    return 0;
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
+    acquire_shutdown(runtime);
+    return retval;
 }

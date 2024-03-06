@@ -30,11 +30,11 @@ else ()
             write-zarr-v2-with-zstd-compression
             write-zarr-v2-compressed-with-chunking
             write-zarr-v2-compressed-with-chunking-and-rollover
+            write-zarr-v2-raw-multiscale
+            write-zarr-v2-raw-multiscale-with-trivial-tile-size
+            write-zarr-v2-compressed-multiscale
             write-zarr-v3-raw
             write-zarr-v3-compressed
-            #            multiscale-with-trivial-tile-size
-            #            write-zarr-compressed-multiscale
-            #            write-zarr-raw-multiscale
     )
 
     foreach (name ${tests})

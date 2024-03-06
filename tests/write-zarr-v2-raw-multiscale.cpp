@@ -1,6 +1,6 @@
-/// @brief Test that an acquisition to compressed Zarr with multiscale enabled
-/// writes multiple layers to the Zarr group, that the layers are the correct
-/// size, that they are chunked accordingly, and that the metadata is written
+/// @brief Test that an acquisition to Zarr with multiscale enabled writes
+/// multiple layers to the Zarr group, that the layers are the correct size,
+/// that they are chunked accordingly, and that the metadata is written
 /// correctly.
 
 #include <filesystem>
@@ -15,6 +15,22 @@
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
+
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+}
 
 void
 reporter(int is_error,
@@ -62,16 +78,6 @@ reporter(int is_error,
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
     } while (0)
 
-/// Check that a>b
-/// example: `ASSERT_GT(int,"%d",43,meaning_of_life())`
-#define ASSERT_GT(T, fmt, a, b)                                                \
-    do {                                                                       \
-        T a_ = (T)(a);                                                         \
-        T b_ = (T)(b);                                                         \
-        EXPECT(                                                                \
-          a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
-    } while (0)
-
 /// Check that strings a == b
 /// example: `ASSERT_STREQ("foo",container_of_foo)`
 #define ASSERT_STREQ(a, b)                                                     \
@@ -86,14 +92,14 @@ reporter(int is_error,
                b_.c_str());                                                    \
     } while (0)
 
-const static uint32_t frame_width = 1920;
-const static uint32_t frame_height = 1080;
+const static uint32_t frame_width = 240;
+const static uint32_t frame_height = 135;
 
 const static uint32_t chunk_width = frame_width / 3;
 const static uint32_t chunk_height = frame_height / 3;
-const static uint32_t chunk_planes = 72;
+const static uint32_t chunk_planes = 128;
 
-const static auto max_frames = 74;
+const static uint64_t max_frames = 100;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -111,7 +117,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("ZarrBlosc1ZstdByteShuffle"),
+                                SIZED("Zarr"),
                                 &props.video[0].storage.identifier));
 
     const char external_metadata[] = R"({"hello":"world"})";
@@ -125,11 +131,34 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   sizeof(external_metadata),
                                   sample_spacing_um));
 
+    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
+    props.video[0].storage.settings.acquisition_dimensions.destroy =
+      destroy_array;
+
     CHECK(
-      storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            chunk_width,
-                                            chunk_height,
-                                            chunk_planes));
+      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
+    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
+
+    CHECK(storage_dimension_init(acq_dims->data,
+                                 SIZED("x") + 1,
+                                 DimensionType_Space,
+                                 frame_width,
+                                 chunk_width,
+                                 0));
+    CHECK(storage_dimension_init(acq_dims->data + 1,
+                                 SIZED("y") + 1,
+                                 DimensionType_Space,
+                                 frame_height,
+                                 chunk_height,
+                                 0));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 0));
+    CHECK(storage_dimension_init(acq_dims->data + 3,
+                                 SIZED("t") + 1,
+                                 DimensionType_Time,
+                                 0,
+                                 chunk_planes,
+                                 0));
 
     CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));
@@ -203,8 +232,8 @@ verify_layer(const LayerTestCase& test_case)
                                          std::to_string(layer) / "0" / "0" /
                                          std::to_string(i) / std::to_string(j);
             CHECK(fs::is_regular_file(chunk_file_path));
-            ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
-            ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+            const auto file_size = fs::file_size(chunk_file_path);
+            ASSERT_EQ(int, "%d", chunk_size, file_size);
         }
     }
 
@@ -227,12 +256,9 @@ verify_layer(const LayerTestCase& test_case)
     CHECK(!fs::is_regular_file(missing_path));
 }
 
-int
-main()
+void
+validate()
 {
-    auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
-
     CHECK(fs::is_directory(TEST ".zarr"));
 
     const auto external_metadata_path =
@@ -268,16 +294,32 @@ main()
     ASSERT_STREQ(multiscales["type"], "local_mean");
 
     // verify each layer
-    verify_layer({ 0, 1920, 1080, 640, 360, 74, 72 });
-    verify_layer({ 1, 960, 540, 640, 360, 37, 37 });
-    // rollover doesn't happen here since tile size is less than the specified
-    // tile size
-    verify_layer({ 2, 480, 270, 480, 270, 18, 18 });
+    verify_layer({ 0, 240, 135, 80, 45, 100, 128 });
+    verify_layer({ 1, 120, 68, 80, 45, 50, 128 }); // padding here
+    verify_layer({ 2, 60, 34, 60, 34, 25, 128 });
 
     auto missing_path = fs::path(TEST ".zarr/3");
     CHECK(!fs::exists(missing_path));
+}
 
-    LOG("Done (OK)");
+int
+main()
+{
+    int retval = 1;
+    auto runtime = acquire_init(reporter);
+
+    try {
+        acquire(runtime, TEST ".zarr");
+        validate();
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
     acquire_shutdown(runtime);
-    return 0;
+    return retval;
 }

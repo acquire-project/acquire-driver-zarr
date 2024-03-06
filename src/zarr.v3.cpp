@@ -45,9 +45,14 @@ zarr::ZarrV3::allocate_writers_()
 
     if (enable_multiscale_) {
         WriterConfig downsampled_config;
-        while (downsample(config, downsampled_config)) {
+
+        bool do_downsample = true;
+        int level = 1;
+        while (do_downsample) {
+            do_downsample = downsample(config, downsampled_config);
             writers_.push_back(
               std::make_shared<ZarrV3Writer>(downsampled_config, thread_pool_));
+            scaled_frames_.emplace(level++, std::nullopt);
 
             config = std::move(downsampled_config);
             downsampled_config = {};
