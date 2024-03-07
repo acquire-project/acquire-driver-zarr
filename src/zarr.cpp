@@ -3,11 +3,23 @@
 #include "writers/zarrv2.writer.hh"
 #include "json.hpp"
 
+#include <tuple> // std::ignore
+
 namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 using json = nlohmann::json;
 
 namespace {
+/// \brief Get the filename from a StorageProperties as fs::path.
+/// \param props StorageProperties for the Zarr Storage device.
+/// \return fs::path representation of the Zarr data directory.
+fs::path
+as_path(const StorageProperties& props)
+{
+    return { props.filename.str,
+             props.filename.str + props.filename.nbytes - 1 };
+}
+
 /// \brief Check that the JSON string is valid. (Valid can mean empty.)
 /// \param str Putative JSON metadata string.
 /// \param nbytes Size of the JSON metadata char array
@@ -19,22 +31,12 @@ validate_json(const char* str, size_t nbytes)
         return;
     }
 
-    json::parse(str,
-                str + nbytes,
-                nullptr, // callback
-                true,    // allow exceptions
-                true     // ignore comments
+    std::ignore = json::parse(str,
+                              str + nbytes,
+                              nullptr, // callback
+                              true,    // allow exceptions
+                              true     // ignore comments
     );
-}
-
-/// \brief Get the filename from a StorageProperties as fs::path.
-/// \param props StorageProperties for the Zarr Storage device.
-/// \return fs::path representation of the Zarr data directory.
-fs::path
-as_path(const StorageProperties& props)
-{
-    return { props.filename.str,
-             props.filename.str + props.filename.nbytes - 1 };
 }
 
 /// \brief Check that the StorageProperties are valid.
@@ -75,6 +77,136 @@ validate_props(const StorageProperties* props)
                          fs::perms::others_write)) != fs::perms::none,
                "Expected \"%s\" to have write permissions.",
                parent_path.c_str());
+    }
+}
+
+void
+validate_dimension(const zarr::Dimension& dim, bool is_append)
+{
+    if (!is_append) {
+        EXPECT(dim.array_size_px > 0, "Dimension array size must be positive.");
+        EXPECT(dim.chunk_size_px > 0 && dim.chunk_size_px <= dim.array_size_px,
+               "Dimension chunk size must be positive and less than or equal "
+               "to array size.");
+
+        // The number of shards must evenly divide the number of chunks.
+        if (dim.shard_size_chunks > 0) {
+            const auto n_chunks = common::chunks_along_dimension(dim);
+            EXPECT(n_chunks % dim.shard_size_chunks == 0,
+                   "Dimension shard size must evenly divide the number of "
+                   "chunks.");
+        }
+    } else {
+        EXPECT(dim.array_size_px == 0,
+               "Append dimension array size must be 0.");
+        EXPECT(dim.chunk_size_px > 0,
+               "Append dimension chunk size must be "
+               "positive.");
+
+        // The number of shards must evenly divide the number of chunks. But
+        // because we don't know a priori how many chunks we will have in the
+        // append dimension, we can't a priori set the number of chunks per
+        // shard in such a way that the number of shards evenly divides the
+        // number of chunks, EXCEPT in the case where the shard size is 1.
+        if (dim.shard_size_chunks > 0) {
+            EXPECT(dim.shard_size_chunks == 1,
+                   "Append dimension shard size must be 1.");
+        }
+    }
+}
+
+[[nodiscard]] bool
+is_multiscale_supported(const std::vector<zarr::Dimension>& dims)
+{
+    // 0. Must have at least 3 dimensions.
+    if (dims.size() < 3) {
+        return false;
+    }
+
+    // 1. The first two dimensions must be space dimensions.
+    if (dims.at(0).kind != DimensionType_Space ||
+        dims.at(1).kind != DimensionType_Space) {
+        return false;
+    }
+
+    // 2. Interior dimensions must have size 1
+    for (auto i = 2; i < dims.size() - 1; ++i) {
+        if (dims.at(i).array_size_px != 1) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+template<typename T>
+VideoFrame*
+scale_image(const VideoFrame* src)
+{
+    CHECK(src);
+    const int downscale = 2;
+    constexpr size_t bytes_of_type = sizeof(T);
+    const auto factor = 0.25f;
+
+    const auto width = src->shape.dims.width;
+    const auto w_pad = width + (width % downscale);
+
+    const auto height = src->shape.dims.height;
+    const auto h_pad = height + (height % downscale);
+
+    auto* dst = (VideoFrame*)malloc(sizeof(VideoFrame) +
+                                    w_pad * h_pad * factor * sizeof(T));
+    memcpy(dst, src, sizeof(VideoFrame));
+
+    dst->shape.dims.width = w_pad / downscale;
+    dst->shape.dims.height = h_pad / downscale;
+    dst->shape.strides.height =
+      dst->shape.strides.width * dst->shape.dims.width;
+    dst->shape.strides.planes =
+      dst->shape.strides.height * dst->shape.dims.height;
+
+    dst->bytes_of_frame =
+      dst->shape.dims.planes * dst->shape.strides.planes * sizeof(T) +
+      sizeof(*dst);
+
+    const auto* src_img = (T*)src->data;
+    auto* dst_img = (T*)dst->data;
+    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
+
+    size_t dst_idx = 0;
+    for (auto row = 0; row < height; row += downscale) {
+        const bool pad_height = (row == height - 1 && height != h_pad);
+
+        for (auto col = 0; col < width; col += downscale) {
+            const bool pad_width = (col == width - 1 && width != w_pad);
+
+            size_t idx = row * width + col;
+            dst_img[dst_idx++] =
+              (T)(factor *
+                  ((float)src_img[idx] +
+                   (float)src_img[idx + (1 - (int)pad_width)] +
+                   (float)src_img[idx + width * (1 - (int)pad_height)] +
+                   (float)src_img[idx + width * (1 - (int)pad_height) +
+                                  (1 - (int)pad_width)]));
+        }
+    }
+
+    return dst;
+}
+
+/// @brief Average both `dst` and `src` into `dst`.
+template<typename T>
+void
+average_two_frames(VideoFrame* dst, const VideoFrame* src)
+{
+    CHECK(dst);
+    CHECK(src);
+    CHECK(dst->bytes_of_frame == src->bytes_of_frame);
+
+    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
+    const auto num_pixels = bytes_of_image / sizeof(T);
+    for (auto i = 0; i < num_pixels; ++i) {
+        dst->data[i] = (T)(((float)dst->data[i] + (float)src->data[i]) / 2.0f);
     }
 }
 
@@ -211,143 +343,6 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
         LOGE("Exception: (unknown)");
     }
 }
-
-// void
-// make_scales(std::vector<std::pair<zarr::ImageDims, zarr::ImageDims>>& shapes)
-//{
-//     CHECK(shapes.size() == 1);
-//     const auto base_image_shape = shapes.at(0).first;
-//     const auto base_tile_shape = shapes.at(0).second;
-//
-//     const int downscale = 2;
-//
-//     uint32_t w = base_image_shape.cols;
-//     uint32_t h = base_image_shape.rows;
-//
-//     while (w > base_tile_shape.cols || h > base_tile_shape.rows) {
-//         w = (w + (w % downscale)) / downscale;
-//         h = (h + (h % downscale)) / downscale;
-//
-//         zarr::ImageDims im_shape = base_image_shape;
-//         im_shape.cols = w;
-//         im_shape.rows = h;
-//
-//         zarr::ImageDims tile_shape = base_tile_shape;
-//         if (tile_shape.cols > w)
-//             tile_shape.cols = w;
-//
-//         if (tile_shape.rows > h)
-//             tile_shape.rows = h;
-//
-//         shapes.emplace_back(im_shape, tile_shape);
-//     }
-// }
-
-template<typename T>
-VideoFrame*
-scale_image(const VideoFrame* src)
-{
-    CHECK(src);
-    const int downscale = 2;
-    constexpr size_t bytes_of_type = sizeof(T);
-    const auto factor = 0.25f;
-
-    const auto width = src->shape.dims.width;
-    const auto w_pad = width + (width % downscale);
-
-    const auto height = src->shape.dims.height;
-    const auto h_pad = height + (height % downscale);
-
-    auto* dst = (VideoFrame*)malloc(sizeof(VideoFrame) +
-                                    w_pad * h_pad * factor * sizeof(T));
-    memcpy(dst, src, sizeof(VideoFrame));
-
-    dst->shape.dims.width = w_pad / downscale;
-    dst->shape.dims.height = h_pad / downscale;
-    dst->shape.strides.height =
-      dst->shape.strides.width * dst->shape.dims.width;
-    dst->shape.strides.planes =
-      dst->shape.strides.height * dst->shape.dims.height;
-
-    dst->bytes_of_frame =
-      dst->shape.dims.planes * dst->shape.strides.planes * sizeof(T) +
-      sizeof(*dst);
-
-    const auto* src_img = (T*)src->data;
-    auto* dst_img = (T*)dst->data;
-    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
-
-    size_t dst_idx = 0;
-    for (auto row = 0; row < height; row += downscale) {
-        const bool pad_height = (row == height - 1 && height != h_pad);
-
-        for (auto col = 0; col < width; col += downscale) {
-            const bool pad_width = (col == width - 1 && width != w_pad);
-
-            size_t idx = row * width + col;
-            dst_img[dst_idx++] =
-              (T)(factor *
-                  ((float)src_img[idx] +
-                   (float)src_img[idx + (1 - (int)pad_width)] +
-                   (float)src_img[idx + width * (1 - (int)pad_height)] +
-                   (float)src_img[idx + width * (1 - (int)pad_height) +
-                                  (1 - (int)pad_width)]));
-        }
-    }
-
-    return dst;
-}
-
-/// @brief Average both `dst` and `src` into `dst`.
-template<typename T>
-void
-average_two_frames(VideoFrame* dst, const VideoFrame* src)
-{
-    CHECK(dst);
-    CHECK(src);
-    CHECK(dst->bytes_of_frame == src->bytes_of_frame);
-
-    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
-    const auto num_pixels = bytes_of_image / sizeof(T);
-    for (auto i = 0; i < num_pixels; ++i) {
-        dst->data[i] = (T)(((float)dst->data[i] + (float)src->data[i]) / 2.0f);
-    }
-}
-
-void
-validate_dimension(const zarr::Dimension& dim, bool is_append)
-{
-    if (!is_append) {
-        EXPECT(dim.array_size_px > 0, "Dimension array size must be positive.");
-        EXPECT(dim.chunk_size_px > 0 && dim.chunk_size_px <= dim.array_size_px,
-               "Dimension chunk size must be positive and less than or equal "
-               "to array size.");
-
-        // The number of shards must evenly divide the number of chunks.
-        if (dim.shard_size_chunks > 0) {
-            const auto n_chunks = common::chunks_along_dimension(dim);
-            EXPECT(n_chunks % dim.shard_size_chunks == 0,
-                   "Dimension shard size must evenly divide the number of "
-                   "chunks.");
-        }
-    } else {
-        EXPECT(dim.array_size_px == 0,
-               "Append dimension array size must be 0.");
-        EXPECT(dim.chunk_size_px > 0,
-               "Append dimension chunk size must be "
-               "positive.");
-
-        // The number of shards must evenly divide the number of chunks. But
-        // because we don't know a priori how many chunks we will have in the
-        // append dimension, we can't a priori set the number of chunks per
-        // shard in such a way that the number of shards evenly divides the
-        // number of chunks, EXCEPT in the case where the shard size is 1.
-        if (dim.shard_size_chunks > 0) {
-            EXPECT(dim.shard_size_chunks == 1,
-                   "Append dimension shard size must be 1.");
-        }
-    }
-}
 } // end ::{anonymous} namespace
 
 void
@@ -377,8 +372,9 @@ zarr::Zarr::set(const StorageProperties* props)
         LOGE("OME-Zarr multiscale not yet supported in Zarr v3. "
              "Multiscale arrays will not be written.");
     }
-    enable_multiscale_ =
-      meta.multiscale_is_supported && props->enable_multiscale;
+    enable_multiscale_ = meta.multiscale_is_supported &&
+                         props->enable_multiscale &&
+                         is_multiscale_supported(acquisition_dimensions_);
 }
 
 void
