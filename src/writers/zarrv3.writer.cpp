@@ -16,6 +16,7 @@ shard_index(size_t chunk_id, const std::vector<zarr::Dimension>& dimensions)
         const auto& dim = dimensions.at(i);
         chunk_strides.push_back(chunk_strides.back() *
                                 zarr::common::chunks_along_dimension(dim));
+        CHECK(chunk_strides.back());
     }
 
     // get chunk indices
@@ -50,7 +51,7 @@ shard_index(size_t chunk_id, const std::vector<zarr::Dimension>& dimensions)
 } // namespace
 
 zarr::ZarrV3Writer::ZarrV3Writer(
-  const WriterConfig& array_spec,
+  const ArrayConfig& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(array_spec, thread_pool)
 {
@@ -75,10 +76,11 @@ zarr::ZarrV3Writer::flush_impl_()
 {
     // create shard files
     CHECK(files_.empty());
-    if (files_.empty() && !file_creator_.create_shard_files(
-                            data_root_ / ("c" + std::to_string(current_chunk_)),
-                            config_.dimensions,
-                            files_)) {
+    if (files_.empty() &&
+        !file_creator_.create_shard_files(
+          data_root_ / ("c" + std::to_string(append_chunk_index_)),
+          config_.dimensions,
+          files_)) {
         return false;
     }
     const auto n_shards = common::number_of_shards(config_.dimensions);
@@ -391,7 +393,7 @@ extern "C"
                 .type = SampleType_u16,
             };
 
-            zarr::WriterConfig array_spec = {
+            zarr::ArrayConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
@@ -519,7 +521,7 @@ extern "C"
                 .type = SampleType_u8,
             };
 
-            zarr::WriterConfig array_spec = {
+            zarr::ArrayConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
@@ -633,7 +635,7 @@ extern "C"
                               5,  // 5 timepoints / chunk
                               2); // 2 chunks / shard
 
-            zarr::WriterConfig array_spec = {
+            zarr::ArrayConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),

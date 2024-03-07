@@ -44,16 +44,7 @@ chunk_lattice_index(size_t frame_id,
     return (frame_id % mod_divisor) / div_divisor;
 }
 
-std::vector<size_t>
-chunk_lattice_indices(size_t frame_id, const std::vector<zarr::Dimension>& dims)
-{
-    std::vector<size_t> indices;
-    for (auto i = 2; i < dims.size(); ++i) {
-        indices.push_back(chunk_lattice_index(frame_id, i, dims));
-    }
-    return indices;
-}
-
+/// Find the offset in the array of chunks for the given frame.
 size_t
 chunk_group_offset(size_t frame_id, const std::vector<zarr::Dimension>& dims)
 {
@@ -76,6 +67,7 @@ chunk_group_offset(size_t frame_id, const std::vector<zarr::Dimension>& dims)
     return offset;
 }
 
+/// Find the offset inside a chunk for the given frame.
 size_t
 chunk_internal_offset(size_t frame_id,
                       const std::vector<zarr::Dimension>& dims,
@@ -94,6 +86,7 @@ chunk_internal_offset(size_t frame_id,
             CHECK(dim.array_size_px);
         }
         CHECK(dim.chunk_size_px);
+        CHECK(array_strides.back());
 
         const auto internal_idx =
           i == dims.size() - 1
@@ -108,7 +101,7 @@ chunk_internal_offset(size_t frame_id,
 
     return offset * tile_size;
 }
-} // namespace
+} // end ::{anonymous} namespace
 
 /// FileCreator
 zarr::FileCreator::FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
@@ -184,6 +177,7 @@ zarr::FileCreator::create_shard_files(const fs::path& base_dir,
     // create directories
     for (auto i = dimensions.size() - 2; i >= 1; --i) {
         const auto& dim = dimensions.at(i);
+        CHECK(dim.shard_size_chunks);
         const auto n_chunks = common::chunks_along_dimension(dim);
         const auto n_dirs = n_chunks / dim.shard_size_chunks;
 
@@ -206,6 +200,7 @@ zarr::FileCreator::create_shard_files(const fs::path& base_dir,
     {
         const auto& dim = dimensions.front();
         const auto n_chunks = common::chunks_along_dimension(dim);
+        CHECK(dim.shard_size_chunks);
         const auto n_files = n_chunks / dim.shard_size_chunks;
 
         auto n_paths = paths.size();
@@ -339,7 +334,7 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
 }
 
 bool
-zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
+zarr::downsample(const ArrayConfig& config, ArrayConfig& downsampled_config)
 {
     // downsample dimensions
     downsampled_config.dimensions.clear();
@@ -355,6 +350,7 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
                 ? dim.chunk_size_px
                 : std::min(dim.chunk_size_px, array_size_px);
 
+            CHECK(chunk_size_px);
             const uint32_t n_chunks =
               (array_size_px + chunk_size_px - 1) / chunk_size_px;
 
@@ -387,6 +383,7 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 
     // data root needs updated
     fs::path downsampled_data_root = config.data_root;
+    // increment the array number in the group
     downsampled_data_root.replace_filename(
       std::to_string(std::stoi(downsampled_data_root.filename()) + 1));
     downsampled_config.data_root = downsampled_data_root.string();
@@ -409,24 +406,15 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 }
 
 /// Writer
-zarr::Writer::Writer(const WriterConfig& config,
+zarr::Writer::Writer(const ArrayConfig& config,
                      std::shared_ptr<common::ThreadPool> thread_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
   , file_creator_{ thread_pool }
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
-  , current_chunk_{ 0 }
+  , append_chunk_index_{ 0 }
 {
-    chunk_strides_.push_back(1);
-    for (auto i = 0; i < config_.dimensions.size() - 1; ++i) {
-        const auto& dim = config_.dimensions.at(i);
-        chunks_per_dim_.push_back(common::chunks_along_dimension(dim));
-        chunk_strides_.push_back(chunks_per_dim_.back() *
-                                 chunk_strides_.back());
-    }
-    chunks_per_dim_.push_back(1);
-
     data_root_ = fs::path(config_.data_root);
 }
 
@@ -462,7 +450,7 @@ zarr::Writer::finalize()
     close_files_();
 }
 
-const zarr::WriterConfig&
+const zarr::ArrayConfig&
 zarr::Writer::config() const noexcept
 {
     return config_;
@@ -472,6 +460,21 @@ uint32_t
 zarr::Writer::frames_written() const noexcept
 {
     return frames_written_;
+}
+
+void
+zarr::Writer::make_buffers_() noexcept
+{
+    const size_t n_chunks = common::number_of_chunks(config_.dimensions);
+    chunk_buffers_.resize(n_chunks); // no-op if already the correct size
+
+    const auto bytes_per_chunk =
+      common::bytes_per_chunk(config_.dimensions, config_.image_shape.type);
+
+    for (auto& buf : chunk_buffers_) {
+        buf.resize(bytes_per_chunk);
+        std::fill_n(buf.begin(), bytes_per_chunk, 0);
+    }
 }
 
 void
@@ -495,19 +498,71 @@ zarr::Writer::validate_frame_(const VideoFrame* frame)
            common::sample_type_to_string(frame->shape.type));
 }
 
-void
-zarr::Writer::make_buffers_() noexcept
+size_t
+zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
-    const size_t n_chunks = common::number_of_chunks(config_.dimensions);
-    chunk_buffers_.resize(n_chunks); // no-op if already the correct size
+    // break the frame into tiles and write them to the chunk buffers
+    const auto image_shape = config_.image_shape;
+    const auto bytes_per_px = bytes_of_type(image_shape.type);
 
-    const auto bytes_per_chunk =
-      common::bytes_per_chunk(config_.dimensions, config_.image_shape.type);
+    const auto frame_cols = image_shape.dims.width;
+    const auto frame_rows = image_shape.dims.height;
 
-    for (auto& buf : chunk_buffers_) {
-        buf.resize(bytes_per_chunk);
-        std::fill_n(buf.begin(), bytes_per_chunk, 0);
+    const auto& dimensions = config_.dimensions;
+    const auto tile_cols = dimensions.at(0).chunk_size_px;
+    const auto tile_rows = dimensions.at(1).chunk_size_px;
+    const auto bytes_per_row = tile_cols * bytes_per_px;
+
+    size_t bytes_written = 0;
+
+    CHECK(tile_cols);
+    const auto n_tiles_x = (frame_cols + tile_cols - 1) / tile_cols;
+    CHECK(tile_rows);
+    const auto n_tiles_y = (frame_rows + tile_rows - 1) / tile_rows;
+
+    // don't take the frame id from the incoming frame, as the camera may have
+    // dropped frames
+    const auto frame_id = frames_written_;
+
+    // offset among the chunks in the lattice
+    const auto group_offset = chunk_group_offset(frame_id, dimensions);
+    // offset within the chunk
+    const auto chunk_offset =
+      chunk_internal_offset(frame_id, dimensions, image_shape.type);
+
+    for (auto i = 0; i < n_tiles_y; ++i) {
+        // TODO (aliddell): we can optimize this when tiles_per_frame_x_ is 1
+        for (auto j = 0; j < n_tiles_x; ++j) {
+            const auto c = group_offset + i * n_tiles_x + j;
+            auto& chunk = chunk_buffers_.at(c);
+            auto chunk_it = chunk.begin() + chunk_offset;
+
+            for (auto k = 0; k < tile_rows; ++k) {
+                const auto frame_row = i * tile_rows + k;
+                if (frame_row < frame_rows) {
+                    const auto frame_col = j * tile_cols;
+
+                    const auto region_width =
+                      std::min(frame_col + tile_cols, frame_cols) - frame_col;
+
+                    const auto region_start =
+                      bytes_per_px * (frame_row * frame_cols + frame_col);
+                    const auto nbytes = region_width * bytes_per_px;
+                    const auto region_stop = region_start + nbytes;
+                    EXPECT(region_stop <= buf_size, "Buffer overflow");
+
+                    // copy region
+                    EXPECT(chunk_it + nbytes <= chunk.end(), "Buffer overflow");
+                    std::copy(buf + region_start, buf + region_stop, chunk_it);
+
+                    bytes_written += (region_stop - region_start);
+                }
+                chunk_it += bytes_per_row;
+            }
+        }
     }
+
+    return bytes_written;
 }
 
 void
@@ -573,71 +628,6 @@ zarr::Writer::compress_buffers_() noexcept
     latch.wait();
 }
 
-size_t
-zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
-{
-    // break the frame into tiles and write them to the chunk buffers
-    const auto image_shape = config_.image_shape;
-    const auto bytes_per_px = bytes_of_type(image_shape.type);
-
-    const auto frame_cols = image_shape.dims.width;
-    const auto frame_rows = image_shape.dims.height;
-
-    const auto& dimensions = config_.dimensions;
-    const auto tile_cols = dimensions.at(0).chunk_size_px;
-    const auto tile_rows = dimensions.at(1).chunk_size_px;
-    const auto bytes_per_row = tile_cols * bytes_per_px;
-
-    size_t bytes_written = 0;
-
-    const auto n_tiles_x = (frame_cols + tile_cols - 1) / tile_cols;
-    const auto n_tiles_y = (frame_rows + tile_rows - 1) / tile_rows;
-
-    // don't take the frame id from the incoming frame, as the camera may have
-    // dropped frames
-    const auto frame_id = frames_written_;
-
-    // offset among the chunks in the lattice
-    const auto group_offset = chunk_group_offset(frame_id, dimensions);
-    // offset within the chunk
-    const auto chunk_offset =
-      chunk_internal_offset(frame_id, dimensions, image_shape.type);
-
-    for (auto i = 0; i < n_tiles_y; ++i) {
-        // TODO (aliddell): we can optimize this when tiles_per_frame_x_ is 1
-        for (auto j = 0; j < n_tiles_x; ++j) {
-            const auto c = group_offset + i * n_tiles_x + j;
-            auto& chunk = chunk_buffers_.at(c);
-            auto chunk_it = chunk.begin() + chunk_offset;
-
-            for (auto k = 0; k < tile_rows; ++k) {
-                const auto frame_row = i * tile_rows + k;
-                if (frame_row < frame_rows) {
-                    const auto frame_col = j * tile_cols;
-
-                    const auto region_width =
-                      std::min(frame_col + tile_cols, frame_cols) - frame_col;
-
-                    const auto region_start =
-                      bytes_per_px * (frame_row * frame_cols + frame_col);
-                    const auto nbytes = region_width * bytes_per_px;
-                    const auto region_stop = region_start + nbytes;
-                    EXPECT(region_stop <= buf_size, "Buffer overflow");
-
-                    // copy region
-                    EXPECT(chunk_it + nbytes <= chunk.end(), "Buffer overflow");
-                    std::copy(buf + region_start, buf + region_stop, chunk_it);
-
-                    bytes_written += (region_stop - region_start);
-                }
-                chunk_it += bytes_per_row;
-            }
-        }
-    }
-
-    return bytes_written;
-}
-
 void
 zarr::Writer::flush_()
 {
@@ -684,7 +674,7 @@ zarr::Writer::rollover_()
     TRACE("Rolling over");
 
     close_files_();
-    ++current_chunk_;
+    ++append_chunk_index_;
 }
 
 #ifndef NO_UNIT_TESTS
@@ -699,7 +689,7 @@ namespace common = zarr::common;
 class TestWriter : public zarr::Writer
 {
   public:
-    TestWriter(const zarr::WriterConfig& array_spec,
+    TestWriter(const zarr::ArrayConfig& array_spec,
                std::shared_ptr<common::ThreadPool> thread_pool)
       : zarr::Writer(array_spec, thread_pool)
     {
@@ -1112,7 +1102,7 @@ extern "C"
                 .type = SampleType_u16,
             };
 
-            zarr::WriterConfig array_spec = {
+            zarr::ArrayConfig array_spec = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
@@ -1153,7 +1143,7 @@ extern "C"
         try {
             const fs::path base_dir = "acquire";
 
-            zarr::WriterConfig config {
+            zarr::ArrayConfig config {
                 .image_shape = {
                     .dims = {
                       .channels = 1,
@@ -1188,7 +1178,7 @@ extern "C"
                                            5,
                                            1); // 5 timepoints / chunk, 1 shard
 
-            zarr::WriterConfig downsampled_config;
+            zarr::ArrayConfig downsampled_config;
             CHECK(zarr::downsample(config, downsampled_config));
 
             // check dimensions

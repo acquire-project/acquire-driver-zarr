@@ -206,7 +206,7 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
     const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
     const auto num_pixels = bytes_of_image / sizeof(T);
     for (auto i = 0; i < num_pixels; ++i) {
-        dst->data[i] = (T)(((float)dst->data[i] + (float)src->data[i]) / 2.0f);
+        dst->data[i] = (T)(0.5f * ((float)dst->data[i] + (float)src->data[i]));
     }
 }
 
@@ -545,17 +545,6 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
            "Image height must match second acquisition dimension.");
 
     image_shape_ = *shape;
-
-    EXPECT(!enable_multiscale_,
-           "Come back to handle multiscale here."); // FIXME (aliddell)
-
-    //    if (enable_multiscale_) {
-    //        make_scales(image_tile_shapes_);
-    //    }
-    //
-    //    for (auto i = 1; i < image_tile_shapes_.size(); ++i) {
-    //        scaled_frames_.insert_or_assign(i, std::nullopt);
-    //    }
 }
 
 /// Zarr

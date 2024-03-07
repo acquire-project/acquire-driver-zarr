@@ -35,7 +35,7 @@ zarr::ZarrV3::allocate_writers_()
 {
     writers_.clear();
 
-    WriterConfig config = {
+    ArrayConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
         .data_root = (dataset_root_ / "data" / "root" / "0").string(),
@@ -44,7 +44,7 @@ zarr::ZarrV3::allocate_writers_()
     writers_.push_back(std::make_shared<ZarrV3Writer>(config, thread_pool_));
 
     if (enable_multiscale_) {
-        WriterConfig downsampled_config;
+        ArrayConfig downsampled_config;
 
         bool do_downsample = true;
         int level = 1;
@@ -77,7 +77,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
     CHECK(level < writers_.size());
     const auto& writer = writers_.at(level);
 
-    const WriterConfig& config = writer->config();
+    const ArrayConfig& config = writer->config();
     const auto& image_shape = config.image_shape;
 
     json metadata;
