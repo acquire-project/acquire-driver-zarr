@@ -91,24 +91,42 @@ struct ThreadPool final
     void thread_worker_();
 };
 
+/// @brief Get the number of chunks along a dimension.
+/// @param dimension A dimension.
+/// @return The number of, possibly ragged, chunks along the dimension, given
+/// the dimension's array and chunk sizes.
 size_t
 chunks_along_dimension(const Dimension& dimension);
 
+/// @brief Get the number of chunks to write at one time, considering sharding.
+/// @param dimensions The dimensions of the array.
+/// @return The number of chunks to buffer and write out.
 size_t
 number_of_chunks(const std::vector<Dimension>& dimensions);
 
+/// @brief Get the number of shards along a dimension.
+/// @param dimension A dimension.
+/// @return The number of shards along the dimension, given the dimension's
+/// array, chunk, and shard sizes.
 size_t
 shards_along_dimension(const Dimension& dimension);
 
+/// @brief Get the number of shards to write at one time.
+/// @param dimensions The dimensions of the array.
+/// @return The number of shards to buffer and write out.
 size_t
 number_of_shards(const std::vector<Dimension>& dimensions);
 
+/// @brief Get the number of chunks in a single shard.
+/// @param dimensions The dimensions of the array.
+/// @return The number of chunks in a shard.
 size_t
 chunks_per_shard(const std::vector<Dimension>& dimensions);
 
-size_t
-bytes_of_image(const ImageShape& shape);
-
+/// @brief Get the size, in bytes, of a single chunk.
+/// @param dimensions The dimensions of the array.
+/// @param dtype The pixel type of the array.
+/// @return The number of bytes to allocate for a chunk.
 size_t
 bytes_per_chunk(const std::vector<Dimension>& dimensions,
                 const SampleType& dtype);

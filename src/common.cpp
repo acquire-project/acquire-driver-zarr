@@ -193,12 +193,6 @@ common::chunks_per_shard(const std::vector<Dimension>& dimensions)
 }
 
 size_t
-common::bytes_of_image(const ImageShape& shape)
-{
-    return shape.dims.width * shape.dims.height * bytes_of_type(shape.type);
-}
-
-size_t
 common::bytes_per_chunk(const std::vector<Dimension>& dimensions,
                         const SampleType& type)
 {
