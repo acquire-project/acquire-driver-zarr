@@ -26,7 +26,7 @@ destroy_array(struct StorageDimension* data)
 {
     delete[] data;
 }
-}
+} // end ::{anonymous} namespace
 
 #define containerof(P, T, F) ((T*)(((char*)(P)) - offsetof(T, F)))
 
@@ -187,6 +187,8 @@ main()
                 CHECK(props.first_frame_id == 0); // this is ignored
 
                 CHECK(props.enable_multiscale == !name.starts_with("ZarrV3"));
+
+                storage_properties_destroy(&props);
 
                 CHECK(Device_Ok == driver_close_device(device));
             }

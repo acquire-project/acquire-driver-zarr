@@ -28,7 +28,7 @@ destroy_array(struct StorageDimension* data)
 {
     delete[] data;
 }
-}
+} // end ::{anonymous} namespace
 
 #define containerof(P, T, F) ((T*)(((char*)(P)) - offsetof(T, F)))
 
@@ -123,6 +123,8 @@ configure(struct Storage* zarr)
       acq_dims->data + 2, SIZED("t") + 1, DimensionType_Time, 0, 1, 0));
 
     CHECK(DeviceState_Armed == zarr->set(zarr, &props));
+
+    storage_properties_destroy(&props);
 }
 
 void

@@ -30,7 +30,7 @@ destroy_array(struct StorageDimension* data)
 {
     delete[] data;
 }
-}
+} // end ::{anonymous} namespace
 
 void
 reporter(int is_error,
@@ -162,6 +162,8 @@ setup(AcquireRuntime* runtime)
     props.video[0].camera.settings.exposure_time_us = 1e4;
 
     OK(acquire_configure(runtime, &props));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 void

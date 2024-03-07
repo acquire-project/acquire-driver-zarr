@@ -25,7 +25,7 @@ destroy_array(struct StorageDimension* data)
 {
     delete[] data;
 }
-}
+} // end ::{anonymous} namespace
 
 void
 reporter(int is_error,
@@ -160,6 +160,8 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 void

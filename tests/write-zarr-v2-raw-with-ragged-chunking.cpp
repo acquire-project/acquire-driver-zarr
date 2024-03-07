@@ -26,7 +26,7 @@ destroy_array(struct StorageDimension* data)
 {
     delete[] data;
 }
-}
+} // end ::{anonymous} namespace
 
 void
 reporter(int is_error,

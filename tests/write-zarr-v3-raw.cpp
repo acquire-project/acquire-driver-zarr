@@ -30,7 +30,7 @@ destroy_array(struct StorageDimension* data)
 {
     delete[] data;
 }
-}
+} // end ::{anonymous} namespace
 
 void
 reporter(int is_error,
@@ -160,6 +160,8 @@ setup(AcquireRuntime* runtime)
     props.video[0].max_frame_count = max_frame_count;
 
     OK(acquire_configure(runtime, &props));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 void

@@ -30,7 +30,7 @@ destroy_array(struct StorageDimension* data)
 {
     delete[] data;
 }
-}
+} // end ::{anonymous} namespace
 
 #define containerof(P, T, F) ((T*)(((char*)(P)) - offsetof(T, F)))
 
@@ -124,7 +124,7 @@ configure(AcquireRuntime* runtime)
     CHECK(storage_dimension_init(
       acq_dims->data + 3, SIZED("t") + 1, DimensionType_Time, 0, 32, 1));
 
-    props.video[0].max_frame_count = 32;
+    props.video[0].max_frame_count = 10;
 
     OK(acquire_configure(runtime, &props));
 
@@ -195,7 +195,7 @@ validate(AcquireRuntime* runtime)
     CHECK(metadata["extensions"].empty());
 
     const auto array_shape = metadata["shape"];
-    ASSERT_EQ(int, "%d", 32, array_shape[0]);
+    ASSERT_EQ(int, "%d", 10, array_shape[0]);
     ASSERT_EQ(int, "%d", 1, array_shape[1]);
     ASSERT_EQ(int, "%d", 48, array_shape[2]);
     ASSERT_EQ(int, "%d", 64, array_shape[3]);
