@@ -344,22 +344,31 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
     // downsample dimensions
     downsampled_config.dimensions.clear();
     for (const auto& dim : config.dimensions) {
-        const uint32_t array_size_px =
-          (dim.array_size_px + (dim.array_size_px % 2)) / 2;
+        if (dim.kind == DimensionType_Channel) { // don't downsample channels
+            downsampled_config.dimensions.push_back(dim);
+        } else {
+            const uint32_t array_size_px =
+              (dim.array_size_px + (dim.array_size_px % 2)) / 2;
 
-        const uint32_t chunk_size_px =
-          dim.array_size_px == 0 ? dim.chunk_size_px
-                                 : std::min(dim.chunk_size_px, array_size_px);
+            const uint32_t chunk_size_px =
+              dim.array_size_px == 0
+                ? dim.chunk_size_px
+                : std::min(dim.chunk_size_px, array_size_px);
 
-        const uint32_t n_chunks =
-          (array_size_px + chunk_size_px - 1) / chunk_size_px;
+            const uint32_t n_chunks =
+              (array_size_px + chunk_size_px - 1) / chunk_size_px;
 
-        const uint32_t shard_size_chunks =
-          dim.array_size_px == 0 ? 1
-                                 : std::min(n_chunks, dim.shard_size_chunks);
+            const uint32_t shard_size_chunks =
+              dim.array_size_px == 0
+                ? 1
+                : std::min(n_chunks, dim.shard_size_chunks);
 
-        downsampled_config.dimensions.emplace_back(
-          dim.name, dim.kind, array_size_px, chunk_size_px, shard_size_chunks);
+            downsampled_config.dimensions.emplace_back(dim.name,
+                                                       dim.kind,
+                                                       array_size_px,
+                                                       chunk_size_px,
+                                                       shard_size_chunks);
+        }
     }
 
     // downsample image_shape
@@ -1172,7 +1181,7 @@ extern "C"
             config.dimensions.emplace_back(
               "z", DimensionType_Space, 7, 3, 3); // 3 chunks, 3 shards
             config.dimensions.emplace_back(
-              "c", DimensionType_Channel, 1, 1, 1); // 1 chunk, 1 shard
+              "c", DimensionType_Channel, 2, 1, 1); // 2 chunks, 2 shards
             config.dimensions.emplace_back("t",
                                            DimensionType_Time,
                                            0,
@@ -1200,7 +1209,8 @@ extern "C"
             CHECK(downsampled_config.dimensions.at(2).shard_size_chunks == 2);
 
             CHECK(downsampled_config.dimensions.at(3).name == "c");
-            CHECK(downsampled_config.dimensions.at(3).array_size_px == 1);
+            // we don't downsample channels
+            CHECK(downsampled_config.dimensions.at(3).array_size_px == 2);
             CHECK(downsampled_config.dimensions.at(3).chunk_size_px == 1);
             CHECK(downsampled_config.dimensions.at(3).shard_size_chunks == 1);
 
@@ -1251,7 +1261,8 @@ extern "C"
             CHECK(downsampled_config.dimensions.at(2).shard_size_chunks == 1);
 
             CHECK(downsampled_config.dimensions.at(3).name == "c");
-            CHECK(downsampled_config.dimensions.at(3).array_size_px == 1);
+            // we don't downsample channels
+            CHECK(downsampled_config.dimensions.at(3).array_size_px == 2);
             CHECK(downsampled_config.dimensions.at(3).chunk_size_px == 1);
             CHECK(downsampled_config.dimensions.at(3).shard_size_chunks == 1);
 
