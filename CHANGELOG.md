@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.1.10](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.8..v0.1.9) - ???
+
+### Added
+
+- Support for nearly arbitrary dimension configurations.
+
+## [0.1.9](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.8..v0.1.9) - 2024-01-11
+
+### Changed
+
+- Switches to `acquire-common` from `acquire-core-libs`, `acquire-video-runtime`, and `acquire-driver-common`.
+
+## [0.1.8](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.7..v0.1.8) - 2023-12-19
+
+### Fixed
+
+- Resets the device state when the device is stopped.
+- Ensure that all properties are saved when `zarr_get` is called.
+
+## [0.1.7](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.6..v0.1.7) - 2023-12-11
 
 ### Fixed
 
