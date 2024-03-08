@@ -289,9 +289,11 @@ validate()
 
     ASSERT_STREQ("y", axes[2]["name"]);
     ASSERT_STREQ("space", axes[2]["type"]);
+    ASSERT_STREQ("micrometer", axes[2]["unit"]);
 
     ASSERT_STREQ("x", axes[3]["name"]);
     ASSERT_STREQ("space", axes[3]["type"]);
+    ASSERT_STREQ("micrometer", axes[3]["unit"]);
 
     const auto& datasets = multiscales["datasets"];
     ASSERT_EQ(int, "%d", 3, datasets.size());

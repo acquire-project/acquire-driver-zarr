@@ -174,7 +174,13 @@ zarr::ZarrV2::write_group_metadata_() const
                 throw std::runtime_error("Unknown dimension type");
         }
 
-        axes.push_back({ { "name", dim->name }, { "type", type } });
+        if (dim < acquisition_dimensions_.rend() - 2) {
+            axes.push_back({ { "name", dim->name }, { "type", type } });
+        } else {
+            axes.push_back({ { "name", dim->name },
+                             { "type", type },
+                             { "unit", "micrometer" } });
+        }
     }
 
     // spatial multiscale metadata
