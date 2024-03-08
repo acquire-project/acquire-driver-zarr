@@ -121,7 +121,7 @@ zarr::ZarrV2::write_external_metadata_() const
 
     std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
     std::string external_metadata = external_metadata_json_.empty()
-                                      ? ""
+                                      ? "{}"
                                       : json::parse(external_metadata_json_,
                                                     nullptr, // callback
                                                     true,    // allow exceptions
