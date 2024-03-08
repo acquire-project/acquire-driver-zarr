@@ -33,6 +33,7 @@ else ()
             write-zarr-v2-raw-multiscale
             write-zarr-v2-raw-multiscale-with-trivial-tile-size
             write-zarr-v2-compressed-multiscale
+            multiscales-metadata
             write-zarr-v3-raw
             write-zarr-v3-compressed
     )

@@ -95,14 +95,16 @@ const static uint32_t frame_height = 135;
 const static uint32_t chunk_planes = 128;
 
 void
-acquire(AcquireRuntime* runtime, const char* filename)
+setup(AcquireRuntime* runtime, const char* filename)
 {
-    auto dm = acquire_device_manager(runtime);
     CHECK(runtime);
+    const DeviceManager* dm = acquire_device_manager(runtime);
     CHECK(dm);
 
     AcquireProperties props = {};
     OK(acquire_get_configuration(runtime, &props));
+
+    struct PixelScale sample_spacing_um = { .x = 1.0f, .y = 2.0f };
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
@@ -113,15 +115,12 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 SIZED("Zarr"),
                                 &props.video[0].storage.identifier));
 
-    const char external_metadata[] = R"({"hello":"world"})";
-    const struct PixelScale sample_spacing_um = { 1, 1 };
-
     CHECK(storage_properties_init(&props.video[0].storage.settings,
                                   0,
                                   (char*)filename,
                                   strlen(filename) + 1,
-                                  (char*)external_metadata,
-                                  sizeof(external_metadata),
+                                  nullptr,
+                                  0,
                                   sample_spacing_um));
 
     props.video[0].storage.settings.acquisition_dimensions.init = init_array;
@@ -129,7 +128,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
       destroy_array;
 
     CHECK(
-      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
+      storage_properties_dimensions_init(&props.video[0].storage.settings, 3));
     auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
 
     CHECK(storage_dimension_init(acq_dims->data,
@@ -144,11 +143,9 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                  frame_height,
                                  frame_height,
                                  0));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 0));
-    CHECK(storage_dimension_init(acq_dims->data + 3,
-                                 SIZED("t") + 1,
-                                 DimensionType_Time,
+    CHECK(storage_dimension_init(acq_dims->data + 2,
+                                 SIZED("z") + 1,
+                                 DimensionType_Space,
                                  0,
                                  chunk_planes,
                                  0));
@@ -163,10 +160,15 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].max_frame_count = chunk_planes;
 
     OK(acquire_configure(runtime, &props));
-    OK(acquire_start(runtime));
-    OK(acquire_stop(runtime));
 
     storage_properties_destroy(&props.video[0].storage.settings);
+}
+
+void
+acquire(AcquireRuntime* runtime)
+{
+    OK(acquire_start(runtime));
+    OK(acquire_stop(runtime));
 }
 
 struct LayerTestCase
@@ -202,19 +204,17 @@ verify_layer(const LayerTestCase& test_case)
 
     const auto shape = zarray["shape"];
     ASSERT_EQ(int, "%d", frames_per_layer, shape[0]);
-    ASSERT_EQ(int, "%d", 1, shape[1]);
-    ASSERT_EQ(int, "%d", layer_frame_height, shape[2]);
-    ASSERT_EQ(int, "%d", layer_frame_width, shape[3]);
+    ASSERT_EQ(int, "%d", layer_frame_height, shape[1]);
+    ASSERT_EQ(int, "%d", layer_frame_width, shape[2]);
 
     const auto chunks = zarray["chunks"];
     ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0].get<int>());
-    ASSERT_EQ(int, "%d", 1, chunks[1].get<int>());
-    ASSERT_EQ(int, "%d", layer_tile_height, chunks[2].get<int>());
-    ASSERT_EQ(int, "%d", layer_tile_width, chunks[3].get<int>());
+    ASSERT_EQ(int, "%d", layer_tile_height, chunks[1].get<int>());
+    ASSERT_EQ(int, "%d", layer_tile_width, chunks[2].get<int>());
 
     // check chunked data
-    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
-                      chunks[2].get<int>() * chunks[3].get<int>();
+    auto chunk_size =
+      chunks[0].get<int>() * chunks[1].get<int>() * chunks[2].get<int>();
 
     const auto tiles_in_x =
       (uint32_t)std::ceil((float)layer_frame_width / (float)layer_tile_width);
@@ -224,7 +224,7 @@ verify_layer(const LayerTestCase& test_case)
     for (auto i = 0; i < tiles_in_y; ++i) {
         for (auto j = 0; j < tiles_in_x; ++j) {
             const auto chunk_file_path = fs::path(TEST ".zarr/") /
-                                         std::to_string(layer) / "0" / "0" /
+                                         std::to_string(layer) / "0" /
                                          std::to_string(i) / std::to_string(j);
             CHECK(fs::is_regular_file(chunk_file_path));
             const auto file_size = fs::file_size(chunk_file_path);
@@ -232,22 +232,18 @@ verify_layer(const LayerTestCase& test_case)
         }
     }
 
-    // check there's not a second chunk in t
+    // check there's not a second chunk in z
     auto missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "1";
     CHECK(!fs::is_regular_file(missing_path));
 
-    // check there's not a second chunk in z
-    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "1";
-    CHECK(!fs::is_regular_file(missing_path));
-
     // check there's no add'l chunks in y
-    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" /
+    missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" /
                    std::to_string(tiles_in_y);
     CHECK(!fs::is_regular_file(missing_path));
 
     // check there's no add'l chunks in y
     missing_path = fs::path(TEST ".zarr/") / std::to_string(layer) / "0" / "0" /
-                   "0" / std::to_string(tiles_in_x);
+                   std::to_string(tiles_in_x);
     CHECK(!fs::is_regular_file(missing_path));
 }
 
@@ -259,7 +255,7 @@ validate()
     const auto external_metadata_path =
       fs::path(TEST ".zarr") / "0" / ".zattrs";
     CHECK(fs::is_regular_file(external_metadata_path));
-    CHECK(fs::file_size(external_metadata_path) > 0);
+    CHECK(fs::file_size(external_metadata_path) == 2); // "{}"
 
     const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
     CHECK(fs::is_regular_file(group_zattrs_path));
@@ -272,19 +268,16 @@ validate()
     const auto multiscales = group_zattrs["multiscales"][0];
 
     const auto& axes = multiscales["axes"];
-    ASSERT_EQ(int, "%d", 4, axes.size());
+    ASSERT_EQ(int, "%d", 3, axes.size());
 
-    ASSERT_STREQ("t", axes[0]["name"]);
-    ASSERT_STREQ("time", axes[0]["type"]);
+    ASSERT_STREQ("z", axes[0]["name"]);
+    ASSERT_STREQ("space", axes[0]["type"]);
 
-    ASSERT_STREQ("c", axes[1]["name"]);
-    ASSERT_STREQ("channel", axes[1]["type"]);
+    ASSERT_STREQ("y", axes[1]["name"]);
+    ASSERT_STREQ("space", axes[1]["type"]);
 
-    ASSERT_STREQ("y", axes[2]["name"]);
+    ASSERT_STREQ("x", axes[2]["name"]);
     ASSERT_STREQ("space", axes[2]["type"]);
-
-    ASSERT_STREQ("x", axes[3]["name"]);
-    ASSERT_STREQ("space", axes[3]["type"]);
 
     const auto& datasets = multiscales["datasets"];
     ASSERT_EQ(int, "%d", 2, datasets.size());
@@ -297,9 +290,8 @@ validate()
 
         const auto& scale = coord_trans["scale"];
         ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[0].get<float>());
-        ASSERT_EQ(float, "%f", 1.f, scale[1].get<float>());
+        ASSERT_EQ(float, "%f", 2.0f * std::pow(2.f, i), scale[1].get<float>());
         ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[2].get<float>());
-        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[3].get<float>());
     }
 
     ASSERT_STREQ(multiscales["type"], "local_mean");
@@ -319,7 +311,8 @@ main()
     auto runtime = acquire_init(reporter);
 
     try {
-        acquire(runtime, TEST ".zarr");
+        setup(runtime, TEST ".zarr");
+        acquire(runtime);
         validate();
 
         retval = 0;

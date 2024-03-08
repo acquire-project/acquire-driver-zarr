@@ -151,29 +151,41 @@ zarr::ZarrV2::write_group_metadata_() const
     json zgroup_attrs;
     zgroup_attrs["multiscales"] = json::array({ json::object() });
     zgroup_attrs["multiscales"][0]["version"] = "0.4";
-    zgroup_attrs["multiscales"][0]["axes"] = {
-        {
-          { "name", "t" },
-          { "type", "time" },
-        },
-        {
-          { "name", "c" },
-          { "type", "channel" },
-        },
-        {
-          { "name", "y" },
-          { "type", "space" },
-          { "unit", "micrometer" },
-        },
-        {
-          { "name", "x" },
-          { "type", "space" },
-          { "unit", "micrometer" },
-        },
-    };
+
+    auto& axes = zgroup_attrs["multiscales"][0]["axes"];
+    for (auto dim = acquisition_dimensions_.rbegin();
+         dim != acquisition_dimensions_.rend();
+         ++dim) {
+        std::string type;
+        switch (dim->kind) {
+            case DimensionType_Space:
+                type = "space";
+                break;
+            case DimensionType_Channel:
+                type = "channel";
+                break;
+            case DimensionType_Time:
+                type = "time";
+                break;
+            case DimensionType_Other:
+                type = "other";
+                break;
+            default:
+                throw std::runtime_error("Unknown dimension type");
+        }
+
+        axes.push_back({ { "name", dim->name }, { "type", type } });
+    }
 
     // spatial multiscale metadata
     if (writers_.empty()) {
+        std::vector<double> scales;
+        for (auto i = 0; i < acquisition_dimensions_.size() - 2; ++i) {
+            scales.push_back(1.);
+        }
+        scales.push_back(pixel_scale_um_.y);
+        scales.push_back(pixel_scale_um_.x);
+
         zgroup_attrs["multiscales"][0]["datasets"] = {
             {
               { "path", "0" },
@@ -181,34 +193,28 @@ zarr::ZarrV2::write_group_metadata_() const
                 {
                   {
                     { "type", "scale" },
-                    { "scale",
-                      {
-                        1,                 // t
-                        1,                 // c
-                        pixel_scale_um_.y, // y
-                        pixel_scale_um_.x  // x
-                      } },
+                    { "scale", scales },
                   },
                 } },
             },
         };
     } else {
         for (auto i = 0; i < writers_.size(); ++i) {
+            std::vector<double> scales;
+            scales.push_back(std::pow(2, i)); // append
+            for (auto k = 0; k < acquisition_dimensions_.size() - 3; ++k) {
+                scales.push_back(1.);
+            }
+            scales.push_back(std::pow(2, i) * pixel_scale_um_.y); // y
+            scales.push_back(std::pow(2, i) * pixel_scale_um_.x); // x
+
             zgroup_attrs["multiscales"][0]["datasets"].push_back({
               { "path", std::to_string(i) },
               { "coordinateTransformations",
                 {
                   {
                     { "type", "scale" },
-                    {
-                      "scale",
-                      {
-                        std::pow(2, i),                     // t
-                        1,                                  // c
-                        std::pow(2, i) * pixel_scale_um_.y, // y
-                        std::pow(2, i) * pixel_scale_um_.x  // x
-                      },
-                    },
+                    { "scale", scales },
                   },
                 } },
             });

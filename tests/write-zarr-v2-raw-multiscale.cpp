@@ -277,6 +277,22 @@ validate()
     json group_zattrs = json::parse(f);
 
     const auto multiscales = group_zattrs["multiscales"][0];
+
+    const auto& axes = multiscales["axes"];
+    ASSERT_EQ(int, "%d", 4, axes.size());
+
+    ASSERT_STREQ("t", axes[0]["name"]);
+    ASSERT_STREQ("time", axes[0]["type"]);
+
+    ASSERT_STREQ("c", axes[1]["name"]);
+    ASSERT_STREQ("channel", axes[1]["type"]);
+
+    ASSERT_STREQ("y", axes[2]["name"]);
+    ASSERT_STREQ("space", axes[2]["type"]);
+
+    ASSERT_STREQ("x", axes[3]["name"]);
+    ASSERT_STREQ("space", axes[3]["type"]);
+
     const auto& datasets = multiscales["datasets"];
     ASSERT_EQ(int, "%d", 3, datasets.size());
     for (auto i = 0; i < 3; ++i) {
