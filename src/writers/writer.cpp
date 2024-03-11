@@ -126,7 +126,6 @@ zarr::FileCreator::create_chunk_files(const fs::path& base_dir,
     for (auto i = dimensions.size() - 2; i >= 1; --i) {
         const auto& dim = dimensions.at(i);
         const auto n_chunks = common::chunks_along_dimension(dim);
-        const auto n_dirs = n_chunks;
 
         auto n_paths = paths.size();
         for (auto j = 0; j < n_paths; ++j) {
@@ -147,13 +146,12 @@ zarr::FileCreator::create_chunk_files(const fs::path& base_dir,
     {
         const auto& dim = dimensions.front();
         const auto n_chunks = common::chunks_along_dimension(dim);
-        const auto n_files = n_chunks;
 
         auto n_paths = paths.size();
         for (auto i = 0; i < n_paths; ++i) {
             const auto path = paths.front();
             paths.pop();
-            for (auto j = 0; j < n_files; ++j) {
+            for (auto j = 0; j < n_chunks; ++j) {
                 paths.push(path / std::to_string(j));
             }
         }
@@ -177,16 +175,15 @@ zarr::FileCreator::create_shard_files(const fs::path& base_dir,
     // create directories
     for (auto i = dimensions.size() - 2; i >= 1; --i) {
         const auto& dim = dimensions.at(i);
-        CHECK(dim.shard_size_chunks);
-        const auto n_chunks = common::chunks_along_dimension(dim);
-        const auto n_dirs = n_chunks / dim.shard_size_chunks;
+        const auto n_shards = common::shards_along_dimension(dim);
+        CHECK(n_shards);
 
         auto n_paths = paths.size();
         for (auto j = 0; j < n_paths; ++j) {
             const auto path = paths.front();
             paths.pop();
 
-            for (auto k = 0; k < n_dirs; ++k) {
+            for (auto k = 0; k < n_shards; ++k) {
                 paths.push(path / std::to_string(k));
             }
         }
@@ -199,15 +196,14 @@ zarr::FileCreator::create_shard_files(const fs::path& base_dir,
     // create files
     {
         const auto& dim = dimensions.front();
-        const auto n_chunks = common::chunks_along_dimension(dim);
-        CHECK(dim.shard_size_chunks);
-        const auto n_files = n_chunks / dim.shard_size_chunks;
+        const auto n_shards = common::shards_along_dimension(dim);
+        CHECK(n_shards);
 
         auto n_paths = paths.size();
         for (auto i = 0; i < n_paths; ++i) {
             const auto path = paths.front();
             paths.pop();
-            for (auto j = 0; j < n_files; ++j) {
+            for (auto j = 0; j < n_shards; ++j) {
                 paths.push(path / std::to_string(j));
             }
         }
