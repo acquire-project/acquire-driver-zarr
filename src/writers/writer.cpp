@@ -631,18 +631,6 @@ zarr::Writer::flush_()
         return;
     }
 
-    // fill in any unfilled chunks
-    const auto bytes_per_chunk =
-      common::bytes_per_chunk(config_.dimensions, config_.image_shape.type);
-
-    // fill in last frames
-    for (auto& chunk : chunk_buffers_) {
-        EXPECT(bytes_per_chunk >= chunk.size(),
-               "Chunk buffer size exceeds expected size.");
-        std::fill_n(
-          std::back_inserter(chunk), bytes_per_chunk - chunk.size(), 0);
-    }
-
     // compress buffers and write out
     compress_buffers_();
     CHECK(flush_impl_());
