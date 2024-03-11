@@ -86,7 +86,7 @@ main()
         CASE(unit_test__file_creator__create_chunk_files),
         CASE(unit_test__file_creator__create_shard_files),
         CASE(unit_test__chunk_lattice_index),
-        CASE(unit_test__chunk_group_offset),
+        CASE(unit_test__tile_group_offset),
         CASE(unit_test__chunk_internal_offset),
         CASE(unit_test__writer__write_frame_to_chunks),
         CASE(unit_test__downsample_writer_config),

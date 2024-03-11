@@ -7,6 +7,7 @@
 namespace zarr = acquire::sink::zarr;
 
 namespace {
+/// @brief Get the shard index for a given chunk index.
 size_t
 shard_index(size_t chunk_id, const std::vector<zarr::Dimension>& dimensions)
 {
