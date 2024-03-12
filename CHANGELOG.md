@@ -5,11 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.1.10](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.8..v0.1.9) - ???
+## [0.1.10](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.9..v0.1.10) - ???
 
 ### Added
 
 - Support for nearly arbitrary dimension configurations.
+
+### Changed
+
+- Chunk size may now exceed the array size along any dimension.
 
 ## [0.1.9](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.8..v0.1.9) - 2024-01-11
 

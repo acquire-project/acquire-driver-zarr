@@ -23,6 +23,7 @@ else ()
             restart-stopped-zarr-resets-threadpool
             repeat-start
             write-zarr-v2-raw
+            write-zarr-v2-raw-chunk-size-larger-than-frame-size
             write-zarr-v2-raw-with-even-chunking
             write-zarr-v2-raw-with-even-chunking-and-rollover
             write-zarr-v2-raw-with-ragged-chunking

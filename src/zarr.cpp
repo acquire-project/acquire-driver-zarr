@@ -85,9 +85,7 @@ validate_dimension(const zarr::Dimension& dim, bool is_append)
 {
     if (!is_append) {
         EXPECT(dim.array_size_px > 0, "Dimension array size must be positive.");
-        EXPECT(dim.chunk_size_px > 0 && dim.chunk_size_px <= dim.array_size_px,
-               "Dimension chunk size must be positive and less than or equal "
-               "to array size.");
+        EXPECT(dim.chunk_size_px > 0, "Dimension chunk size must be positive.");
 
         // The number of shards must evenly divide the number of chunks.
         if (dim.shard_size_chunks > 0) {
