@@ -114,14 +114,16 @@ struct Writer
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
     uint32_t append_chunk_index_;
+    bool is_finalizing_;
 
     void make_buffers_() noexcept;
     void validate_frame_(const VideoFrame* frame);
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
-    virtual bool should_flush_() const = 0;
+    bool should_flush_() const;
     void compress_buffers_() noexcept;
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
+    virtual bool should_rollover_() const = 0;
     void close_files_();
     void rollover_();
 };

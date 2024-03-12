@@ -30,8 +30,8 @@ struct ZarrV2Writer final : public Writer
     ~ZarrV2Writer() override = default;
 
   private:
-    bool should_flush_() const override;
     [[nodiscard]] bool flush_impl_() override;
+    bool should_rollover_() const override;
 };
 } // namespace acquire::sink::zarr
 

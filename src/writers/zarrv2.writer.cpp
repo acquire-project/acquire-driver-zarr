@@ -15,19 +15,6 @@ zarr::ZarrV2Writer::ZarrV2Writer(
 }
 
 bool
-zarr::ZarrV2Writer::should_flush_() const
-{
-    const auto& dims = config_.dimensions;
-    size_t frames_before_flush = dims.back().chunk_size_px;
-    for (auto i = 2; i < dims.size() - 1; ++i) {
-        frames_before_flush *= dims.at(i).array_size_px;
-    }
-
-    CHECK(frames_before_flush > 0);
-    return frames_written_ % frames_before_flush == 0;
-}
-
-bool
 zarr::ZarrV2Writer::flush_impl_()
 {
     // create chunk files
@@ -74,6 +61,12 @@ zarr::ZarrV2Writer::flush_impl_()
     // wait for all threads to finish
     latch.wait();
 
+    return true;
+}
+
+bool
+zarr::ZarrV2Writer::should_rollover_() const
+{
     return true;
 }
 

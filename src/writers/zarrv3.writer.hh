@@ -30,8 +30,10 @@ struct ZarrV3Writer final : public Writer
     ~ZarrV3Writer() override = default;
 
   private:
-    bool should_flush_() const override;
+    std::vector<std::vector<uint64_t>> chunk_indices_;
+
     [[nodiscard]] bool flush_impl_() override;
+    bool should_rollover_() const override;
 };
 } // namespace acquire::sink::zarr
 

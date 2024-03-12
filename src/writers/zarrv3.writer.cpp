@@ -55,28 +55,14 @@ zarr::ZarrV3Writer::ZarrV3Writer(
   const ArrayConfig& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(array_spec, thread_pool)
+  , chunk_indices_{ common::number_of_shards(array_spec.dimensions) }
 {
-}
-
-bool
-zarr::ZarrV3Writer::should_flush_() const
-{
-    const auto& dims = config_.dimensions;
-    size_t frames_before_flush =
-      dims.back().chunk_size_px * dims.back().shard_size_chunks;
-    for (auto i = 2; i < dims.size() - 1; ++i) {
-        frames_before_flush *= dims[i].array_size_px;
-    }
-
-    CHECK(frames_before_flush > 0);
-    return frames_written_ % frames_before_flush == 0;
 }
 
 bool
 zarr::ZarrV3Writer::flush_impl_()
 {
-    // create shard files
-    CHECK(files_.empty());
+    // create shard files if they don't exist
     if (files_.empty() &&
         !file_creator_.create_shard_files(
           data_root_ / ("c" + std::to_string(append_chunk_index_)),
@@ -87,11 +73,8 @@ zarr::ZarrV3Writer::flush_impl_()
     const auto n_shards = common::number_of_shards(config_.dimensions);
     CHECK(files_.size() == n_shards);
 
-    const auto chunks_per_shard = common::chunks_per_shard(config_.dimensions);
-
     // compress buffers
     compress_buffers_();
-    const size_t bytes_of_index = 2 * chunks_per_shard * sizeof(uint64_t);
 
     // get shard indices for each chunk
     std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
@@ -100,55 +83,93 @@ zarr::ZarrV3Writer::flush_impl_()
         chunk_in_shards.at(index).push_back(i);
     }
 
-    // concatenate chunks into shards
+    // write out chunks to shards
+    bool write_indices = is_finalizing_ || should_rollover_();
     std::latch latch(n_shards);
     for (auto i = 0; i < n_shards; ++i) {
-        thread_pool_->push_to_job_queue(
-          [fh = &files_.at(i), chunks = chunk_in_shards.at(i), i, &latch, this](
-            std::string& err) {
-              size_t chunk_index = 0;
-              std::vector<uint64_t> chunk_indices;
-              size_t offset = 0;
-              bool success = false;
-              try {
-                  for (const auto& chunk_idx : chunks) {
-                      chunk_indices.push_back(chunk_index); // chunk offset
+        auto& chunk_indices = chunk_indices_.at(i);
 
-                      auto& chunk = chunk_buffers_.at(chunk_idx);
-                      chunk_index += chunk.size();
-                      chunk_indices.push_back(chunk.size()); // chunk extent
+        thread_pool_->push_to_job_queue([fh = &files_.at(i),
+                                         chunks = &chunk_in_shards.at(i),
+                                         chunk_indices = &chunk_indices_.at(i),
+                                         write_indices,
+                                         &latch,
+                                         this](std::string& err) mutable {
+            bool success = false;
 
-                      file_write(
-                        fh, offset, chunk.data(), chunk.data() + chunk.size());
-                      offset += chunk.size();
-                  }
+            size_t file_offset = 0;
+            if (chunk_indices->size() > 1) {
+                const auto index = chunk_indices->at(chunk_indices->size() - 2);
+                const auto extent = chunk_indices->back();
+                file_offset = index + extent;
+            }
 
-                  // write the indices out at the end of the shard
-                  const auto* indices =
-                    reinterpret_cast<const uint8_t*>(chunk_indices.data());
-                  success = (bool)file_write(fh,
-                                             offset,
-                                             indices,
-                                             indices + chunk_indices.size() *
-                                                         sizeof(uint64_t));
-              } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(
-                    buf, sizeof(buf), "Failed to write chunk: %s", exc.what());
-                  err = buf;
-              } catch (...) {
-                  err = "Unknown error";
-              }
+            try {
+                for (const auto& chunk_idx : *chunks) {
+                    auto& chunk = chunk_buffers_.at(chunk_idx);
 
-              latch.count_down();
-              return success;
-          });
+                    success = file_write(fh,
+                                         file_offset,
+                                         chunk.data(),
+                                         chunk.data() + chunk.size());
+                    if (!success) {
+                        break;
+                    }
+
+                    chunk_indices->push_back(file_offset);
+                    chunk_indices->push_back(chunk.size());
+
+                    file_offset += chunk.size();
+                }
+
+                if (success && write_indices) {
+                    const auto* indices =
+                      reinterpret_cast<const uint8_t*>(chunk_indices->data());
+                    success = file_write(fh,
+                                         file_offset,
+                                         indices,
+                                         indices + chunk_indices->size() *
+                                                     sizeof(uint64_t));
+                }
+            } catch (const std::exception& exc) {
+                char buf[128];
+                snprintf(
+                  buf, sizeof(buf), "Failed to write chunk: %s", exc.what());
+                err = buf;
+            } catch (...) {
+                err = "Unknown error";
+            }
+
+            latch.count_down();
+            return success;
+        });
     }
 
     // wait for all threads to finish
     latch.wait();
 
+    // cleanup chunk indices
+    if (write_indices) {
+        for (auto i = 0; i < n_shards; ++i) {
+            chunk_indices_.at(i).clear();
+        }
+    }
+
     return true;
+}
+
+bool
+zarr::ZarrV3Writer::should_rollover_() const
+{
+    const auto& dims = config_.dimensions;
+    size_t frames_before_flush =
+      dims.back().chunk_size_px * dims.back().shard_size_chunks;
+    for (auto i = 2; i < dims.size() - 1; ++i) {
+        frames_before_flush *= dims[i].array_size_px;
+    }
+
+    CHECK(frames_before_flush > 0);
+    return frames_written_ % frames_before_flush == 0;
 }
 
 #ifndef NO_UNIT_TESTS
@@ -650,7 +671,7 @@ extern "C"
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48);
 
-            for (auto i = 0; i < 2 * 5 * 2; ++i) { // 5 time points
+            for (auto i = 0; i < 5 * 10; ++i) { // 10 time points (2 chunks)
                 frame->frame_id = i;
                 CHECK(writer.write(frame));
             }

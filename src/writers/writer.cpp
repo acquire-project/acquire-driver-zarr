@@ -410,6 +410,7 @@ zarr::Writer::Writer(const ArrayConfig& config,
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
   , append_chunk_index_{ 0 }
+  , is_finalizing_{ false }
 {
     data_root_ = fs::path(config_.data_root);
 }
@@ -442,8 +443,10 @@ zarr::Writer::write(const VideoFrame* frame)
 void
 zarr::Writer::finalize()
 {
+    is_finalizing_ = true;
     flush_();
     close_files_();
+    is_finalizing_ = false;
 }
 
 const zarr::ArrayConfig&
@@ -562,6 +565,19 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
     return bytes_written;
 }
 
+bool
+zarr::Writer::should_flush_() const
+{
+    const auto& dims = config_.dimensions;
+    size_t frames_before_flush = dims.back().chunk_size_px;
+    for (auto i = 2; i < dims.size() - 1; ++i) {
+        frames_before_flush *= dims.at(i).array_size_px;
+    }
+
+    CHECK(frames_before_flush > 0);
+    return frames_written_ % frames_before_flush == 0;
+}
+
 void
 zarr::Writer::compress_buffers_() noexcept
 {
@@ -635,7 +651,10 @@ zarr::Writer::flush_()
     // compress buffers and write out
     compress_buffers_();
     CHECK(flush_impl_());
-    rollover_();
+
+    if (should_rollover_()) {
+        rollover_();
+    }
 
     // reset buffers
     make_buffers_();
@@ -681,7 +700,7 @@ class TestWriter : public zarr::Writer
     }
 
   private:
-    bool should_flush_() const override { return false; }
+    bool should_rollover_() const override { return false; }
     bool flush_impl_() override { return true; }
 };
 
