@@ -98,11 +98,11 @@ struct ThreadPool final
 size_t
 chunks_along_dimension(const Dimension& dimension);
 
-/// @brief Get the number of chunks to write at one time, considering sharding.
+/// @brief Get the number of chunks to hold in memory.
 /// @param dimensions The dimensions of the array.
-/// @return The number of chunks to buffer and write out.
+/// @return The number of chunks to buffer before writing out.
 size_t
-number_of_chunks(const std::vector<Dimension>& dimensions);
+number_of_chunks_in_memory(const std::vector<Dimension>& dimensions);
 
 /// @brief Get the number of shards along a dimension.
 /// @param dimension A dimension.

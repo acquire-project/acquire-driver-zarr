@@ -153,17 +153,11 @@ common::shards_along_dimension(const Dimension& dimension)
 }
 
 size_t
-common::number_of_chunks(const std::vector<Dimension>& dimensions)
+common::number_of_chunks_in_memory(const std::vector<Dimension>& dimensions)
 {
     size_t n_chunks = 1;
     for (auto i = 0; i < dimensions.size() - 1; ++i) {
         n_chunks *= chunks_along_dimension(dimensions[i]);
-    }
-
-    // the final dimension can accumulate more than one chunk in a shard
-    const auto& append = dimensions.back();
-    if (append.shard_size_chunks > 0) {
-        n_chunks *= append.shard_size_chunks;
     }
 
     return n_chunks;

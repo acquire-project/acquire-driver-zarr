@@ -461,7 +461,8 @@ zarr::Writer::frames_written() const noexcept
 void
 zarr::Writer::make_buffers_() noexcept
 {
-    const size_t n_chunks = common::number_of_chunks(config_.dimensions);
+    const size_t n_chunks =
+      common::number_of_chunks_in_memory(config_.dimensions);
     chunk_buffers_.resize(n_chunks); // no-op if already the correct size
 
     const auto bytes_per_chunk =
