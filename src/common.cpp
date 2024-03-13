@@ -144,12 +144,13 @@ common::chunks_along_dimension(const Dimension& dimension)
 size_t
 common::shards_along_dimension(const Dimension& dimension)
 {
-    if (dimension.shard_size_chunks == 0) {
+    const size_t shard_size = dimension.shard_size_chunks;
+    if (shard_size == 0) {
         return 0;
     }
 
-    // shard_size_chunks evenly divides the number of chunks
-    return chunks_along_dimension(dimension) / dimension.shard_size_chunks;
+    const size_t n_chunks = chunks_along_dimension(dimension);
+    return (n_chunks + shard_size - 1) / shard_size;
 }
 
 size_t

@@ -104,7 +104,7 @@ chunks_along_dimension(const Dimension& dimension);
 size_t
 number_of_chunks_in_memory(const std::vector<Dimension>& dimensions);
 
-/// @brief Get the number of shards along a dimension.
+/// @brief Get the number of (possibly ragged) shards along a dimension.
 /// @param dimension A dimension.
 /// @return The number of shards along the dimension, given the dimension's
 /// array, chunk, and shard sizes.

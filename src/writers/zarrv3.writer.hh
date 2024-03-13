@@ -30,7 +30,8 @@ struct ZarrV3Writer final : public Writer
     ~ZarrV3Writer() override = default;
 
   private:
-    std::vector<std::vector<uint64_t>> chunk_indices_;
+    std::vector<size_t> shard_file_offsets_;
+    std::vector<std::vector<uint64_t>> shard_tables_;
 
     [[nodiscard]] bool flush_impl_() override;
     bool should_rollover_() const override;

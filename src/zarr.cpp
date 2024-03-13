@@ -83,34 +83,14 @@ validate_props(const StorageProperties* props)
 void
 validate_dimension(const zarr::Dimension& dim, bool is_append)
 {
-    if (!is_append) {
-        EXPECT(dim.array_size_px > 0, "Dimension array size must be positive.");
-        EXPECT(dim.chunk_size_px > 0, "Dimension chunk size must be positive.");
-
-        // The number of shards must evenly divide the number of chunks.
-        if (dim.shard_size_chunks > 0) {
-            const auto n_chunks = common::chunks_along_dimension(dim);
-            EXPECT(n_chunks % dim.shard_size_chunks == 0,
-                   "Dimension shard size must evenly divide the number of "
-                   "chunks.");
-        }
-    } else {
+    if (is_append) {
         EXPECT(dim.array_size_px == 0,
                "Append dimension array size must be 0.");
-        EXPECT(dim.chunk_size_px > 0,
-               "Append dimension chunk size must be "
-               "positive.");
-
-        // The number of shards must evenly divide the number of chunks. But
-        // because we don't know a priori how many chunks we will have in the
-        // append dimension, we can't a priori set the number of chunks per
-        // shard in such a way that the number of shards evenly divides the
-        // number of chunks, EXCEPT in the case where the shard size is 1.
-        if (dim.shard_size_chunks > 0) {
-            EXPECT(dim.shard_size_chunks == 1,
-                   "Append dimension shard size must be 1.");
-        }
+    } else {
+        EXPECT(dim.array_size_px > 0, "Dimension array size must be positive.");
     }
+
+    EXPECT(dim.chunk_size_px > 0, "Dimension chunk size must be positive.");
 }
 
 [[nodiscard]] bool
@@ -580,6 +560,7 @@ zarr::Zarr::set_dimensions_(const StorageProperties* props)
     EXPECT(dimension_count > 2, "Expected at least 3 dimensions.");
 
     for (auto i = 0; i < dimension_count; ++i) {
+        CHECK(props->acquisition_dimensions.data[i].name.str);
         Dimension dim(props->acquisition_dimensions.data[i]);
         validate_dimension(dim, i == dimension_count - 1);
 
