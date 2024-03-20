@@ -378,7 +378,7 @@ extern "C"
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
-              [](const std::string& err) { throw std::runtime_error(err); });
+              [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
             std::vector<zarr::Dimension> dims;
             dims.emplace_back("x",
@@ -516,7 +516,7 @@ extern "C"
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
-              [](const std::string& err) { throw std::runtime_error(err); });
+              [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
             std::vector<zarr::Dimension> dims;
             dims.emplace_back("x",
@@ -625,7 +625,7 @@ extern "C"
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
-              [](const std::string& err) { throw std::runtime_error(err); });
+              [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
             ImageShape shape {
                 .dims = {
