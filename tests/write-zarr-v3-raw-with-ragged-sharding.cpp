@@ -1,6 +1,4 @@
-/// @brief Test the basic Zarr v3 writer.
-/// @details Ensure that chunking is working as expected and metadata is written
-/// correctly.
+/// @brief Test that we can write ragged shards with the ZarrV3 writer.
 
 #include "device/hal/device.manager.h"
 #include "acquire.h"
@@ -20,9 +18,7 @@ namespace {
 void
 init_array(struct StorageDimension** data, size_t size)
 {
-    if (!*data) {
-        *data = new struct StorageDimension[size];
-    }
+    *data = new struct StorageDimension[size];
 }
 
 void
@@ -89,8 +85,12 @@ reporter(int is_error,
 
 const static uint32_t frame_width = 1080;
 const static uint32_t chunk_width = frame_width / 4;
+const static uint32_t shard_width = 3; // 3 chunks per shard, ragged
+
 const static uint32_t frame_height = 960;
 const static uint32_t chunk_height = frame_height / 3;
+const static uint32_t shard_height = 2; // 2 chunks per shard, ragged
+
 const static uint32_t frames_per_chunk = 48;
 const static uint32_t max_frame_count = 48;
 
@@ -129,7 +129,7 @@ setup(AcquireRuntime* runtime)
       destroy_array;
 
     CHECK(
-      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
+      storage_properties_dimensions_init(&props.video[0].storage.settings, 3));
     auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
 
     CHECK(storage_dimension_init(acq_dims->data,
@@ -137,16 +137,14 @@ setup(AcquireRuntime* runtime)
                                  DimensionType_Space,
                                  frame_width,
                                  chunk_width,
-                                 4));
+                                 shard_width));
     CHECK(storage_dimension_init(acq_dims->data + 1,
                                  SIZED("y") + 1,
                                  DimensionType_Space,
                                  frame_height,
                                  chunk_height,
-                                 3));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 1));
-    CHECK(storage_dimension_init(acq_dims->data + 3,
+                                 shard_height));
+    CHECK(storage_dimension_init(acq_dims->data + 2,
                                  SIZED("t") + 1,
                                  DimensionType_Time,
                                  0,
@@ -270,9 +268,8 @@ validate(AcquireRuntime* runtime)
 
     const auto chunk_shape = chunk_grid["chunk_shape"];
     ASSERT_EQ(int, "%d", frames_per_chunk, chunk_shape[0]);
-    ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
-    ASSERT_EQ(int, "%d", chunk_height, chunk_shape[2]);
-    ASSERT_EQ(int, "%d", chunk_width, chunk_shape[3]);
+    ASSERT_EQ(int, "%d", chunk_height, chunk_shape[1]);
+    ASSERT_EQ(int, "%d", chunk_width, chunk_shape[2]);
 
     CHECK("C" == metadata["chunk_memory_layout"]);
     CHECK("u1" == metadata["data_type"]);
@@ -280,45 +277,150 @@ validate(AcquireRuntime* runtime)
 
     const auto array_shape = metadata["shape"];
     ASSERT_EQ(int, "%d", max_frame_count, array_shape[0]);
-    ASSERT_EQ(int, "%d", 1, array_shape[1]);
-    ASSERT_EQ(int, "%d", frame_height, array_shape[2]);
-    ASSERT_EQ(int, "%d", frame_width, array_shape[3]);
+    ASSERT_EQ(int, "%d", frame_height, array_shape[1]);
+    ASSERT_EQ(int, "%d", frame_width, array_shape[2]);
 
     // sharding
     const auto storage_transformers = metadata["storage_transformers"];
     const auto configuration = storage_transformers[0]["configuration"];
     const auto& cps = configuration["chunks_per_shard"];
     ASSERT_EQ(int, "%d", 1, cps[0]);
-    ASSERT_EQ(int, "%d", 1, cps[1]);
-    ASSERT_EQ(int, "%d", 3, cps[2]);
-    ASSERT_EQ(int, "%d", 4, cps[3]);
-    const size_t chunks_per_shard = cps[0].get<size_t>() *
-                                    cps[1].get<size_t>() *
-                                    cps[2].get<size_t>() * cps[3].get<size_t>();
+    ASSERT_EQ(int, "%d", shard_height, cps[1]);
+    ASSERT_EQ(int, "%d", shard_width, cps[2]);
+
+    const size_t chunks_per_shard =
+      cps[0].get<size_t>() * cps[1].get<size_t>() * cps[2].get<size_t>();
+    ASSERT_EQ(int, "%d", 6, chunks_per_shard);
 
     const auto index_size = 2 * chunks_per_shard * sizeof(uint64_t);
 
-    // check that each chunked data file is the expected size
-    const uint32_t bytes_per_chunk =
-      chunk_shape[0].get<uint32_t>() * chunk_shape[1].get<uint32_t>() *
-      chunk_shape[2].get<uint32_t>() * chunk_shape[3].get<uint32_t>();
-    for (auto t = 0; t < std::ceil(max_frame_count / frames_per_chunk); ++t) {
-        fs::path path = test_path / "data" / "root" / "0" /
-                        ("c" + std::to_string(t)) / "0" / "0" / "0";
+    const uint32_t bytes_per_chunk = chunk_shape[0].get<uint32_t>() *
+                                     chunk_shape[1].get<uint32_t>() *
+                                     chunk_shape[2].get<uint32_t>();
 
-        CHECK(fs::is_regular_file(path));
+    // 1st shard is full
+    {
+        const fs::path shard_path =
+          test_path / "data" / "root" / "0" / "c0" / "0" / "0";
+        CHECK(fs::is_regular_file(shard_path));
 
-        auto file_size = fs::file_size(path);
+        const int expected_file_size = 6 * bytes_per_chunk + // 6 chunks
+                                       index_size;           // 6 indices
+        const int file_size = fs::file_size(shard_path);
+        ASSERT_EQ(int, "%d", expected_file_size, file_size);
 
-        ASSERT_EQ(
-          int, "%d", chunks_per_shard* bytes_per_chunk + index_size, file_size);
+        // check the indices at the end of the file
+        std::ifstream shard_file(shard_path, std::ios::binary);
+        shard_file.seekg(-index_size, std::ios::end);
+        std::vector<uint64_t> indices(12);
+        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+
+        for (auto i = 0; i < indices.size(); i += 2) {
+            ASSERT_EQ(
+              uint64_t, "%llu", (i / 2) * bytes_per_chunk, indices.at(i));
+        }
+        for (auto i = 1; i < indices.size(); i += 2) {
+            ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(i));
+        }
     }
-}
 
-void
-teardown(AcquireRuntime* runtime)
-{
-    acquire_shutdown(runtime);
+    // 2nd shard has 2 chunks, arranged vertically
+    {
+        const fs::path shard_path =
+          test_path / "data" / "root" / "0" / "c0" / "0" / "1";
+        CHECK(fs::is_regular_file(shard_path));
+
+        const int expected_file_size = 2 * bytes_per_chunk + // 2 chunks
+                                       index_size;           // 6 indices
+        const int file_size = fs::file_size(shard_path);
+        ASSERT_EQ(int, "%d", expected_file_size, file_size);
+
+        // check the indices at the end of the file
+        std::ifstream shard_file(shard_path, std::ios::binary);
+        shard_file.seekg(-index_size, std::ios::end);
+        std::vector<uint64_t> indices(12);
+        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+
+        ASSERT_EQ(uint64_t, "%llu", 0, indices.at(0));
+        ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(1));
+
+        ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(6));
+        ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(7));
+
+        for (auto i = 2; i < 6; ++i) {
+            ASSERT_EQ(uint64_t,
+                      "%llu",
+                      std::numeric_limits<uint64_t>::max(),
+                      indices.at(i));
+        }
+        for (auto i = 8; i < indices.size(); ++i) {
+            ASSERT_EQ(uint64_t,
+                      "%llu",
+                      std::numeric_limits<uint64_t>::max(),
+                      indices.at(i));
+        }
+    }
+
+    // 3rd shard has 3 chunks, arranged horizontally
+    {
+        const fs::path shard_path =
+          test_path / "data" / "root" / "0" / "c0" / "1" / "0";
+        CHECK(fs::is_regular_file(shard_path));
+
+        const int expected_file_size = 3 * bytes_per_chunk + // 3 chunks
+                                       index_size;           // 6 indices
+        const int file_size = fs::file_size(shard_path);
+        ASSERT_EQ(int, "%d", expected_file_size, file_size);
+
+        // check the indices at the end of the file
+        std::ifstream shard_file(shard_path, std::ios::binary);
+        shard_file.seekg(-index_size, std::ios::end);
+        std::vector<uint64_t> indices(12);
+        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+
+        for (auto i = 0; i < 6; i += 2) {
+            ASSERT_EQ(
+              uint64_t, "%llu", (i / 2) * bytes_per_chunk, indices.at(i));
+        }
+        for (auto i = 1; i < 6; i += 2) {
+            ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(i));
+        }
+
+        for (auto i = 6; i < indices.size(); ++i) {
+            ASSERT_EQ(uint64_t,
+                      "%llu",
+                      std::numeric_limits<uint64_t>::max(),
+                      indices.at(i));
+        }
+    }
+
+    // 4th shard has a single chunk
+    {
+        const fs::path shard_path =
+          test_path / "data" / "root" / "0" / "c0" / "1" / "1";
+        CHECK(fs::is_regular_file(shard_path));
+
+        const int expected_file_size = bytes_per_chunk + // 1 chunk
+                                       index_size;       // 6 indices
+        const int file_size = fs::file_size(shard_path);
+        ASSERT_EQ(int, "%d", expected_file_size, file_size);
+
+        // check the indices at the end of the file
+        std::ifstream shard_file(shard_path, std::ios::binary);
+        shard_file.seekg(-index_size, std::ios::end);
+        std::vector<uint64_t> indices(12);
+        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+
+        ASSERT_EQ(uint64_t, "%llu", 0, indices.at(0));
+        ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(1));
+
+        for (auto i = 2; i < indices.size(); ++i) {
+            ASSERT_EQ(uint64_t,
+                      "%llu",
+                      std::numeric_limits<uint64_t>::max(),
+                      indices.at(i));
+        }
+    }
 }
 
 int
@@ -340,7 +442,7 @@ main()
         ERR("Unknown exception");
     }
 
-    teardown(runtime);
+    acquire_shutdown(runtime);
 
     return retval;
 }
