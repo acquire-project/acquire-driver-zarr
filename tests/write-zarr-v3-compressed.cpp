@@ -88,12 +88,12 @@ reporter(int is_error,
     } while (0)
 
 const static uint32_t frame_width = 1920;
-const static uint32_t chunk_width = frame_width / 4;
-const static uint32_t shard_width = 4;
+const static uint32_t chunk_width = frame_width / 7; // ragged
+const static uint32_t shard_width = 8;
 
 const static uint32_t frame_height = 1080;
-const static uint32_t chunk_height = frame_height / 3;
-const static uint32_t shard_height = 3;
+const static uint32_t chunk_height = frame_height / 7; // ragged
+const static uint32_t shard_height = 8;
 
 const static uint32_t frames_per_chunk = 16;
 const static uint32_t max_frame_count = 16;
@@ -293,6 +293,7 @@ validate()
     ASSERT_EQ(int, "%d", frame_height, array_shape[2]);
     ASSERT_EQ(int, "%d", frame_width, array_shape[3]);
 
+    // compression
     const auto compressor = metadata["compressor"];
     CHECK("https://purl.org/zarr/spec/codec/blosc/1.0" == compressor["codec"]);
 
@@ -308,8 +309,8 @@ validate()
     const auto& cps = configuration["chunks_per_shard"];
     ASSERT_EQ(int, "%d", 1, cps[0]);
     ASSERT_EQ(int, "%d", 1, cps[1]);
-    ASSERT_EQ(int, "%d", 3, cps[2]);
-    ASSERT_EQ(int, "%d", 4, cps[3]);
+    ASSERT_EQ(int, "%d", shard_height, cps[2]);
+    ASSERT_EQ(int, "%d", shard_width, cps[3]);
     const size_t chunks_per_shard = cps[0].get<size_t>() *
                                     cps[1].get<size_t>() *
                                     cps[2].get<size_t>() * cps[3].get<size_t>();
@@ -327,6 +328,7 @@ validate()
         CHECK(fs::is_regular_file(path));
 
         auto file_size = fs::file_size(path);
+
         ASSERT_GT(int, "%d", file_size, 0);
         ASSERT_GT(int,
                   "%d",
