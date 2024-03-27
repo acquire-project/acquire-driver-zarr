@@ -1,5 +1,5 @@
 /// @brief Test the basic Zarr v3 writer.
-/// @details Ensure that chunking is working as expected and metadata is written
+/// @details Ensure that sharding is working as expected and metadata is written
 /// correctly.
 
 #include "device/hal/device.manager.h"
@@ -87,12 +87,16 @@ reporter(int is_error,
           a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
     } while (0)
 
-const static uint32_t frame_width = 1080;
+const static uint32_t frame_width = 1920;
 const static uint32_t chunk_width = frame_width / 4;
-const static uint32_t frame_height = 960;
+const static uint32_t shard_width = 4;
+
+const static uint32_t frame_height = 1080;
 const static uint32_t chunk_height = frame_height / 3;
-const static uint32_t frames_per_chunk = 48;
-const static uint32_t max_frame_count = 48;
+const static uint32_t shard_height = 3;
+
+const static uint32_t frames_per_chunk = 16;
+const static uint32_t max_frame_count = 16;
 
 void
 setup(AcquireRuntime* runtime)
@@ -107,7 +111,7 @@ setup(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*empty.*"),
+                                SIZED("simulated.*radial.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -137,13 +141,13 @@ setup(AcquireRuntime* runtime)
                                  DimensionType_Space,
                                  frame_width,
                                  chunk_width,
-                                 4));
+                                 shard_width));
     CHECK(storage_dimension_init(acq_dims->data + 1,
                                  SIZED("y") + 1,
                                  DimensionType_Space,
                                  frame_height,
                                  chunk_height,
-                                 3));
+                                 shard_height));
     CHECK(storage_dimension_init(
       acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 1));
     CHECK(storage_dimension_init(acq_dims->data + 3,
@@ -158,6 +162,7 @@ setup(AcquireRuntime* runtime)
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
     props.video[0].max_frame_count = max_frame_count;
+    props.video[0].camera.settings.exposure_time_us = 5e5;
 
     OK(acquire_configure(runtime, &props));
 
@@ -176,8 +181,12 @@ acquire(AcquireRuntime* runtime)
         return (uint8_t*)end - (uint8_t*)cur;
     };
 
+    AcquireProperties props = { 0 };
+    OK(acquire_get_configuration(runtime, &props));
+
     struct clock clock;
-    static double time_limit_ms = 20000.0;
+    static double time_limit_ms =
+      max_frame_count * props.video[0].camera.settings.exposure_time_us / 1000.;
     clock_init(&clock);
     clock_shift_ms(&clock, time_limit_ms);
     OK(acquire_start(runtime));
@@ -231,7 +240,7 @@ acquire(AcquireRuntime* runtime)
 }
 
 void
-validate(AcquireRuntime* runtime)
+validate()
 {
     const fs::path test_path(TEST ".zarr");
     CHECK(fs::is_directory(test_path));
@@ -296,7 +305,7 @@ validate(AcquireRuntime* runtime)
                                     cps[1].get<size_t>() *
                                     cps[2].get<size_t>() * cps[3].get<size_t>();
 
-    const auto index_size = 2 * chunks_per_shard * sizeof(uint64_t);
+    const auto index_size = 2 * sizeof(uint64_t);
 
     // check that each chunked data file is the expected size
     const uint32_t bytes_per_chunk =
@@ -310,15 +319,11 @@ validate(AcquireRuntime* runtime)
 
         auto file_size = fs::file_size(path);
 
-        ASSERT_EQ(
-          int, "%d", chunks_per_shard* bytes_per_chunk + index_size, file_size);
+        ASSERT_EQ(int,
+                  "%d",
+                  (bytes_per_chunk + index_size) * chunks_per_shard,
+                  file_size);
     }
-}
-
-void
-teardown(AcquireRuntime* runtime)
-{
-    acquire_shutdown(runtime);
 }
 
 int
@@ -330,7 +335,7 @@ main()
     try {
         setup(runtime);
         acquire(runtime);
-        validate(runtime);
+        validate();
 
         retval = 0;
         LOG("Done (OK)");
@@ -340,7 +345,7 @@ main()
         ERR("Unknown exception");
     }
 
-    teardown(runtime);
+    acquire_shutdown(runtime);
 
     return retval;
 }
