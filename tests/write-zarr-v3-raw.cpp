@@ -186,7 +186,8 @@ acquire(AcquireRuntime* runtime)
 
     struct clock clock;
     static double time_limit_ms =
-      max_frame_count * props.video[0].camera.settings.exposure_time_us / 1000.;
+      2 * max_frame_count * props.video[0].camera.settings.exposure_time_us /
+      1000.;
     clock_init(&clock);
     clock_shift_ms(&clock, time_limit_ms);
     OK(acquire_start(runtime));
