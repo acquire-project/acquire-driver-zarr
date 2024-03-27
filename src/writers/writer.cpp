@@ -581,9 +581,6 @@ zarr::Writer::should_flush_() const
 void
 zarr::Writer::compress_buffers_() noexcept
 {
-    const auto n_chunks = chunk_buffers_.size();
-
-    const size_t bytes_per_chunk = bytes_to_flush_ / n_chunks;
     if (!config_.compression_params.has_value()) {
         return;
     }
@@ -598,43 +595,44 @@ zarr::Writer::compress_buffers_() noexcept
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
         auto& chunk = chunk_buffers_.at(i);
 
-        thread_pool_->push_to_job_queue(
-          [&params, buf = &chunk, bytes_per_px, bytes_per_chunk, &latch](
-            std::string& err) -> bool {
-              bool success = false;
-              try {
-                  const auto tmp_size = bytes_per_chunk + BLOSC_MAX_OVERHEAD;
-                  std::vector<uint8_t> tmp(tmp_size);
-                  const auto nb =
-                    blosc_compress_ctx(params.clevel,
-                                       params.shuffle,
-                                       bytes_per_px,
-                                       bytes_per_chunk,
-                                       buf->data(),
-                                       tmp.data(),
-                                       tmp_size,
-                                       params.codec_id.c_str(),
-                                       0 /* blocksize - 0:automatic */,
-                                       1);
+        thread_pool_->push_to_job_queue([&params,
+                                         buf = &chunk,
+                                         bytes_per_px,
+                                         &latch](std::string& err) -> bool {
+            bool success = false;
+            const size_t bytes_of_chunk = buf->size();
 
-                  tmp.resize(nb);
-                  buf->swap(tmp);
+            try {
+                const auto tmp_size = bytes_of_chunk + BLOSC_MAX_OVERHEAD;
+                std::vector<uint8_t> tmp(tmp_size);
+                const auto nb =
+                  blosc_compress_ctx(params.clevel,
+                                     params.shuffle,
+                                     bytes_per_px,
+                                     bytes_of_chunk,
+                                     buf->data(),
+                                     tmp.data(),
+                                     tmp_size,
+                                     params.codec_id.c_str(),
+                                     0 /* blocksize - 0:automatic */,
+                                     1);
 
-                  success = true;
-              } catch (const std::exception& exc) {
-                  char msg[128];
-                  snprintf(msg,
-                           sizeof(msg),
-                           "Failed to compress chunk: %s",
-                           exc.what());
-                  err = msg;
-              } catch (...) {
-                  err = "Failed to compress chunk (unknown)";
-              }
-              latch.count_down();
+                tmp.resize(nb);
+                buf->swap(tmp);
 
-              return success;
-          });
+                success = true;
+            } catch (const std::exception& exc) {
+                char msg[128];
+                snprintf(
+                  msg, sizeof(msg), "Failed to compress chunk: %s", exc.what());
+                err = msg;
+            } catch (...) {
+                err = "Failed to compress chunk (unknown)";
+            }
+            latch.count_down();
+
+            return success;
+        });
     }
 
     // wait for all threads to finish
