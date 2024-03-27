@@ -1,5 +1,5 @@
 /// @brief Test the basic Zarr v3 writer.
-/// @details Ensure that chunking is working as expected and metadata is written
+/// @details Ensure that sharding is working as expected and metadata is written
 /// correctly.
 
 #include "device/hal/device.manager.h"
@@ -15,6 +15,22 @@
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
+
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+} // end ::{anonymous} namespace
 
 void
 reporter(int is_error,
@@ -71,12 +87,16 @@ reporter(int is_error,
           a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
     } while (0)
 
-const static uint32_t frame_width = 1080;
-const static uint32_t chunk_width = frame_width / 4;
-const static uint32_t frame_height = 960;
-const static uint32_t chunk_height = frame_height / 3;
-const static uint32_t frames_per_chunk = 48;
-const static uint32_t max_frame_count = 48;
+const static uint32_t frame_width = 1920;
+const static uint32_t chunk_width = frame_width / 7; // ragged
+const static uint32_t shard_width = 8;
+
+const static uint32_t frame_height = 1080;
+const static uint32_t chunk_height = frame_height / 7; // ragged
+const static uint32_t shard_height = 8;
+
+const static uint32_t frames_per_chunk = 16;
+const static uint32_t max_frame_count = 16;
 
 void
 setup(AcquireRuntime* runtime)
@@ -91,7 +111,7 @@ setup(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*empty.*"),
+                                SIZED("simulated.*random.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
@@ -108,21 +128,45 @@ setup(AcquireRuntime* runtime)
                             0,
                             sample_spacing_um);
 
-    storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                          chunk_width,
-                                          chunk_height,
-                                          frames_per_chunk);
+    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
+    props.video[0].storage.settings.acquisition_dimensions.destroy =
+      destroy_array;
 
-    storage_properties_set_sharding_props(
-      &props.video[0].storage.settings, 4, 3, 1);
+    CHECK(
+      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
+    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
+
+    CHECK(storage_dimension_init(acq_dims->data,
+                                 SIZED("x") + 1,
+                                 DimensionType_Space,
+                                 frame_width,
+                                 chunk_width,
+                                 shard_width));
+    CHECK(storage_dimension_init(acq_dims->data + 1,
+                                 SIZED("y") + 1,
+                                 DimensionType_Space,
+                                 frame_height,
+                                 chunk_height,
+                                 shard_height));
+    CHECK(storage_dimension_init(
+      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 1));
+    CHECK(storage_dimension_init(acq_dims->data + 3,
+                                 SIZED("t") + 1,
+                                 DimensionType_Time,
+                                 0,
+                                 frames_per_chunk,
+                                 1));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
     props.video[0].max_frame_count = max_frame_count;
+    props.video[0].camera.settings.exposure_time_us = 5e5;
 
     OK(acquire_configure(runtime, &props));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 void
@@ -137,8 +181,13 @@ acquire(AcquireRuntime* runtime)
         return (uint8_t*)end - (uint8_t*)cur;
     };
 
+    AcquireProperties props = { 0 };
+    OK(acquire_get_configuration(runtime, &props));
+
     struct clock clock;
-    static double time_limit_ms = 20000.0;
+    static double time_limit_ms =
+      2 * max_frame_count * props.video[0].camera.settings.exposure_time_us /
+      1000.;
     clock_init(&clock);
     clock_shift_ms(&clock, time_limit_ms);
     OK(acquire_start(runtime));
@@ -192,7 +241,7 @@ acquire(AcquireRuntime* runtime)
 }
 
 void
-validate(AcquireRuntime* runtime)
+validate()
 {
     const fs::path test_path(TEST ".zarr");
     CHECK(fs::is_directory(test_path));
@@ -251,13 +300,13 @@ validate(AcquireRuntime* runtime)
     const auto& cps = configuration["chunks_per_shard"];
     ASSERT_EQ(int, "%d", 1, cps[0]);
     ASSERT_EQ(int, "%d", 1, cps[1]);
-    ASSERT_EQ(int, "%d", 3, cps[2]);
-    ASSERT_EQ(int, "%d", 4, cps[3]);
+    ASSERT_EQ(int, "%d", shard_height, cps[2]);
+    ASSERT_EQ(int, "%d", shard_width, cps[3]);
     const size_t chunks_per_shard = cps[0].get<size_t>() *
                                     cps[1].get<size_t>() *
                                     cps[2].get<size_t>() * cps[3].get<size_t>();
 
-    const auto index_size = 2 * chunks_per_shard * sizeof(uint64_t);
+    const auto index_size = 2 * sizeof(uint64_t);
 
     // check that each chunked data file is the expected size
     const uint32_t bytes_per_chunk =
@@ -271,27 +320,33 @@ validate(AcquireRuntime* runtime)
 
         auto file_size = fs::file_size(path);
 
-        ASSERT_EQ(
-          int, "%d", chunks_per_shard* bytes_per_chunk + index_size, file_size);
+        ASSERT_EQ(int,
+                  "%d",
+                  (bytes_per_chunk + index_size) * chunks_per_shard,
+                  file_size);
     }
-}
-
-void
-teardown(AcquireRuntime* runtime)
-{
-    LOG("Done (OK)");
-    acquire_shutdown(runtime);
 }
 
 int
 main()
 {
+    int retval = 1;
     auto runtime = acquire_init(reporter);
 
-    setup(runtime);
-    acquire(runtime);
-    validate(runtime);
-    teardown(runtime);
+    try {
+        setup(runtime);
+        acquire(runtime);
+        validate();
 
-    return 0;
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
+    acquire_shutdown(runtime);
+
+    return retval;
 }

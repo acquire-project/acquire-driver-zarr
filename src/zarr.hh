@@ -30,22 +30,18 @@ struct Zarr : public Storage
     virtual ~Zarr() noexcept = default;
 
     /// Storage interface
-    virtual void set(const StorageProperties* props);
-    virtual void get(StorageProperties* props) const;
+    void set(const StorageProperties* props);
+    void get(StorageProperties* props) const;
     virtual void get_meta(StoragePropertyMetadata* meta) const;
     void start();
     int stop() noexcept;
     size_t append(const VideoFrame* frames, size_t nbytes);
-    virtual void reserve_image_shape(const ImageShape* shape);
+    void reserve_image_shape(const ImageShape* shape);
 
     /// Error state
     void set_error(const std::string& msg) noexcept;
 
   protected:
-    using ChunkingProps = StorageProperties::storage_properties_chunking_s;
-    using ChunkingMeta =
-      StoragePropertyMetadata::storage_property_metadata_chunking_s;
-
     /// static - set on construction
     std::optional<BloscCompressionParams> blosc_compression_params_;
 
@@ -57,8 +53,8 @@ struct Zarr : public Storage
     bool enable_multiscale_;
 
     /// changes on reserve_image_shape
-    std::vector<std::pair<ImageDims, ImageDims>> image_tile_shapes_;
-    SampleType pixel_type_;
+    struct ImageShape image_shape_;
+    std::vector<Dimension> acquisition_dimensions_;
     std::vector<std::shared_ptr<Writer>> writers_;
 
     /// changes on append
@@ -74,7 +70,7 @@ struct Zarr : public Storage
     std::string error_msg_;
 
     /// Setup
-    void set_chunking(const ChunkingProps& props, const ChunkingMeta& meta);
+    void set_dimensions_(const StorageProperties* props);
     virtual void allocate_writers_() = 0;
 
     /// Metadata
