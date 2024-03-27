@@ -219,7 +219,7 @@ zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
         return true;
     }
 
-    std::atomic<bool> success = true;
+    std::atomic<bool> all_successful = true;
 
     const auto n_dirs = dir_paths.size();
     std::latch latch(n_dirs);
@@ -229,17 +229,20 @@ zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
         dir_paths.pop();
 
         thread_pool_->push_to_job_queue(
-          [dirname, &latch, &success](std::string& err) -> bool {
+          [dirname, &latch, &all_successful](std::string& err) -> bool {
+              bool success = false;
+
               try {
                   if (fs::exists(dirname)) {
                       EXPECT(fs::is_directory(dirname),
                              "'%s' exists but is not a directory.",
                              dirname.c_str());
-                  } else if (success) {
+                  } else if (all_successful) {
                       EXPECT(fs::create_directories(dirname),
                              "Not creating directory '%s': another job failed.",
                              dirname.c_str());
                   }
+                  success = true;
               } catch (const std::exception& exc) {
                   char buf[128];
                   snprintf(buf,
@@ -248,7 +251,6 @@ zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
                            dirname.string().c_str(),
                            exc.what());
                   err = buf;
-                  success = false;
               } catch (...) {
                   char buf[128];
                   snprintf(buf,
@@ -256,10 +258,11 @@ zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
                            "Failed to create directory '%s': (unknown).",
                            dirname.string().c_str());
                   err = buf;
-                  success = false;
               }
 
               latch.count_down();
+              all_successful = all_successful && success;
+
               return success;
           });
 
@@ -268,7 +271,7 @@ zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
 
     latch.wait();
 
-    return success;
+    return all_successful;
 }
 
 bool
@@ -279,7 +282,7 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
         return true;
     }
 
-    std::atomic<bool> success = true;
+    std::atomic<bool> all_successful = true;
 
     const auto n_files = file_paths.size();
     files.resize(n_files);
@@ -292,14 +295,18 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
         struct file* pfile = files.data() + i;
 
         thread_pool_->push_to_job_queue(
-          [filename, pfile, &latch, &success](std::string& err) -> bool {
+          [filename, pfile, &latch, &all_successful](std::string& err) -> bool {
+              bool success = false;
+
               try {
-                  CHECK(success);
-                  EXPECT(file_create(pfile,
-                                     filename.string().c_str(),
-                                     filename.string().length()),
-                         "Failed to open file: '%s'",
-                         filename.string().c_str());
+                  if (all_successful) {
+                      EXPECT(file_create(pfile,
+                                         filename.string().c_str(),
+                                         filename.string().length()),
+                             "Failed to open file: '%s'",
+                             filename.string().c_str());
+                  }
+                  success = true;
               } catch (const std::exception& exc) {
                   char buf[128];
                   snprintf(buf,
@@ -308,7 +315,6 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
                            filename.string().c_str(),
                            exc.what());
                   err = buf;
-                  success = false;
               } catch (...) {
                   char buf[128];
                   snprintf(buf,
@@ -316,17 +322,18 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
                            "Failed to create file '%s': (unknown).",
                            filename.string().c_str());
                   err = buf;
-                  success = false;
               }
 
               latch.count_down();
+              all_successful = all_successful && success;
+
               return success;
           });
     }
 
     latch.wait();
 
-    return success;
+    return all_successful;
 }
 
 bool
