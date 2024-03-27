@@ -111,7 +111,7 @@ setup(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*radial.*"),
+                                SIZED("simulated.*random.*"),
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
