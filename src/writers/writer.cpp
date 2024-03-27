@@ -235,12 +235,13 @@ zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
               try {
                   if (fs::exists(dirname)) {
                       EXPECT(fs::is_directory(dirname),
-                             "'%s' exists but is not a directory.",
+                             "'%s' exists but is not a directory",
                              dirname.c_str());
                   } else if (all_successful) {
-                      EXPECT(fs::create_directories(dirname),
-                             "Not creating directory '%s': another job failed.",
-                             dirname.c_str());
+                      std::error_code ec;
+                      EXPECT(fs::create_directories(dirname, ec),
+                             "%s",
+                             ec.message().c_str());
                   }
                   success = true;
               } catch (const std::exception& exc) {

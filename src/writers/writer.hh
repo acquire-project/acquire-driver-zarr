@@ -54,7 +54,8 @@ struct FileCreator
     [[nodiscard]] bool make_dirs_(std::queue<fs::path>& dir_paths);
 
     /// @brief Parallel create a collection of files.
-    /// @param[in] file_paths The files to create.
+    /// @param[in,out] file_paths The files to create. Unlike `make_dirs_`,
+    /// this function drains the queue.
     /// @param[out] files The files created.
     /// @return True iff all files were created successfully.
     [[nodiscard]] bool make_files_(std::queue<fs::path>& file_paths,
