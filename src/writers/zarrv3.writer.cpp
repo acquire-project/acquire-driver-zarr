@@ -73,9 +73,6 @@ zarr::ZarrV3Writer::flush_impl_()
     const auto n_shards = common::number_of_shards(config_.dimensions);
     CHECK(files_.size() == n_shards);
 
-    // compress buffers
-    compress_buffers_();
-
     // get shard indices for each chunk
     std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
