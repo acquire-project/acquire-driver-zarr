@@ -378,39 +378,43 @@ zarr::Zarr::set(const StorageProperties* props)
 void
 zarr::Zarr::get(StorageProperties* props) const
 {
-    if (const auto dataset_root = dataset_root_.string();
-        !dataset_root.empty()) {
-        CHECK(storage_properties_set_filename(
-          props, dataset_root.c_str(), dataset_root.size() + 1));
-    }
+    CHECK(props);
+    storage_properties_destroy(props);
 
-    if (!external_metadata_json_.empty()) {
-        CHECK(storage_properties_set_external_metadata(
-          props,
-          external_metadata_json_.c_str(),
-          external_metadata_json_.size() + 1));
-    }
+    const std::string dataset_root = dataset_root_.string();
+    const char* filename =
+      dataset_root.empty() ? nullptr : dataset_root.c_str();
+    const size_t bytes_of_filename = filename ? dataset_root.size() + 1 : 0;
 
-    props->pixel_scale_um = pixel_scale_um_;
+    const char* metadata = external_metadata_json_.empty()
+                             ? nullptr
+                             : external_metadata_json_.c_str();
+    const size_t bytes_of_metadata =
+      metadata ? external_metadata_json_.size() + 1 : 0;
 
-    // reset acquisition_dimensions
-    CHECK(storage_properties_dimensions_init(props,
-                                             acquisition_dimensions_.size()));
+    CHECK(storage_properties_init(props,
+                                  0,
+                                  filename,
+                                  bytes_of_filename,
+                                  metadata,
+                                  bytes_of_metadata,
+                                  pixel_scale_um_,
+                                  acquisition_dimensions_.size()));
 
     for (auto i = 0; i < acquisition_dimensions_.size(); ++i) {
         const auto dim = acquisition_dimensions_.at(i);
-        CHECK(storage_dimension_init(&props->acquisition_dimensions.data[i],
-                                     dim.name.c_str(),
-                                     dim.name.length() + 1,
-                                     dim.kind,
-                                     dim.array_size_px,
-                                     dim.chunk_size_px,
-                                     dim.shard_size_chunks));
+        CHECK(storage_properties_set_dimension(props,
+                                               i,
+                                               dim.name.c_str(),
+                                               dim.name.length() + 1,
+                                               dim.kind,
+                                               dim.array_size_px,
+                                               dim.chunk_size_px,
+                                               dim.shard_size_chunks));
     }
-    props->acquisition_dimensions.size = acquisition_dimensions_.size();
 
-    props->first_frame_id = 0;
-    props->enable_multiscale = enable_multiscale_;
+    storage_properties_set_enable_multiscale(props,
+                                             (uint8_t)enable_multiscale_);
 }
 
 void
