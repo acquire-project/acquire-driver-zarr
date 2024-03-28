@@ -14,22 +14,6 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace {
-void
-init_array(struct StorageDimension** data, size_t size)
-{
-    if (!*data) {
-        *data = new struct StorageDimension[size];
-    }
-}
-
-void
-destroy_array(struct StorageDimension* data)
-{
-    delete[] data;
-}
-} // end ::{anonymous} namespace
-
 void
 reporter(int is_error,
          const char* file,
@@ -121,34 +105,30 @@ setup(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   nullptr,
                                   0,
-                                  sample_spacing_um));
+                                  sample_spacing_um,
+                                  3));
 
-    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
-    props.video[0].storage.settings.acquisition_dimensions.destroy =
-      destroy_array;
-
-    CHECK(
-      storage_properties_dimensions_init(&props.video[0].storage.settings, 3));
-    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
-
-    CHECK(storage_dimension_init(acq_dims->data,
-                                 SIZED("x") + 1,
-                                 DimensionType_Space,
-                                 frame_width,
-                                 frame_width,
-                                 0));
-    CHECK(storage_dimension_init(acq_dims->data + 1,
-                                 SIZED("y") + 1,
-                                 DimensionType_Space,
-                                 frame_height,
-                                 frame_height,
-                                 0));
-    CHECK(storage_dimension_init(acq_dims->data + 2,
-                                 SIZED("z") + 1,
-                                 DimensionType_Space,
-                                 0,
-                                 chunk_planes,
-                                 0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           frame_width,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           frame_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("z") + 1,
+                                           DimensionType_Space,
+                                           0,
+                                           chunk_planes,
+                                           0));
 
     CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));

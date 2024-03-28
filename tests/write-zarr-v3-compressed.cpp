@@ -16,22 +16,6 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace {
-void
-init_array(struct StorageDimension** data, size_t size)
-{
-    if (!*data) {
-        *data = new struct StorageDimension[size];
-    }
-}
-
-void
-destroy_array(struct StorageDimension* data)
-{
-    delete[] data;
-}
-} // end ::{anonymous} namespace
-
 void
 reporter(int is_error,
          const char* file,
@@ -120,42 +104,43 @@ setup(AcquireRuntime* runtime)
 
     const struct PixelScale sample_spacing_um = { 1, 1 };
 
-    storage_properties_init(&props.video[0].storage.settings,
-                            0,
-                            (char*)filename,
-                            strlen(filename) + 1,
-                            nullptr,
-                            0,
-                            sample_spacing_um);
+    CHECK(storage_properties_init(&props.video[0].storage.settings,
+                                  0,
+                                  (char*)filename,
+                                  strlen(filename) + 1,
+                                  nullptr,
+                                  0,
+                                  sample_spacing_um,
+                                  4));
 
-    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
-    props.video[0].storage.settings.acquisition_dimensions.destroy =
-      destroy_array;
-
-    CHECK(
-      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
-    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
-
-    CHECK(storage_dimension_init(acq_dims->data,
-                                 SIZED("x") + 1,
-                                 DimensionType_Space,
-                                 frame_width,
-                                 chunk_width,
-                                 shard_width));
-    CHECK(storage_dimension_init(acq_dims->data + 1,
-                                 SIZED("y") + 1,
-                                 DimensionType_Space,
-                                 frame_height,
-                                 chunk_height,
-                                 shard_height));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 1));
-    CHECK(storage_dimension_init(acq_dims->data + 3,
-                                 SIZED("t") + 1,
-                                 DimensionType_Time,
-                                 0,
-                                 frames_per_chunk,
-                                 1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
+                                           shard_width));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           chunk_height,
+                                           shard_height));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           frames_per_chunk,
+                                           1));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;

@@ -12,22 +12,6 @@
 #include <cstdio>
 #include <stdexcept>
 
-namespace {
-void
-init_array(struct StorageDimension** data, size_t size)
-{
-    if (!*data) {
-        *data = new struct StorageDimension[size];
-    }
-}
-
-void
-destroy_array(struct StorageDimension* data)
-{
-    delete[] data;
-}
-} // end ::{anonymous} namespace
-
 void
 reporter(int is_error,
          const char* file,
@@ -89,21 +73,31 @@ setup(AcquireRuntime* runtime)
       0,
       SIZED(TEST ".zarr"),
       SIZED(R"({"hello":"world"}  )"), // note trailing whitespace
-      { 0 }));
+      { 0 },
+      3 // we need at least 3 dimensions to validate settings
+      ));
 
-    // we need at least 3 dimensions to validate settings
-    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
-    acq_dims->init = init_array;
-    acq_dims->destroy = destroy_array;
-    CHECK(
-      storage_properties_dimensions_init(&props.video[0].storage.settings, 3));
-
-    CHECK(storage_dimension_init(
-      acq_dims->data, SIZED("x") + 1, DimensionType_Space, 1, 1, 0));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 1, SIZED("y") + 1, DimensionType_Space, 1, 1, 0));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 2, SIZED("z") + 1, DimensionType_Space, 0, 1, 0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("z") + 1,
+                                           DimensionType_Space,
+                                           0,
+                                           1,
+                                           0));
 
     OK(acquire_configure(runtime, &props));
 

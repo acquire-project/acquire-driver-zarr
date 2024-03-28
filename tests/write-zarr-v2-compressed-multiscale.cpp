@@ -16,22 +16,6 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace {
-void
-init_array(struct StorageDimension** data, size_t size)
-{
-    if (!*data) {
-        *data = new struct StorageDimension[size];
-    }
-}
-
-void
-destroy_array(struct StorageDimension* data)
-{
-    delete[] data;
-}
-} // end ::{anonymous} namespace
-
 void
 reporter(int is_error,
          const char* file,
@@ -139,36 +123,37 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   (char*)external_metadata,
                                   sizeof(external_metadata),
-                                  sample_spacing_um));
+                                  sample_spacing_um,
+                                  4));
 
-    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
-    props.video[0].storage.settings.acquisition_dimensions.destroy =
-      destroy_array;
-
-    CHECK(
-      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
-    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
-
-    CHECK(storage_dimension_init(acq_dims->data,
-                                 SIZED("x") + 1,
-                                 DimensionType_Space,
-                                 frame_width,
-                                 chunk_width,
-                                 0));
-    CHECK(storage_dimension_init(acq_dims->data + 1,
-                                 SIZED("y") + 1,
-                                 DimensionType_Space,
-                                 frame_height,
-                                 chunk_height,
-                                 0));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 0));
-    CHECK(storage_dimension_init(acq_dims->data + 3,
-                                 SIZED("t") + 1,
-                                 DimensionType_Time,
-                                 0,
-                                 chunk_planes,
-                                 0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           chunk_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           chunk_planes,
+                                           0));
 
     CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));

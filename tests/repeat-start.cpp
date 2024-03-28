@@ -16,22 +16,6 @@
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 
-namespace {
-void
-init_array(struct StorageDimension** data, size_t size)
-{
-    if (!*data) {
-        *data = new struct StorageDimension[size];
-    }
-}
-
-void
-destroy_array(struct StorageDimension* data)
-{
-    delete[] data;
-}
-} // end ::{anonymous} namespace
-
 #define containerof(P, T, F) ((T*)(((char*)(P)) - offsetof(T, F)))
 
 /// Helper for passing size static strings as function args.
@@ -105,24 +89,37 @@ configure(AcquireRuntime* runtime)
                                   SIZED(TEST ".zarr"),
                                   nullptr,
                                   0,
-                                  { 1, 1 }));
+                                  { 1, 1 },
+                                  4));
 
-    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
-    props.video[0].storage.settings.acquisition_dimensions.destroy =
-      destroy_array;
-
-    CHECK(
-      storage_properties_dimensions_init(&props.video[0].storage.settings, 4));
-    auto* acq_dims = &props.video[0].storage.settings.acquisition_dimensions;
-
-    CHECK(storage_dimension_init(
-      acq_dims->data, SIZED("x") + 1, DimensionType_Space, 64, 32, 1));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 1, SIZED("y") + 1, DimensionType_Space, 48, 32, 1));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 2, SIZED("c") + 1, DimensionType_Channel, 1, 1, 1));
-    CHECK(storage_dimension_init(
-      acq_dims->data + 3, SIZED("t") + 1, DimensionType_Time, 0, 32, 1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           64,
+                                           32,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           48,
+                                           32,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           32,
+                                           1));
 
     props.video[0].max_frame_count = 10;
 
@@ -142,9 +139,6 @@ void
 validate(AcquireRuntime* runtime)
 {
     AcquireProperties props = { 0 };
-    props.video[0].storage.settings.acquisition_dimensions.init = init_array;
-    props.video[0].storage.settings.acquisition_dimensions.destroy =
-      destroy_array;
     OK(acquire_get_configuration(runtime, &props));
 
     const fs::path test_path(props.video[0].storage.settings.filename.str);
