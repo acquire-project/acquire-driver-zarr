@@ -9,7 +9,7 @@ namespace zarr = acquire::sink::zarr;
 namespace {
 /// @brief Get the shard index for a given chunk index.
 size_t
-shard_index(size_t chunk_id, const std::vector<zarr::Dimension>& dimensions)
+shard_index(size_t chunk_idx, const std::vector<zarr::Dimension>& dimensions)
 {
     // make chunk strides
     std::vector<size_t> chunk_strides(1, 1);
@@ -23,10 +23,10 @@ shard_index(size_t chunk_id, const std::vector<zarr::Dimension>& dimensions)
     // get chunk indices
     std::vector<size_t> chunk_lattice_indices;
     for (auto i = 0; i < dimensions.size() - 1; ++i) {
-        chunk_lattice_indices.push_back(chunk_id % chunk_strides.at(i + 1) /
+        chunk_lattice_indices.push_back(chunk_idx % chunk_strides.at(i + 1) /
                                         chunk_strides.at(i));
     }
-    chunk_lattice_indices.push_back(chunk_id / chunk_strides.back());
+    chunk_lattice_indices.push_back(chunk_idx / chunk_strides.back());
 
     // make shard strides
     std::vector<size_t> shard_strides(1, 1);
@@ -49,14 +49,70 @@ shard_index(size_t chunk_id, const std::vector<zarr::Dimension>& dimensions)
 
     return index;
 }
+
+/// @brief Get the index for a chunk within a shard.
+size_t
+shard_internal_index(size_t chunk_idx,
+                     const std::vector<zarr::Dimension>& dimensions)
+{
+    // make chunk strides
+    std::vector<size_t> chunk_strides(1, 1);
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        const auto& dim = dimensions.at(i);
+        chunk_strides.push_back(chunk_strides.back() *
+                                zarr::common::chunks_along_dimension(dim));
+        CHECK(chunk_strides.back());
+    }
+
+    // get chunk indices
+    std::vector<size_t> chunk_lattice_indices;
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        chunk_lattice_indices.push_back(chunk_idx % chunk_strides.at(i + 1) /
+                                        chunk_strides.at(i));
+    }
+    chunk_lattice_indices.push_back(chunk_idx / chunk_strides.back());
+
+    // make shard lattice indices
+    std::vector<size_t> shard_lattice_indices;
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        shard_lattice_indices.push_back(chunk_lattice_indices.at(i) /
+                                        dimensions.at(i).shard_size_chunks);
+    }
+
+    std::vector<size_t> chunk_internal_strides(1, 1);
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        const auto& dim = dimensions.at(i);
+        chunk_internal_strides.push_back(chunk_internal_strides.back() *
+                                         dim.shard_size_chunks);
+    }
+
+    size_t index = 0;
+
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        index +=
+          (chunk_lattice_indices.at(i) % dimensions.at(i).shard_size_chunks) *
+          chunk_internal_strides.at(i);
+    }
+
+    return index;
+}
 } // namespace
 
 zarr::ZarrV3Writer::ZarrV3Writer(
   const ArrayConfig& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(array_spec, thread_pool)
-  , chunk_indices_{ common::number_of_shards(array_spec.dimensions) }
+  , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
+  , shard_tables_{ common::number_of_shards(array_spec.dimensions) }
 {
+    const auto chunks_per_shard =
+      common::chunks_per_shard(array_spec.dimensions);
+
+    for (auto& table : shard_tables_) {
+        table.resize(2 * chunks_per_shard);
+        std::fill_n(
+          table.begin(), table.size(), std::numeric_limits<uint64_t>::max());
+    }
 }
 
 bool
@@ -81,52 +137,50 @@ zarr::ZarrV3Writer::flush_impl_()
     }
 
     // write out chunks to shards
-    bool write_indices = is_finalizing_ || should_rollover_();
+    bool write_table = is_finalizing_ || should_rollover_();
     std::latch latch(n_shards);
     for (auto i = 0; i < n_shards; ++i) {
-        auto& chunk_indices = chunk_indices_.at(i);
+        const auto& chunks = chunk_in_shards.at(i);
+        auto& chunk_table = shard_tables_.at(i);
+        size_t* file_offset = &shard_file_offsets_.at(i);
 
         thread_pool_->push_to_job_queue([fh = &files_.at(i),
-                                         chunks = &chunk_in_shards.at(i),
-                                         chunk_indices = &chunk_indices_.at(i),
-                                         write_indices,
+                                         &chunks,
+                                         &chunk_table,
+                                         file_offset,
+                                         write_table,
                                          &latch,
                                          this](std::string& err) mutable {
             bool success = false;
 
-            size_t file_offset = 0;
-            if (chunk_indices->size() > 1) {
-                const auto index = chunk_indices->at(chunk_indices->size() - 2);
-                const auto extent = chunk_indices->back();
-                file_offset = index + extent;
-            }
-
             try {
-                for (const auto& chunk_idx : *chunks) {
+                for (const auto& chunk_idx : chunks) {
                     auto& chunk = chunk_buffers_.at(chunk_idx);
 
                     success = file_write(fh,
-                                         file_offset,
+                                         *file_offset,
                                          chunk.data(),
                                          chunk.data() + chunk.size());
                     if (!success) {
                         break;
                     }
 
-                    chunk_indices->push_back(file_offset);
-                    chunk_indices->push_back(chunk.size());
+                    const auto internal_idx =
+                      shard_internal_index(chunk_idx, config_.dimensions);
+                    chunk_table.at(2 * internal_idx) = *file_offset;
+                    chunk_table.at(2 * internal_idx + 1) = chunk.size();
 
-                    file_offset += chunk.size();
+                    *file_offset += chunk.size();
                 }
 
-                if (success && write_indices) {
-                    const auto* indices =
-                      reinterpret_cast<const uint8_t*>(chunk_indices->data());
-                    success = file_write(fh,
-                                         file_offset,
-                                         indices,
-                                         indices + chunk_indices->size() *
-                                                     sizeof(uint64_t));
+                if (success && write_table) {
+                    const auto* table =
+                      reinterpret_cast<const uint8_t*>(chunk_table.data());
+                    success =
+                      file_write(fh,
+                                 *file_offset,
+                                 table,
+                                 table + chunk_table.size() * sizeof(uint64_t));
                 }
             } catch (const std::exception& exc) {
                 char buf[128];
@@ -145,11 +199,15 @@ zarr::ZarrV3Writer::flush_impl_()
     // wait for all threads to finish
     latch.wait();
 
-    // cleanup chunk indices
-    if (write_indices) {
-        for (auto i = 0; i < n_shards; ++i) {
-            chunk_indices_.at(i).clear();
+    // reset shard tables and file offsets
+    if (write_table) {
+        for (auto& table : shard_tables_) {
+            std::fill_n(table.begin(),
+                        table.size(),
+                        std::numeric_limits<uint64_t>::max());
         }
+
+        std::fill_n(shard_file_offsets_.begin(), shard_file_offsets_.size(), 0);
     }
 
     return true;
@@ -356,6 +414,73 @@ extern "C"
             CHECK(shard_index(142, dims) == 17);
             CHECK(shard_index(143, dims) == 17);
 
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        return retval;
+    }
+
+    acquire_export int unit_test__shard_internal_index()
+    {
+        int retval = 0;
+
+        std::vector<zarr::Dimension> dims;
+        dims.emplace_back("x",
+                          DimensionType_Space,
+                          1080,
+                          270, // 4 chunks
+                          3);  // 2 ragged shards
+        dims.emplace_back("y",
+                          DimensionType_Space,
+                          960,
+                          320, // 3 chunks
+                          2);  // 2 ragged shards
+        dims.emplace_back("t",
+                          DimensionType_Time,
+                          0,
+                          32, // 32 timepoints / chunk
+                          1); // 1 shard
+
+        try {
+            CHECK(shard_index(0, dims) == 0);
+            CHECK(shard_internal_index(0, dims) == 0);
+
+            CHECK(shard_index(1, dims) == 0);
+            CHECK(shard_internal_index(1, dims) == 1);
+
+            CHECK(shard_index(2, dims) == 0);
+            CHECK(shard_internal_index(2, dims) == 2);
+
+            CHECK(shard_index(3, dims) == 1);
+            CHECK(shard_internal_index(3, dims) == 0);
+
+            CHECK(shard_index(4, dims) == 0);
+            CHECK(shard_internal_index(4, dims) == 3);
+
+            CHECK(shard_index(5, dims) == 0);
+            CHECK(shard_internal_index(5, dims) == 4);
+
+            CHECK(shard_index(6, dims) == 0);
+            CHECK(shard_internal_index(6, dims) == 5);
+
+            CHECK(shard_index(7, dims) == 1);
+            CHECK(shard_internal_index(7, dims) == 3);
+
+            CHECK(shard_index(8, dims) == 2);
+            CHECK(shard_internal_index(8, dims) == 0);
+
+            CHECK(shard_index(9, dims) == 2);
+            CHECK(shard_internal_index(9, dims) == 1);
+
+            CHECK(shard_index(10, dims) == 2);
+            CHECK(shard_internal_index(10, dims) == 2);
+
+            CHECK(shard_index(11, dims) == 3);
+            CHECK(shard_internal_index(11, dims) == 0);
             retval = 1;
         } catch (const std::exception& exc) {
             LOGE("Exception: %s\n", exc.what());
