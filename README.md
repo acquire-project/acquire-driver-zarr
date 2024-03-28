@@ -65,36 +65,12 @@ struct storage_properties_dimensions_s
 
     // The number of dimensions in the output array.
     size_t size;
-
-    // Allocate storage for the dimensions.
-    void (*init)(struct StorageDimension**, size_t);
-
-    // Free storage for the dimensions.
-    void (*destroy)(struct StorageDimension*);
 };
 ```
 
-Observe that this struct contains a pointer to a `struct StorageDimension` array, as well as a `size_t` field `size`,
-and function pointers for initializing and destroying the array.
-In general, you will need to set the function pointers yourself, but once you have done so, you can initialize and
-destroy the array with the following helper functions, defined in `device/props/storage.h`:
+Observe that this struct contains a pointer to a `struct StorageDimension` array, as well as a `size_t` field `size`.
 
-```c
-/// @brief Initialize the acquisition_dimensions array in `self`.
-/// @param[out] self The StorageProperties struct containing the array to
-///                  initialize.
-/// @param[in] size The number of dimensions to allocate.
-/// @returns 1 on success, otherwise 0
-int storage_properties_dimensions_init(struct StorageProperties* self, size_t size);
-
-/// @brief Free the acquisition_dimensions array in `self`.
-/// @param[out] self The StorageProperties struct containing the array to
-///                  destroy.
-/// @returns 1 on success, otherwise 0
-int storage_properties_dimensions_destroy(struct StorageProperties* self);
-```
-
-Now let's look at the `struct StorageDimension` array.
+Let's look at the `StorageDimension` struct.
 This struct has the following fields:
 
 ```c
@@ -131,12 +107,43 @@ be `DimensionType_Space`. The rest of the dimensions should match the order of a
 You can configure chunking and sharding for each dimension by setting the `chunk_size_px` and `shard_size_chunks`
 fields, respectively.
 
-There are helper functions that can be used to initialize, copy, and destroy the storage dimensions, given a
-pointer to a `StorageDimension` struct:
+In general, you should not manipulate this struct, or the array, directly.
+Instead, there are helper functions that can be used to initialize the array and set up each of the storage dimensions,
+given a pointer to the `StorageProperties` struct that contains them:
 
 ```c
-/// @brief Initialize the Dimension struct in `out`.
-/// @param[out] out The Dimension struct to initialize.
+/// Initializes StorageProperties, allocating string storage on the heap
+/// and filling out the struct fields.
+/// @returns 0 when `bytes_of_out` is not large enough, otherwise 1.
+/// @param[out] out The constructed StorageProperties object.
+/// @param[in] first_frame_id (unused; aiming for future file rollover
+/// support
+/// @param[in] filename A c-style null-terminated string. The file to create
+///                     for streaming.
+/// @param[in] bytes_of_filename Number of bytes in the `filename` buffer
+///                              including the terminating null.
+/// @param[in] metadata A c-style null-terminated string. Metadata string
+///                     to save along side the created file.
+/// @param[in] bytes_of_metadata Number of bytes in the `metadata` buffer
+///                              including the terminating null.
+/// @param[in] pixel_scale_um The pixel scale or size in microns.
+/// @param[in] dimension_count The number of dimensions in the storage
+/// array. Each of the @p dimension_count dimensions will be initialized
+/// to zero.
+int storage_properties_init(struct StorageProperties* out,
+                            uint32_t first_frame_id,
+                            const char* filename,
+                            size_t bytes_of_filename,
+                            const char* metadata,
+                            size_t bytes_of_metadata,
+                            struct PixelScale pixel_scale_um,
+                            uint8_t dimension_count);
+
+/// @brief Set the value of the StorageDimension struct at index `index` in
+/// `out`.
+/// @param[out] out The StorageProperties struct containing the
+/// StorageDimension array.
+/// @param[in] index The index of the dimension to set.
 /// @param[in] name The name of the dimension.
 /// @param[in] bytes_of_name The number of bytes in the name buffer.
 ///                          Should include the terminating NULL.
@@ -146,26 +153,18 @@ pointer to a `StorageDimension` struct:
 /// @param[in] shard_size_chunks The number of chunks in a shard along this
 ///                              dimension.
 /// @returns 1 on success, otherwise 0
-int storage_dimension_init(struct StorageDimension* out,
-                           const char* name,
-                           size_t bytes_of_name,
-                           enum DimensionType kind,
-                           uint32_t array_size_px,
-                           uint32_t chunk_size_px,
-                           uint32_t shard_size_chunks);
-
-/// @brief Copy the Dimension struct in `src` to `dst`.
-/// @param[out] dst The Dimension struct to copy to.
-/// @param[in] src The Dimension struct to copy from.
-/// @returns 1 on success, otherwise 0
-int storage_dimension_copy(struct StorageDimension* dst, const struct StorageDimension* src);
-
-/// @brief Destroy the Dimension struct in `self`.
-/// @param[out] self The Dimension struct to destroy.
-void storage_dimension_destroy(struct StorageDimension* self);
+int storage_properties_set_dimension(struct StorageProperties* out,
+                                     int index,
+                                     const char* name,
+                                     size_t bytes_of_name,
+                                     enum DimensionType kind,
+                                     uint32_t array_size_px,
+                                     uint32_t chunk_size_px,
+                                     uint32_t shard_size_chunks);
 ```
 
-You can find the implementations of all of these functions in the [acquire-common][] library.
+You will need to call `storage_properties_init()` _before_ calling `storage_properties_set_dimension()`.
+You can find the implementation of these functions in the [acquire-common][] library.
 
 #### Example
 
@@ -210,23 +209,6 @@ Suppose further that you wanted to aggregate each of these chunks into a single 
 Configuring your storage dimensions might look like this:
 
 ```cpp
-// provide functions to initialize and destroy the array
-namespace {
-void
-init_array(struct StorageDimension** data, size_t size)
-{
-    if (!*data) {
-        *data = new struct StorageDimension[size];
-    }
-}
-
-void
-destroy_array(struct StorageDimension* data)
-{
-    delete[] data;
-}
-} // end ::{anonymous} namespace
-
 struct StorageProperties props = { 0 };
 
 const char filename[] = "my_video.zarr";
@@ -238,20 +220,13 @@ storage_properties_init(&props,
                         strlen(filename) + 1,
                         (char*)external_metadata,
                         sizeof(external_metadata),
-                        sample_spacing_um);
-
-// initialize the dimensions array
-props.acquisition_dimensions.init = init_array;
-props.acquisition_dimensions.destroy = destroy_array;
-
-storage_properties_dimensions_init(&props, 4);
-
-// initialize each dimension in place
-struct storage_properties_dimensions_s* dims = &props.acquisition_dimensions;
+                        sample_spacing_um,
+                        4); // number of dimensions
 
 // width
-storage_dimension_init(
-  &dims->data[0],
+storage_properties_set_dimension(
+  &props,
+  0,
   "x", // name
   2,   // number of bytes in the name, including the null terminator
   DimensionType_Space, // type of the dimension
@@ -260,8 +235,9 @@ storage_dimension_init(
   4); // aggregate all 4 chunks into a shard along this dimension
 
 // height
-storage_dimension_init(
-  &dims->data[1],
+storage_properties_set_dimension(
+  &props,
+  1,
   "y", // name
   2,   // number of bytes in the name, including the null terminator
   DimensionType_Space, // type of the dimension
@@ -270,8 +246,9 @@ storage_dimension_init(
   4); // aggregate all 4 chunks into a shard along this dimension
 
 // channels
-storage_dimension_init(
-  &dims->data[2],
+storage_properties_set_dimension(
+  &props,
+  2
   "c", // name
   2,   // number of bytes in the name, including the null terminator
   DimensionType_Channel, // type of the dimension
@@ -280,8 +257,9 @@ storage_dimension_init(
   1); // one single-channel chunk per shard along this dimension
 
 // time
-storage_dimension_init(
-  &dims->data[3],
+storage_properties_set_dimension(
+  &props,
+  3,
   "t", // name
   2,   // number of bytes in the name, including the null terminator
   DimensionType_Time, // type of the dimension
