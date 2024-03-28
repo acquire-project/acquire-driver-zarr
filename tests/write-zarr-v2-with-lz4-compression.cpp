@@ -100,12 +100,37 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   (char*)external_metadata,
                                   sizeof(external_metadata),
-                                  sample_spacing_um));
+                                  sample_spacing_um,
+                                  4));
 
-    storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                          frame_width,
-                                          frame_height,
-                                          frames_per_chunk);
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           frame_width,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           frame_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           frames_per_chunk,
+                                           0));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -118,14 +143,13 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
-int
-main()
+void
+validate()
 {
-    auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
-
     CHECK(fs::is_directory(TEST ".zarr"));
 
     const auto external_metadata_path =
@@ -165,8 +189,26 @@ main()
     CHECK(fs::is_regular_file(chunk_file_path));
     ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
     ASSERT_GT(int, "%d", raw_chunk_size, fs::file_size(chunk_file_path));
+}
 
-    LOG("Done (OK)");
+int
+main()
+{
+    int retval = 1;
+    auto runtime = acquire_init(reporter);
+
+    try {
+        acquire(runtime, TEST ".zarr");
+        validate();
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
     acquire_shutdown(runtime);
-    return 0;
+    return retval;
 }

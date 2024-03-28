@@ -6,7 +6,33 @@
 #include <cmath>
 #include <thread>
 
-namespace common = acquire::sink::zarr::common;
+namespace zarr = acquire::sink::zarr;
+namespace common = zarr::common;
+
+zarr::Dimension::Dimension(const std::string& name,
+                           DimensionType kind,
+                           uint32_t array_size_px,
+                           uint32_t chunk_size_px,
+                           uint32_t shard_size_chunks)
+  : name{ name }
+  , kind{ kind }
+  , array_size_px{ array_size_px }
+  , chunk_size_px{ chunk_size_px }
+  , shard_size_chunks{ shard_size_chunks }
+{
+    EXPECT(kind < DimensionTypeCount, "Invalid dimension type.");
+    EXPECT(!name.empty(), "Dimension name cannot be empty.");
+}
+
+zarr::Dimension::Dimension(const StorageDimension& dim)
+  : Dimension(dim.name.str,
+              dim.kind,
+              dim.array_size_px,
+              dim.chunk_size_px,
+              dim.shard_size_chunks)
+{
+}
+
 common::ThreadPool::ThreadPool(size_t n_threads,
                                std::function<void(const std::string&)> err)
   : error_handler_{ err }
@@ -107,30 +133,69 @@ common::ThreadPool::thread_worker_()
 }
 
 size_t
-common::bytes_per_tile(const ImageDims& tile_shape, const SampleType& type)
+common::chunks_along_dimension(const Dimension& dimension)
 {
-    return bytes_of_type(type) * tile_shape.rows * tile_shape.cols;
+    EXPECT(dimension.chunk_size_px > 0, "Invalid chunk_size size.");
+
+    return (dimension.array_size_px + dimension.chunk_size_px - 1) /
+           dimension.chunk_size_px;
 }
 
 size_t
-common::frames_per_chunk(const ImageDims& tile_shape,
-                         SampleType type,
-                         uint64_t max_bytes_per_chunk)
+common::shards_along_dimension(const Dimension& dimension)
 {
-    auto bpt = (float)bytes_per_tile(tile_shape, type);
-    if (0 == bpt)
+    if (dimension.shard_size_chunks == 0) {
         return 0;
+    }
 
-    return (size_t)std::floor((float)max_bytes_per_chunk / bpt);
+    // shard_size_chunks evenly divides the number of chunks
+    return chunks_along_dimension(dimension) / dimension.shard_size_chunks;
 }
 
 size_t
-common::bytes_per_chunk(const ImageDims& tile_shape,
-                        const SampleType& type,
-                        uint64_t max_bytes_per_chunk)
+common::number_of_chunks_in_memory(const std::vector<Dimension>& dimensions)
 {
-    return bytes_per_tile(tile_shape, type) *
-           frames_per_chunk(tile_shape, type, max_bytes_per_chunk);
+    size_t n_chunks = 1;
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        n_chunks *= chunks_along_dimension(dimensions[i]);
+    }
+
+    return n_chunks;
+}
+
+size_t
+common::number_of_shards(const std::vector<Dimension>& dimensions)
+{
+    size_t n_shards = 1;
+    for (auto i = 0; i < dimensions.size() - 1; ++i) {
+        const auto& dim = dimensions.at(i);
+        n_shards *= shards_along_dimension(dim);
+    }
+
+    return n_shards;
+}
+
+size_t
+common::chunks_per_shard(const std::vector<Dimension>& dimensions)
+{
+    size_t n_chunks = 1;
+    for (const auto& dim : dimensions) {
+        n_chunks *= dim.shard_size_chunks;
+    }
+
+    return n_chunks;
+}
+
+size_t
+common::bytes_per_chunk(const std::vector<Dimension>& dimensions,
+                        const SampleType& type)
+{
+    auto n_bytes = bytes_of_type(type);
+    for (const auto& d : dimensions) {
+        n_bytes *= d.chunk_size_px;
+    }
+
+    return n_bytes;
 }
 
 const char*

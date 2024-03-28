@@ -72,7 +72,7 @@ configure(AcquireRuntime* runtime)
     auto dm = acquire_device_manager(runtime);
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
-                                SIZED("simulated.*random.*"),
+                                SIZED("simulated.*random.*") - 1,
                                 &props.video[0].camera.identifier));
 
     props.video[0].camera.settings.binning = 1;
@@ -82,22 +82,50 @@ configure(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("ZarrV3"),
+                                SIZED("ZarrV3") - 1,
                                 &props.video[0].storage.identifier));
     CHECK(storage_properties_init(&props.video[0].storage.settings,
                                   0,
                                   SIZED(TEST ".zarr"),
                                   nullptr,
                                   0,
-                                  { 1, 1 }));
+                                  { 1, 1 },
+                                  4));
 
-    CHECK(storage_properties_set_chunking_props(
-      &props.video[0].storage.settings, 32, 32, 32));
-    CHECK(storage_properties_set_sharding_props(
-      &props.video[0].storage.settings, 2, 1, 1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           64,
+                                           32,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           48,
+                                           32,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           32,
+                                           1));
+
     props.video[0].max_frame_count = 10;
 
     OK(acquire_configure(runtime, &props));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 void
@@ -151,7 +179,7 @@ validate(AcquireRuntime* runtime)
     CHECK("regular" == chunk_grid["type"]);
 
     const auto chunk_shape = chunk_grid["chunk_shape"];
-    ASSERT_EQ(int, "%d", 10, chunk_shape[0]);
+    ASSERT_EQ(int, "%d", 32, chunk_shape[0]);
     ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
     ASSERT_EQ(int, "%d", 32, chunk_shape[2]);
     ASSERT_EQ(int, "%d", 32, chunk_shape[3]);
@@ -173,7 +201,7 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(int, "%d", 1, cps[0]);
     ASSERT_EQ(int, "%d", 1, cps[1]);
     ASSERT_EQ(int, "%d", 1, cps[2]);
-    ASSERT_EQ(int, "%d", 2, cps[3]);
+    ASSERT_EQ(int, "%d", 1, cps[3]);
     const size_t chunks_per_shard = cps[0].get<size_t>() *
                                     cps[1].get<size_t>() *
                                     cps[2].get<size_t>() * cps[3].get<size_t>();
@@ -198,9 +226,9 @@ validate(AcquireRuntime* runtime)
 int
 main()
 {
+    int retval = 1;
     auto runtime = acquire_init(reporter);
 
-    int retval = 1;
     try {
         configure(runtime);
 
@@ -208,6 +236,7 @@ main()
             acquire(runtime);
             validate(runtime);
         }
+
         retval = 0;
         LOG("Done (OK)");
     } catch (const std::exception& e) {

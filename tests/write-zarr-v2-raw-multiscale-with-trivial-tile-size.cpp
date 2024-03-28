@@ -1,7 +1,5 @@
-/// @brief Test that an acquisition to Zarr with multiscale enabled writes
-/// multiple layers to the Zarr group, that the layers are the correct size,
-/// that they are chunked accordingly, and that the metadata is written
-/// correctly.
+/// @brief Test that an acquisition to Zarr with multiscale enabled and trivial
+/// chunk sizes will downsample exactly one time.
 
 #include <filesystem>
 #include <fstream>
@@ -78,12 +76,7 @@ reporter(int is_error,
 
 const static uint32_t frame_width = 240;
 const static uint32_t frame_height = 135;
-
-const static uint32_t chunk_width = frame_width / 3;
-const static uint32_t chunk_height = frame_height / 3;
 const static uint32_t chunk_planes = 128;
-
-const static auto max_frames = 100;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -113,13 +106,37 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   (char*)external_metadata,
                                   sizeof(external_metadata),
-                                  sample_spacing_um));
+                                  sample_spacing_um,
+                                  4));
 
-    CHECK(
-      storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            chunk_width,
-                                            chunk_height,
-                                            chunk_planes));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           frame_width,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           frame_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           chunk_planes,
+                                           0));
 
     CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));
@@ -128,11 +145,13 @@ acquire(AcquireRuntime* runtime, const char* filename)
     props.video[0].camera.settings.pixel_type = SampleType_u8;
     props.video[0].camera.settings.shape = { .x = frame_width,
                                              .y = frame_height };
-    props.video[0].max_frame_count = max_frames;
+    props.video[0].max_frame_count = chunk_planes;
 
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 struct LayerTestCase
@@ -217,12 +236,9 @@ verify_layer(const LayerTestCase& test_case)
     CHECK(!fs::is_regular_file(missing_path));
 }
 
-int
-main()
+void
+validate()
 {
-    auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
-
     CHECK(fs::is_directory(TEST ".zarr"));
 
     const auto external_metadata_path =
@@ -239,9 +255,27 @@ main()
     json group_zattrs = json::parse(f);
 
     const auto multiscales = group_zattrs["multiscales"][0];
+
+    const auto& axes = multiscales["axes"];
+    ASSERT_EQ(int, "%d", 4, axes.size());
+
+    ASSERT_STREQ("t", axes[0]["name"]);
+    ASSERT_STREQ("time", axes[0]["type"]);
+
+    ASSERT_STREQ("c", axes[1]["name"]);
+    ASSERT_STREQ("channel", axes[1]["type"]);
+
+    ASSERT_STREQ("y", axes[2]["name"]);
+    ASSERT_STREQ("space", axes[2]["type"]);
+    ASSERT_STREQ("micrometer", axes[2]["unit"]);
+
+    ASSERT_STREQ("x", axes[3]["name"]);
+    ASSERT_STREQ("space", axes[3]["type"]);
+    ASSERT_STREQ("micrometer", axes[3]["unit"]);
+
     const auto& datasets = multiscales["datasets"];
-    ASSERT_EQ(int, "%d", 3, datasets.size());
-    for (auto i = 0; i < 3; ++i) {
+    ASSERT_EQ(int, "%d", 2, datasets.size());
+    for (auto i = 0; i < 2; ++i) {
         const auto& dataset = datasets.at(i);
         ASSERT_STREQ(std::to_string(i), dataset["path"]);
 
@@ -258,14 +292,31 @@ main()
     ASSERT_STREQ(multiscales["type"], "local_mean");
 
     // verify each layer
-    verify_layer({ 0, 240, 135, 80, 45, 100, 100 });
-    verify_layer({ 1, 120, 68, 80, 45, 50, 50 }); // padding here
-    verify_layer({ 2, 60, 34, 60, 34, 25, 25 });
+    verify_layer({ 0, 240, 135, 240, 135, 128, 128 });
+    verify_layer({ 1, 120, 68, 120, 68, 64, 128 });
 
-    auto missing_path = fs::path(TEST ".zarr/3");
+    auto missing_path = fs::path(TEST ".zarr/2");
     CHECK(!fs::exists(missing_path));
+}
 
-    LOG("Done (OK)");
+int
+main()
+{
+    int retval = 1;
+    auto runtime = acquire_init(reporter);
+
+    try {
+        acquire(runtime, TEST ".zarr");
+        validate();
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
     acquire_shutdown(runtime);
-    return 0;
+    return retval;
 }

@@ -3,10 +3,23 @@
 #include "writers/zarrv2.writer.hh"
 #include "json.hpp"
 
+#include <tuple> // std::ignore
+
 namespace zarr = acquire::sink::zarr;
+namespace common = zarr::common;
 using json = nlohmann::json;
 
 namespace {
+/// \brief Get the filename from a StorageProperties as fs::path.
+/// \param props StorageProperties for the Zarr Storage device.
+/// \return fs::path representation of the Zarr data directory.
+fs::path
+as_path(const StorageProperties& props)
+{
+    return { props.filename.str,
+             props.filename.str + props.filename.nbytes - 1 };
+}
+
 /// \brief Check that the JSON string is valid. (Valid can mean empty.)
 /// \param str Putative JSON metadata string.
 /// \param nbytes Size of the JSON metadata char array
@@ -18,22 +31,12 @@ validate_json(const char* str, size_t nbytes)
         return;
     }
 
-    json::parse(str,
-                str + nbytes,
-                nullptr, // callback
-                true,    // allow exceptions
-                true     // ignore comments
+    std::ignore = json::parse(str,
+                              str + nbytes,
+                              nullptr, // callback
+                              true,    // allow exceptions
+                              true     // ignore comments
     );
-}
-
-/// \brief Get the filename from a StorageProperties as fs::path.
-/// \param props StorageProperties for the Zarr Storage device.
-/// \return fs::path representation of the Zarr data directory.
-fs::path
-as_path(const StorageProperties& props)
-{
-    return { props.filename.str,
-             props.filename.str + props.filename.nbytes - 1 };
 }
 
 /// \brief Check that the StorageProperties are valid.
@@ -74,6 +77,134 @@ validate_props(const StorageProperties* props)
                          fs::perms::others_write)) != fs::perms::none,
                "Expected \"%s\" to have write permissions.",
                parent_path.c_str());
+    }
+}
+
+void
+validate_dimension(const zarr::Dimension& dim, bool is_append)
+{
+    if (!is_append) {
+        EXPECT(dim.array_size_px > 0, "Dimension array size must be positive.");
+        EXPECT(dim.chunk_size_px > 0, "Dimension chunk size must be positive.");
+
+        // The number of shards must evenly divide the number of chunks.
+        if (dim.shard_size_chunks > 0) {
+            const auto n_chunks = common::chunks_along_dimension(dim);
+            EXPECT(n_chunks % dim.shard_size_chunks == 0,
+                   "Dimension shard size must evenly divide the number of "
+                   "chunks.");
+        }
+    } else {
+        EXPECT(dim.array_size_px == 0,
+               "Append dimension array size must be 0.");
+        EXPECT(dim.chunk_size_px > 0,
+               "Append dimension chunk size must be "
+               "positive.");
+
+        // The number of shards must evenly divide the number of chunks. But
+        // because we don't know a priori how many chunks we will have in the
+        // append dimension, we can't a priori set the number of chunks per
+        // shard in such a way that the number of shards evenly divides the
+        // number of chunks, EXCEPT in the case where the shard size is 1.
+        if (dim.shard_size_chunks > 0) {
+            EXPECT(dim.shard_size_chunks == 1,
+                   "Append dimension shard size must be 1.");
+        }
+    }
+}
+
+[[nodiscard]] bool
+is_multiscale_supported(const std::vector<zarr::Dimension>& dims)
+{
+    // 0. Must have at least 3 dimensions.
+    if (dims.size() < 3) {
+        return false;
+    }
+
+    // 1. The first two dimensions must be space dimensions.
+    if (dims.at(0).kind != DimensionType_Space ||
+        dims.at(1).kind != DimensionType_Space) {
+        return false;
+    }
+
+    // 2. Interior dimensions must have size 1
+    for (auto i = 2; i < dims.size() - 1; ++i) {
+        if (dims.at(i).array_size_px != 1) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+template<typename T>
+VideoFrame*
+scale_image(const VideoFrame* src)
+{
+    CHECK(src);
+    const int downscale = 2;
+    constexpr size_t bytes_of_type = sizeof(T);
+    const auto factor = 0.25f;
+
+    const auto width = src->shape.dims.width;
+    const auto w_pad = width + (width % downscale);
+
+    const auto height = src->shape.dims.height;
+    const auto h_pad = height + (height % downscale);
+
+    auto* dst = (VideoFrame*)malloc(sizeof(VideoFrame) +
+                                    w_pad * h_pad * factor * sizeof(T));
+    memcpy(dst, src, sizeof(VideoFrame));
+
+    dst->shape.dims.width = w_pad / downscale;
+    dst->shape.dims.height = h_pad / downscale;
+    dst->shape.strides.height =
+      dst->shape.strides.width * dst->shape.dims.width;
+    dst->shape.strides.planes =
+      dst->shape.strides.height * dst->shape.dims.height;
+
+    dst->bytes_of_frame =
+      dst->shape.dims.planes * dst->shape.strides.planes * sizeof(T) +
+      sizeof(*dst);
+
+    const auto* src_img = (T*)src->data;
+    auto* dst_img = (T*)dst->data;
+    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
+
+    size_t dst_idx = 0;
+    for (auto row = 0; row < height; row += downscale) {
+        const bool pad_height = (row == height - 1 && height != h_pad);
+
+        for (auto col = 0; col < width; col += downscale) {
+            const bool pad_width = (col == width - 1 && width != w_pad);
+
+            size_t idx = row * width + col;
+            dst_img[dst_idx++] =
+              (T)(factor *
+                  ((float)src_img[idx] +
+                   (float)src_img[idx + (1 - (int)pad_width)] +
+                   (float)src_img[idx + width * (1 - (int)pad_height)] +
+                   (float)src_img[idx + width * (1 - (int)pad_height) +
+                                  (1 - (int)pad_width)]));
+        }
+    }
+
+    return dst;
+}
+
+/// @brief Average both `dst` and `src` into `dst`.
+template<typename T>
+void
+average_two_frames(VideoFrame* dst, const VideoFrame* src)
+{
+    CHECK(dst);
+    CHECK(src);
+    CHECK(dst->bytes_of_frame == src->bytes_of_frame);
+
+    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
+    const auto num_pixels = bytes_of_image / sizeof(T);
+    for (auto i = 0; i < num_pixels; ++i) {
+        dst->data[i] = (T)(0.5f * ((float)dst->data[i] + (float)src->data[i]));
     }
 }
 
@@ -210,108 +341,6 @@ zarr_reserve_image_shape(Storage* self_, const ImageShape* shape) noexcept
         LOGE("Exception: (unknown)");
     }
 }
-
-void
-make_scales(std::vector<std::pair<zarr::ImageDims, zarr::ImageDims>>& shapes)
-{
-    CHECK(shapes.size() == 1);
-    const auto base_image_shape = shapes.at(0).first;
-    const auto base_tile_shape = shapes.at(0).second;
-
-    const int downscale = 2;
-
-    uint32_t w = base_image_shape.cols;
-    uint32_t h = base_image_shape.rows;
-
-    while (w > base_tile_shape.cols || h > base_tile_shape.rows) {
-        w = (w + (w % downscale)) / downscale;
-        h = (h + (h % downscale)) / downscale;
-
-        zarr::ImageDims im_shape = base_image_shape;
-        im_shape.cols = w;
-        im_shape.rows = h;
-
-        zarr::ImageDims tile_shape = base_tile_shape;
-        if (tile_shape.cols > w)
-            tile_shape.cols = w;
-
-        if (tile_shape.rows > h)
-            tile_shape.rows = h;
-
-        shapes.emplace_back(im_shape, tile_shape);
-    }
-}
-
-template<typename T>
-VideoFrame*
-scale_image(const VideoFrame* src)
-{
-    CHECK(src);
-    const int downscale = 2;
-    constexpr size_t bytes_of_type = sizeof(T);
-    const auto factor = 0.25f;
-
-    const auto width = src->shape.dims.width;
-    const auto w_pad = width + (width % downscale);
-
-    const auto height = src->shape.dims.height;
-    const auto h_pad = height + (height % downscale);
-
-    auto* dst = (VideoFrame*)malloc(sizeof(VideoFrame) +
-                                    w_pad * h_pad * factor * sizeof(T));
-    memcpy(dst, src, sizeof(VideoFrame));
-
-    dst->shape.dims.width = w_pad / downscale;
-    dst->shape.dims.height = h_pad / downscale;
-    dst->shape.strides.height =
-      dst->shape.strides.width * dst->shape.dims.width;
-    dst->shape.strides.planes =
-      dst->shape.strides.height * dst->shape.dims.height;
-
-    dst->bytes_of_frame =
-      dst->shape.dims.planes * dst->shape.strides.planes * sizeof(T) +
-      sizeof(*dst);
-
-    const auto* src_img = (T*)src->data;
-    auto* dst_img = (T*)dst->data;
-    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
-
-    size_t dst_idx = 0;
-    for (auto row = 0; row < height; row += downscale) {
-        const bool pad_height = (row == height - 1 && height != h_pad);
-
-        for (auto col = 0; col < width; col += downscale) {
-            const bool pad_width = (col == width - 1 && width != w_pad);
-
-            size_t idx = row * width + col;
-            dst_img[dst_idx++] =
-              (T)(factor *
-                  ((float)src_img[idx] +
-                   (float)src_img[idx + (1 - (int)pad_width)] +
-                   (float)src_img[idx + width * (1 - (int)pad_height)] +
-                   (float)src_img[idx + width * (1 - (int)pad_height) +
-                                  (1 - (int)pad_width)]));
-        }
-    }
-
-    return dst;
-}
-
-/// @brief Average both `dst` and `src` into `dst`.
-template<typename T>
-void
-average_two_frames(VideoFrame* dst, const VideoFrame* src)
-{
-    CHECK(dst);
-    CHECK(src);
-    CHECK(dst->bytes_of_frame == src->bytes_of_frame);
-
-    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
-    const auto num_pixels = bytes_of_image / sizeof(T);
-    for (auto i = 0; i < num_pixels; ++i) {
-        dst->data[i] = (T)(((float)dst->data[i] + (float)src->data[i]) / 2.0f);
-    }
-}
 } // end ::{anonymous} namespace
 
 void
@@ -334,74 +363,67 @@ zarr::Zarr::set(const StorageProperties* props)
 
     pixel_scale_um_ = props->pixel_scale_um;
 
-    // chunking
-    image_tile_shapes_.clear();
-    image_tile_shapes_.emplace_back();
+    set_dimensions_(props);
 
-    set_chunking(props->chunk_dims_px, meta.chunk_dims_px);
-
-    if (props->enable_multiscale && !meta.multiscale.is_supported) {
+    if (props->enable_multiscale && !meta.multiscale_is_supported) {
         // TODO (aliddell): https://github.com/ome/ngff/pull/206
         LOGE("OME-Zarr multiscale not yet supported in Zarr v3. "
              "Multiscale arrays will not be written.");
     }
-    enable_multiscale_ =
-      meta.multiscale.is_supported && props->enable_multiscale;
+    enable_multiscale_ = meta.multiscale_is_supported &&
+                         props->enable_multiscale &&
+                         is_multiscale_supported(acquisition_dimensions_);
 }
 
 void
 zarr::Zarr::get(StorageProperties* props) const
 {
-    if (const auto dataset_root = dataset_root_.string();
-        !dataset_root.empty()) {
-        CHECK(storage_properties_set_filename(
-          props, dataset_root.c_str(), dataset_root.size() + 1));
-    }
-    if (!external_metadata_json_.empty()) {
-        CHECK(storage_properties_set_external_metadata(
-          props,
-          external_metadata_json_.c_str(),
-          external_metadata_json_.size() + 1));
-        props->pixel_scale_um = pixel_scale_um_;
+    CHECK(props);
+    storage_properties_destroy(props);
+
+    const std::string dataset_root = dataset_root_.string();
+    const char* filename =
+      dataset_root.empty() ? nullptr : dataset_root.c_str();
+    const size_t bytes_of_filename = filename ? dataset_root.size() + 1 : 0;
+
+    const char* metadata = external_metadata_json_.empty()
+                             ? nullptr
+                             : external_metadata_json_.c_str();
+    const size_t bytes_of_metadata =
+      metadata ? external_metadata_json_.size() + 1 : 0;
+
+    CHECK(storage_properties_init(props,
+                                  0,
+                                  filename,
+                                  bytes_of_filename,
+                                  metadata,
+                                  bytes_of_metadata,
+                                  pixel_scale_um_,
+                                  acquisition_dimensions_.size()));
+
+    for (auto i = 0; i < acquisition_dimensions_.size(); ++i) {
+        const auto dim = acquisition_dimensions_.at(i);
+        CHECK(storage_properties_set_dimension(props,
+                                               i,
+                                               dim.name.c_str(),
+                                               dim.name.length() + 1,
+                                               dim.kind,
+                                               dim.array_size_px,
+                                               dim.chunk_size_px,
+                                               dim.shard_size_chunks));
     }
 
-    if (!image_tile_shapes_.empty()) {
-        props->chunk_dims_px.width = image_tile_shapes_.at(0).second.cols;
-        props->chunk_dims_px.height = image_tile_shapes_.at(0).second.rows;
-    }
-    props->chunk_dims_px.planes = planes_per_chunk_;
-
-    props->enable_multiscale = enable_multiscale_;
+    storage_properties_set_enable_multiscale(props,
+                                             (uint8_t)enable_multiscale_);
 }
 
 void
 zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
 {
     CHECK(meta);
+    memset(meta, 0, sizeof(*meta));
 
-    *meta = {
-        .chunk_dims_px = {
-          .is_supported = 1,
-          .width = {
-            .writable = 1,
-            .low = 32.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-          .height = {
-            .writable = 1,
-            .low = 32.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-          .planes = {
-            .writable = 1,
-            .low = 32.f,
-            .high = (float)std::numeric_limits<uint16_t>::max(),
-            .type = PropertyType_FixedPrecision
-          },
-        },
-    };
+    meta->chunking_is_supported = 1;
 }
 
 void
@@ -517,52 +539,14 @@ zarr::Zarr::reserve_image_shape(const ImageShape* shape)
     // `shape` should be verified nonnull in storage_reserve_image_shape, but
     // let's check anyway
     CHECK(shape);
-    image_tile_shapes_.at(0).first = {
-        .cols = shape->dims.width,
-        .rows = shape->dims.height,
-    };
-    pixel_type_ = shape->type;
 
-    ImageDims& image_shape = image_tile_shapes_.at(0).first;
-    ImageDims& tile_shape = image_tile_shapes_.at(0).second;
+    // image shape should be compatible with first two acquisition dimensions
+    EXPECT(shape->dims.width == acquisition_dimensions_.at(0).array_size_px,
+           "Image width must match first acquisition dimension.");
+    EXPECT(shape->dims.height == acquisition_dimensions_.at(1).array_size_px,
+           "Image height must match second acquisition dimension.");
 
-    // ensure that tile dimensions are compatible with the image shape
-    {
-        StorageProperties props = { 0 };
-        get(&props);
-        uint32_t tile_width = props.chunk_dims_px.width;
-        if (image_shape.cols > 0 &&
-            (tile_width == 0 || tile_width > image_shape.cols)) {
-            LOGE("%s. Setting width to %u.",
-                 tile_width == 0 ? "Tile width not specified"
-                                 : "Specified tile width is too large",
-                 image_shape.cols);
-            tile_width = image_shape.cols;
-        }
-        tile_shape.cols = tile_width;
-
-        uint32_t tile_height = props.chunk_dims_px.height;
-        if (image_shape.rows > 0 &&
-            (tile_height == 0 || tile_height > image_shape.rows)) {
-            LOGE("%s. Setting height to %u.",
-                 tile_height == 0 ? "Tile height not specified"
-                                  : "Specified tile height is too large",
-                 image_shape.rows);
-            tile_height = image_shape.rows;
-        }
-        tile_shape.rows = tile_height;
-
-        storage_properties_destroy(&props);
-    }
-
-    if (enable_multiscale_) {
-        make_scales(image_tile_shapes_);
-    }
-
-    // multiscale
-    for (auto i = 1; i < image_tile_shapes_.size(); ++i) {
-        scaled_frames_.insert_or_assign(i, std::nullopt);
-    }
+    image_shape_ = *shape;
 }
 
 /// Zarr
@@ -583,7 +567,6 @@ zarr::Zarr::Zarr()
   , pixel_scale_um_{ 1, 1 }
   , planes_per_chunk_{ 0 }
   , enable_multiscale_{ false }
-  , pixel_type_{ SampleType_u8 }
   , error_{ false }
 {
 }
@@ -595,20 +578,17 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 }
 
 void
-zarr::Zarr::set_chunking(const ChunkingProps& props, const ChunkingMeta& meta)
+zarr::Zarr::set_dimensions_(const StorageProperties* props)
 {
-    // image shape is set *after* this is set so we verify it later
-    image_tile_shapes_.at(0).second = {
-        .cols = std::clamp(
-          props.width, (uint32_t)meta.width.low, (uint32_t)meta.width.high),
-        .rows = std::clamp(
-          props.height, (uint32_t)meta.height.low, (uint32_t)meta.height.high),
-    };
+    const auto dimension_count = props->acquisition_dimensions.size;
+    EXPECT(dimension_count > 2, "Expected at least 3 dimensions.");
 
-    planes_per_chunk_ = std::clamp(
-      props.planes, (uint32_t)meta.planes.low, (uint32_t)meta.planes.high);
+    for (auto i = 0; i < dimension_count; ++i) {
+        Dimension dim(props->acquisition_dimensions.data[i]);
+        validate_dimension(dim, i == dimension_count - 1);
 
-    CHECK(planes_per_chunk_ > 0);
+        acquisition_dimensions_.push_back(dim);
+    }
 }
 
 void
@@ -626,9 +606,7 @@ zarr::Zarr::set_error(const std::string& msg) noexcept
 void
 zarr::Zarr::write_all_array_metadata_() const
 {
-    namespace fs = std::filesystem;
-
-    for (auto i = 0; i < image_tile_shapes_.size(); ++i) {
+    for (auto i = 0; i < writers_.size(); ++i) {
         write_array_metadata_(i);
     }
 }
@@ -743,25 +721,23 @@ test_average_frame_inner(const SampleType& stype)
     free(dst);
 }
 
-extern "C"
+extern "C" acquire_export int
+unit_test__average_frame()
 {
-    acquire_export int unit_test__average_frame()
-    {
-        try {
-            test_average_frame_inner<uint8_t>(SampleType_u8);
-            test_average_frame_inner<int8_t>(SampleType_i8);
-            test_average_frame_inner<uint16_t>(SampleType_u16);
-            test_average_frame_inner<int16_t>(SampleType_i16);
-            test_average_frame_inner<float>(SampleType_f32);
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-            return 0;
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-            return 0;
-        }
-
-        return 1;
+    try {
+        test_average_frame_inner<uint8_t>(SampleType_u8);
+        test_average_frame_inner<int8_t>(SampleType_i8);
+        test_average_frame_inner<uint16_t>(SampleType_u16);
+        test_average_frame_inner<int16_t>(SampleType_i16);
+        test_average_frame_inner<float>(SampleType_f32);
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
+        return 0;
+    } catch (...) {
+        LOGE("Exception: (unknown)");
+        return 0;
     }
+
+    return 1;
 }
 #endif

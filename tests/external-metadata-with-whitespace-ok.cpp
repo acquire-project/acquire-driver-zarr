@@ -11,7 +11,6 @@
 
 #include <cstdio>
 #include <stdexcept>
-#include <iostream>
 
 void
 reporter(int is_error,
@@ -69,19 +68,58 @@ setup(AcquireRuntime* runtime)
                                 SIZED("Zarr") - 1,
                                 &props.video[0].storage.identifier));
 
-    CHECK(1 == storage_properties_init(
-                 &props.video[0].storage.settings,
-                 0,
-                 SIZED(TEST ".zarr"),
-                 SIZED(R"({"hello":"world"}  )"), // note trailing whitespace
-                 { 0 }));
+    CHECK(storage_properties_init(
+      &props.video[0].storage.settings,
+      0,
+      SIZED(TEST ".zarr"),
+      SIZED(R"({"hello":"world"}  )"), // note trailing whitespace
+      { 0 },
+      3 // we need at least 3 dimensions to validate settings
+      ));
+
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("z") + 1,
+                                           DimensionType_Space,
+                                           0,
+                                           1,
+                                           0));
+
     OK(acquire_configure(runtime, &props));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 int
 main()
 {
+    int retval = 1;
     auto runtime = acquire_init(reporter);
-    setup(runtime);
-    return 0;
+    try {
+        setup(runtime);
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
+    acquire_shutdown(runtime);
+    return retval;
 }

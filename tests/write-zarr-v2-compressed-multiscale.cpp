@@ -123,13 +123,37 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   (char*)external_metadata,
                                   sizeof(external_metadata),
-                                  sample_spacing_um));
+                                  sample_spacing_um,
+                                  4));
 
-    CHECK(
-      storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            chunk_width,
-                                            chunk_height,
-                                            chunk_planes));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           chunk_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           chunk_planes,
+                                           0));
 
     CHECK(storage_properties_set_enable_multiscale(
       &props.video[0].storage.settings, 1));
@@ -143,6 +167,8 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
 struct LayerTestCase
@@ -227,12 +253,9 @@ verify_layer(const LayerTestCase& test_case)
     CHECK(!fs::is_regular_file(missing_path));
 }
 
-int
-main()
+void
+validate()
 {
-    auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
-
     CHECK(fs::is_directory(TEST ".zarr"));
 
     const auto external_metadata_path =
@@ -269,15 +292,33 @@ main()
 
     // verify each layer
     verify_layer({ 0, 1920, 1080, 640, 360, 74, 72 });
-    verify_layer({ 1, 960, 540, 640, 360, 37, 37 });
+    verify_layer({ 1, 960, 540, 640, 360, 37, 72 });
     // rollover doesn't happen here since tile size is less than the specified
     // tile size
-    verify_layer({ 2, 480, 270, 480, 270, 18, 18 });
+    verify_layer({ 2, 480, 270, 480, 270, 18, 72 });
 
     auto missing_path = fs::path(TEST ".zarr/3");
     CHECK(!fs::exists(missing_path));
+}
 
-    LOG("Done (OK)");
+int
+main()
+{
+    int retval = 1;
+    AcquireRuntime* runtime = acquire_init(reporter);
+
+    try {
+        acquire(runtime, TEST ".zarr");
+        validate();
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
     acquire_shutdown(runtime);
-    return 0;
+    return retval;
 }

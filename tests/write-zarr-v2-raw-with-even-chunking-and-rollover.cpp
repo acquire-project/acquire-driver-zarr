@@ -1,12 +1,10 @@
-#include "acquire.h"
-#include "device/hal/device.manager.h"
-#include "platform.h"
-#include "logger.h"
-
-#include <cstring>
-#include <fstream>
 #include <filesystem>
+#include <fstream>
 #include <stdexcept>
+
+#include "device/hal/device.manager.h"
+#include "acquire.h"
+#include "logger.h"
 
 #include "json.hpp"
 
@@ -50,6 +48,7 @@ reporter(int is_error,
 #define DEVOK(e) CHECK(Device_Ok == (e))
 #define OK(e) CHECK(AcquireStatus_Ok == (e))
 
+/// Check that a==b
 /// example: `ASSERT_EQ(int,"%d",42,meaning_of_life())`
 #define ASSERT_EQ(T, fmt, a, b)                                                \
     do {                                                                       \
@@ -58,19 +57,12 @@ reporter(int is_error,
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
     } while (0)
 
-/// Check that a>b
-/// example: `ASSERT_GT(int,"%d",43,meaning_of_life())`
-#define ASSERT_GT(T, fmt, a, b)                                                \
-    do {                                                                       \
-        T a_ = (T)(a);                                                         \
-        T b_ = (T)(b);                                                         \
-        EXPECT(                                                                \
-          a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
-    } while (0)
+const static uint32_t frame_width = 1920;
+const static uint32_t frame_height = 1080;
 
-static const uint32_t frame_width = 64;
-static const uint32_t frame_height = 48;
-static const uint32_t frames_per_chunk = 64;
+const static uint32_t chunk_width = frame_width / 2;
+const static uint32_t chunk_height = frame_height / 2;
+const static uint32_t chunk_planes = 512;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -88,7 +80,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("ZarrBlosc1ZstdByteShuffle"),
+                                SIZED("Zarr"),
                                 &props.video[0].storage.identifier));
 
     const char external_metadata[] = R"({"hello":"world"})";
@@ -100,12 +92,37 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   (char*)external_metadata,
                                   sizeof(external_metadata),
-                                  sample_spacing_um));
+                                  sample_spacing_um,
+                                  4));
 
-    storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                          frame_width,
-                                          frame_height,
-                                          frames_per_chunk);
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           chunk_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           chunk_planes,
+                                           0));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -113,60 +130,105 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                              .y = frame_height };
     // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 1e4;
-    props.video[0].max_frame_count = frames_per_chunk;
+    // should trigger rollover
+    props.video[0].max_frame_count = chunk_planes + 1;
 
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
-int
-main()
+void
+validate()
 {
-    auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
-
     CHECK(fs::is_directory(TEST ".zarr"));
 
     const auto external_metadata_path =
       fs::path(TEST ".zarr") / "0" / ".zattrs";
     CHECK(fs::is_regular_file(external_metadata_path));
-    ASSERT_GT(int, "%d", fs::file_size(external_metadata_path), 0);
+    CHECK(fs::file_size(external_metadata_path) > 0);
 
     const auto group_zattrs_path = fs::path(TEST ".zarr") / ".zattrs";
     CHECK(fs::is_regular_file(group_zattrs_path));
-    ASSERT_GT(int, "%d", fs::file_size(group_zattrs_path), 0);
+    CHECK(fs::file_size(group_zattrs_path) > 0);
 
     const auto zarray_path = fs::path(TEST ".zarr") / "0" / ".zarray";
     CHECK(fs::is_regular_file(zarray_path));
-    ASSERT_GT(int, "%d", fs::file_size(zarray_path), 0);
+    CHECK(fs::file_size(zarray_path) > 0);
 
     // check metadata
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
 
     auto shape = zarray["shape"];
-    ASSERT_EQ(int, "%d", frames_per_chunk, shape[0]);
+    ASSERT_EQ(int, "%d", chunk_planes + 1, shape[0]);
     ASSERT_EQ(int, "%d", 1, shape[1]);
     ASSERT_EQ(int, "%d", frame_height, shape[2]);
     ASSERT_EQ(int, "%d", frame_width, shape[3]);
 
     auto chunks = zarray["chunks"];
-    ASSERT_EQ(int, "%d", frames_per_chunk, chunks[0]);
+    ASSERT_EQ(int, "%d", chunk_planes, chunks[0]);
     ASSERT_EQ(int, "%d", 1, chunks[1]);
-    ASSERT_EQ(int, "%d", frame_height, chunks[2]);
-    ASSERT_EQ(int, "%d", frame_width, chunks[3]);
+    ASSERT_EQ(int, "%d", chunk_height, chunks[2]);
+    ASSERT_EQ(int, "%d", chunk_width, chunks[3]);
 
     // check chunked data
-    auto raw_chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
-                          chunks[2].get<int>() * chunks[3].get<int>();
+    auto chunk_size = chunks[0].get<int>() * chunks[1].get<int>() *
+                      chunks[2].get<int>() * chunks[3].get<int>();
 
-    const auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
+    auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
     CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
-    ASSERT_GT(int, "%d", raw_chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
 
-    LOG("Done (OK)");
+    chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/1");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/0");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/1");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/0/0");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/0/1");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/1/0");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+
+    chunk_file_path = fs::path(TEST ".zarr/0/1/0/1/1");
+    CHECK(fs::is_regular_file(chunk_file_path));
+    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+}
+
+int
+main()
+{
+    int retval = 1;
+    auto runtime = acquire_init(reporter);
+
+    try {
+        acquire(runtime, TEST ".zarr");
+        validate();
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
     acquire_shutdown(runtime);
-    return 0;
+    return retval;
 }

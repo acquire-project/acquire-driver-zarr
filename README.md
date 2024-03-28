@@ -52,20 +52,124 @@ os.environ["ZARR_V3_SHARDING"] = "1"
 import zarr
 ```
 
-### Configuring chunking
+### Configuring the output array
 
-You can configure chunking by calling `storage_properties_set_chunking_props()` on your `StorageProperties` object
-_after_ calling `storage_properties_init()`.
-There are 3 parameters you can set to determine the chunk size, namely `chunk_width`, `chunk_height`,
-and `chunk_planes`:
+You will need to specify the shape of the output array when configuring your video stream.
+The `StorageProperties` object has a field `acquisition_dimensions`, which is defined like so:
 
 ```c
-int
-storage_properties_set_chunking_props(struct StorageProperties* out,
-                                      uint32_t chunk_width,
-                                      uint32_t chunk_height,
-                                      uint32_t chunk_planes)
+struct storage_properties_dimensions_s
+{
+    // The dimensions of the output array.
+    struct StorageDimension* data;
+
+    // The number of dimensions in the output array.
+    size_t size;
+
+    // Allocate storage for the dimensions.
+    void (*init)(struct StorageDimension**, size_t);
+
+    // Free storage for the dimensions.
+    void (*destroy)(struct StorageDimension*);
+};
 ```
+
+Observe that this struct contains a pointer to a `struct StorageDimension` array, as well as a `size_t` field `size`,
+and function pointers for initializing and destroying the array.
+In general, you will need to set the function pointers yourself, but once you have done so, you can initialize and
+destroy the array with the following helper functions, defined in `device/props/storage.h`:
+
+```c
+/// @brief Initialize the acquisition_dimensions array in `self`.
+/// @param[out] self The StorageProperties struct containing the array to
+///                  initialize.
+/// @param[in] size The number of dimensions to allocate.
+/// @returns 1 on success, otherwise 0
+int storage_properties_dimensions_init(struct StorageProperties* self, size_t size);
+
+/// @brief Free the acquisition_dimensions array in `self`.
+/// @param[out] self The StorageProperties struct containing the array to
+///                  destroy.
+/// @returns 1 on success, otherwise 0
+int storage_properties_dimensions_destroy(struct StorageProperties* self);
+```
+
+Now let's look at the `struct StorageDimension` array.
+This struct has the following fields:
+
+```c
+struct StorageDimension
+{
+    // the name of the dimension as it appears in the metadata, e.g.,
+    // "x", "y", "z", "c", "t"
+    struct String name;
+
+    // the type of dimension, e.g., spatial, channel, time
+    enum DimensionType kind;
+
+    // the expected size of the full output array along this dimension
+    uint32_t array_size_px;
+
+    // the size of a chunk along this dimension
+    uint32_t chunk_size_px;
+
+    // the number of chunks in a shard along this dimension
+    uint32_t shard_size_chunks;
+};
+```
+
+Each of your output dimensions should have a corresponding `StorageDimension` struct.
+The order of these dimensions matters: the first dimension in the array will be the fastest-varying dimension as you
+acquire.
+Then the next dimension will be the next-fastest varying, and so on.
+The last dimension will be the slowest-varying, i.e., the append dimension.
+
+The first two dimensions should represent the width and height of the frame, respectively.
+The `array_size_px` for these dimensions should match the width and height of the frame, and the `kind` field should
+be `DimensionType_Space`. The rest of the dimensions should match the order of acquisition.
+
+You can configure chunking and sharding for each dimension by setting the `chunk_size_px` and `shard_size_chunks`
+fields, respectively.
+
+There are helper functions that can be used to initialize, copy, and destroy the storage dimensions, given a
+pointer to a `StorageDimension` struct:
+
+```c
+/// @brief Initialize the Dimension struct in `out`.
+/// @param[out] out The Dimension struct to initialize.
+/// @param[in] name The name of the dimension.
+/// @param[in] bytes_of_name The number of bytes in the name buffer.
+///                          Should include the terminating NULL.
+/// @param[in] kind The type of dimension.
+/// @param[in] array_size_px The size of the array along this dimension.
+/// @param[in] chunk_size_px The size of a chunk along this dimension.
+/// @param[in] shard_size_chunks The number of chunks in a shard along this
+///                              dimension.
+/// @returns 1 on success, otherwise 0
+int storage_dimension_init(struct StorageDimension* out,
+                           const char* name,
+                           size_t bytes_of_name,
+                           enum DimensionType kind,
+                           uint32_t array_size_px,
+                           uint32_t chunk_size_px,
+                           uint32_t shard_size_chunks);
+
+/// @brief Copy the Dimension struct in `src` to `dst`.
+/// @param[out] dst The Dimension struct to copy to.
+/// @param[in] src The Dimension struct to copy from.
+/// @returns 1 on success, otherwise 0
+int storage_dimension_copy(struct StorageDimension* dst, const struct StorageDimension* src);
+
+/// @brief Destroy the Dimension struct in `self`.
+/// @param[out] self The Dimension struct to destroy.
+void storage_dimension_destroy(struct StorageDimension* self);
+```
+
+You can find the implementations of all of these functions in the [acquire-common][] library.
+
+#### Example
+
+Let's define some terms:
 
 | ![frames](https://github.com/aliddell/acquire-driver-zarr/assets/844464/3510d468-4751-4fa0-b2bf-0e29a5f3ea1c) |
 |:-------------------------------------------------------------------------------------------------------------:|
@@ -84,51 +188,107 @@ the same ROI in its respective frame.
 |:-------------------------------------------------------------------------------------------------------------:|
 |            A collection of frames, divided into tiles. A single chunk has been highlighted in red.            |
 
-You can specify the width and height, in pixels, of each tile.
-If any of these values are unset (equivalently, set to 0), or if they are set to a value larger than the frame size,
-the full value of the frame size along that dimension will be used instead.
-You should take care that the values you select won't result in tile sizes that are too small or too large for your
-application.
-You can also set the number of tile *planes* to concatenate into a chunk.
-If this value is unset (or set to 0), it will default to a prescribed minimum value of 32.
+A _shard_ is a collection of chunks within a single file or S3 bucket.
 
-#### Example
+| ![shards](https://user-images.githubusercontent.com/7216331/142424772-fa0b700a-8176-4663-a136-9807e64f7078.png) |
+|:---------------------------------------------------------------------------------------------------------------:|
+|                         Shards aggregate chunks within individual files or S3 buckets.                          |
 
-Suppose your frame size is 1920 x 1080, with a pixel type of unsigned 8-bit integer.
-You can use a tile size of 640 x 360, which will divide your frame evenly into 9 tiles.
-You want chunk sizes of at most 32 MiB and this works out to 32 * 2^20 / (640 * 360) = 145.63555555555556, so you select
-145 chunk planes.
-You would configure your storage properties as follows:
+Suppose you have a video stream with the following dimensions:
 
-```c
-storage_properties_set_chunking_props(&storage_props,
-                                      640,
-                                      360,
-                                      145);
+- Width: 1920 px
+- Height: 1080 px
+- Channels: 3
+- Time: 1000 frames (per channel)
+
+You want to divide your frames into 4 x 4 tiles of size 480 x 270, and you want each channel to be stored in separate
+chunks.
+You also want to aggregate 100 time points into a single chunk.
+You will end up with 4 x 4 = 16 chunks of size 480 x 270 x 1 x 100 for each channel, for a total of 48 chunks, for every
+100 time points.
+Suppose further that you wanted to aggregate each of these chunks into a single *shard*.
+Configuring your storage dimensions might look like this:
+
+```cpp
+// provide functions to initialize and destroy the array
+namespace {
+void
+init_array(struct StorageDimension** data, size_t size)
+{
+    if (!*data) {
+        *data = new struct StorageDimension[size];
+    }
+}
+
+void
+destroy_array(struct StorageDimension* data)
+{
+    delete[] data;
+}
+} // end ::{anonymous} namespace
+
+struct StorageProperties props = { 0 };
+
+const char filename[] = "my_video.zarr";
+const char external_metadata[] = R"({"my":"metadata"})";
+const struct PixelScale sample_spacing_um = { 1, 1 };
+storage_properties_init(&props,
+                        0, // first frame id
+                        (char*)filename,
+                        strlen(filename) + 1,
+                        (char*)external_metadata,
+                        sizeof(external_metadata),
+                        sample_spacing_um);
+
+// initialize the dimensions array
+props.acquisition_dimensions.init = init_array;
+props.acquisition_dimensions.destroy = destroy_array;
+
+storage_properties_dimensions_init(&props, 4);
+
+// initialize each dimension in place
+struct storage_properties_dimensions_s* dims = &props.acquisition_dimensions;
+
+// width
+storage_dimension_init(
+  &dims->data[0],
+  "x", // name
+  2,   // number of bytes in the name, including the null terminator
+  DimensionType_Space, // type of the dimension
+  1920,                // full size of the dimension
+  480,                 // number of pixels in a chunk
+  4); // aggregate all 4 chunks into a shard along this dimension
+
+// height
+storage_dimension_init(
+  &dims->data[1],
+  "y", // name
+  2,   // number of bytes in the name, including the null terminator
+  DimensionType_Space, // type of the dimension
+  1080,                // full size of the dimension
+  270,                 // number of pixels in a chunk
+  4); // aggregate all 4 chunks into a shard along this dimension
+
+// channels
+storage_dimension_init(
+  &dims->data[2],
+  "c", // name
+  2,   // number of bytes in the name, including the null terminator
+  DimensionType_Channel, // type of the dimension
+  3,                     // full size of the dimension
+  1,                     // number of pixels in a chunk (1 channel per chunk)
+  1); // one single-channel chunk per shard along this dimension
+
+// time
+storage_dimension_init(
+  &dims->data[3],
+  "t", // name
+  2,   // number of bytes in the name, including the null terminator
+  DimensionType_Time, // type of the dimension
+  0,   // append dimension; we don't know the full size a priori
+  100, // number of pixels in a chunk
+  1);  // one 100-timepoint chunk per shard along this dimension
 ```
-
-### Configuring sharding
-
-Configuring sharding is similar to configuring chunking.
-You can configure sharding by calling `storage_properties_set_sharding_props()` on your `StorageProperties` object
-_after_ calling `storage_properties_init()`.
-There are 3 parameters you can set to determine the shard size, namely `shard_width`, `shard_height`,
-and `shard_planes`.
-**Note:** whereas the unit for the width, height, and plane values when chunking is *pixels*, when sharding, the unit is
-*chunks*.
-So in the previous example, if you wanted combine all your chunks together into a single shard, you would set your shard
-properties like so:
-
-```c
-storage_properties_set_sharding_props(&storage_props,
-                                      3, // width: 1920 / 640
-                                      3, // height: 1080 / 360
-                                      1);
-```
-
-This would result in all 9 chunks being combined into a single shard.
-
-```c
 
 ### Compression
 
@@ -166,3 +326,5 @@ Then the sequence of levels will have dimensions 1920 x 1080, 960 x 540, 480 x 2
 [Blosc docs]: https://www.blosc.org/
 
 [Zarr v3]: https://zarr-specs.readthedocs.io/en/latest/v3/core/v3.0.html
+
+[acquire-common]: https://github.com/acquire-project/acquire-common

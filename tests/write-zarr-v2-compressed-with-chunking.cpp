@@ -48,6 +48,16 @@ reporter(int is_error,
 #define DEVOK(e) CHECK(Device_Ok == (e))
 #define OK(e) CHECK(AcquireStatus_Ok == (e))
 
+/// Check that a>b
+/// example: `ASSERT_GT(int,"%d",43,meaning_of_life())`
+#define ASSERT_GT(T, fmt, a, b)                                                \
+    do {                                                                       \
+        T a_ = (T)(a);                                                         \
+        T b_ = (T)(b);                                                         \
+        EXPECT(                                                                \
+          a_ > b_, "Expected (%s) > (%s) but " fmt "<=" fmt, #a, #b, a_, b_);  \
+    } while (0)
+
 /// Check that a==b
 /// example: `ASSERT_EQ(int,"%d",42,meaning_of_life())`
 #define ASSERT_EQ(T, fmt, a, b)                                                \
@@ -62,7 +72,7 @@ const static uint32_t frame_height = 1080;
 
 const static uint32_t chunk_width = frame_width / 2;
 const static uint32_t chunk_height = frame_height / 2;
-const static uint32_t chunk_planes = 128;
+const static uint32_t chunk_planes = 64;
 
 void
 acquire(AcquireRuntime* runtime, const char* filename)
@@ -80,7 +90,7 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                 &props.video[0].camera.identifier));
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("Zarr"),
+                                SIZED("ZarrBlosc1Lz4ByteShuffle"),
                                 &props.video[0].storage.identifier));
 
     const char external_metadata[] = R"({"hello":"world"})";
@@ -92,13 +102,37 @@ acquire(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   (char*)external_metadata,
                                   sizeof(external_metadata),
-                                  sample_spacing_um));
+                                  sample_spacing_um,
+                                  4));
 
-    CHECK(
-      storage_properties_set_chunking_props(&props.video[0].storage.settings,
-                                            chunk_width,
-                                            chunk_height,
-                                            chunk_planes));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           1,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           chunk_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("c") + 1,
+                                           DimensionType_Channel,
+                                           1,
+                                           1,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           3,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           chunk_planes,
+                                           0));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -111,14 +145,13 @@ acquire(AcquireRuntime* runtime, const char* filename)
     OK(acquire_configure(runtime, &props));
     OK(acquire_start(runtime));
     OK(acquire_stop(runtime));
+
+    storage_properties_destroy(&props.video[0].storage.settings);
 }
 
-int
-main()
+void
+validate()
 {
-    auto runtime = acquire_init(reporter);
-    acquire(runtime, TEST ".zarr");
-
     CHECK(fs::is_directory(TEST ".zarr"));
 
     const auto external_metadata_path =
@@ -156,25 +189,47 @@ main()
 
     auto chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/0");
     CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
 
     chunk_file_path = fs::path(TEST ".zarr/0/0/0/0/1");
     CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
 
     chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/0");
     CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
 
     chunk_file_path = fs::path(TEST ".zarr/0/0/0/1/1");
     CHECK(fs::is_regular_file(chunk_file_path));
-    ASSERT_EQ(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", chunk_size, fs::file_size(chunk_file_path));
+    ASSERT_GT(int, "%d", fs::file_size(chunk_file_path), 0);
 
     // check that there isn't a second (empty) chunk along the time dimension
     auto second_time_chunk_path = fs::path(TEST ".zarr/0/1");
     CHECK(!fs::exists(second_time_chunk_path));
+}
 
-    LOG("Done (OK)");
+int
+main()
+{
+    int retval = 1;
+    auto runtime = acquire_init(reporter);
+
+    try {
+        acquire(runtime, TEST ".zarr");
+        validate();
+
+        retval = 0;
+        LOG("Done (OK)");
+    } catch (const std::exception& exc) {
+        ERR("Exception: %s", exc.what());
+    } catch (...) {
+        ERR("Unknown exception");
+    }
+
     acquire_shutdown(runtime);
-    return 0;
+    return retval;
 }

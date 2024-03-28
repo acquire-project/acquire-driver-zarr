@@ -88,50 +88,89 @@ main()
                 storage = containerof(device, struct Storage, device);
 
                 struct StorageProperties props = { 0 };
-                storage_properties_init(&props,
-                                        13,
-                                        SIZED(TEST ".zarr"),
-                                        SIZED(R"({"foo":"bar"})"),
-                                        { 1, 1 });
-                props.chunk_dims_px = {
-                    .width = 64,
-                    .height = 48,
-                    .planes = 6,
-                };
-                props.shard_dims_chunks = {
-                    .width = 3,
-                    .height = 2,
-                    .planes = 1,
-                };
+
+                // unconfigured behavior
+                CHECK(storage_get(storage, &props) == Device_Ok);
+
+                CHECK(props.filename.str);
+                CHECK(strcmp(props.filename.str, "") == 0);
+                CHECK(props.filename.nbytes == 1);
+
+                CHECK(props.external_metadata_json.str);
+                CHECK(strcmp(props.external_metadata_json.str, "") == 0);
+                CHECK(props.external_metadata_json.nbytes == 1);
+
+                CHECK(props.first_frame_id == 0);
+
+                CHECK(props.pixel_scale_um.x == 1);
+                CHECK(props.pixel_scale_um.y == 1);
+
+                CHECK(props.acquisition_dimensions.size == 0);
+                CHECK(props.acquisition_dimensions.data == nullptr);
+
+                CHECK(props.enable_multiscale == 0);
+
+                CHECK(storage_properties_init(
+                  &props,
+                  13,
+                  SIZED(TEST ".zarr"),
+                  SIZED(R"({"foo":"bar"})"),
+                  { 1, 1 },
+                  3 // we need at least 3 dimensions to validate settings
+                  ));
+
+                CHECK(storage_properties_set_dimension(
+                  &props, 0, SIZED("x") + 1, DimensionType_Space, 64, 16, 2));
+                CHECK(storage_properties_set_dimension(
+                  &props, 1, SIZED("y") + 1, DimensionType_Space, 48, 16, 3));
+                CHECK(storage_properties_set_dimension(
+                  &props, 2, SIZED("z") + 1, DimensionType_Space, 0, 6, 1));
+
                 props.enable_multiscale = true;
 
+                // configure the storage device
                 CHECK(Device_Ok == storage_set(storage, &props));
-                props = { 0 };
-
                 CHECK(Device_Ok == storage_get(storage, &props));
 
                 CHECK(strcmp(props.filename.str, TEST ".zarr") == 0);
                 CHECK(strcmp(props.external_metadata_json.str,
                              R"({"foo":"bar"})") == 0);
 
+                CHECK(props.acquisition_dimensions.size == 3);
+                CHECK(props.acquisition_dimensions.data != nullptr);
+
+                CHECK(0 == strcmp(props.acquisition_dimensions.data[0].name.str,
+                                  "x"));
+                CHECK(DimensionType_Space ==
+                      props.acquisition_dimensions.data[0].kind);
+                CHECK(props.acquisition_dimensions.data[0].array_size_px == 64);
+                CHECK(props.acquisition_dimensions.data[0].chunk_size_px == 16);
+                CHECK(props.acquisition_dimensions.data[0].shard_size_chunks ==
+                      2);
+
+                CHECK(0 == strcmp(props.acquisition_dimensions.data[1].name.str,
+                                  "y"));
+                CHECK(DimensionType_Space ==
+                      props.acquisition_dimensions.data[1].kind);
+                CHECK(props.acquisition_dimensions.data[1].array_size_px == 48);
+                CHECK(props.acquisition_dimensions.data[1].chunk_size_px == 16);
+                CHECK(props.acquisition_dimensions.data[1].shard_size_chunks ==
+                      3);
+
+                CHECK(0 == strcmp(props.acquisition_dimensions.data[2].name.str,
+                                  "z"));
+                CHECK(DimensionType_Space ==
+                      props.acquisition_dimensions.data[2].kind);
+                CHECK(props.acquisition_dimensions.data[2].array_size_px == 0);
+                CHECK(props.acquisition_dimensions.data[2].chunk_size_px == 6);
+                CHECK(props.acquisition_dimensions.data[2].shard_size_chunks ==
+                      1);
+
                 CHECK(props.first_frame_id == 0); // this is ignored
 
-                CHECK(props.chunk_dims_px.width == 64);
-                CHECK(props.chunk_dims_px.height == 48);
-                // 32 is the minimum value for planes
-                CHECK(props.chunk_dims_px.planes == 32);
-
-                if (name.starts_with("ZarrV3")) {
-                    CHECK(props.shard_dims_chunks.width == 3);
-                    CHECK(props.shard_dims_chunks.height == 2);
-                    CHECK(props.shard_dims_chunks.planes == 1);
-                } else {
-                    CHECK(props.shard_dims_chunks.width == 0);
-                    CHECK(props.shard_dims_chunks.height == 0);
-                    CHECK(props.shard_dims_chunks.planes == 0);
-                }
-
                 CHECK(props.enable_multiscale == !name.starts_with("ZarrV3"));
+
+                storage_properties_destroy(&props);
 
                 CHECK(Device_Ok == driver_close_device(device));
             }
