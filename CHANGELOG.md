@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Chunk size may now exceed the array size along any dimension.
+- The number of chunks per shard along any dimension no longer needs to divide the total number of chunks along that
+  dimension.
 
 ## [0.1.9](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.8..v0.1.9) - 2024-01-11
 

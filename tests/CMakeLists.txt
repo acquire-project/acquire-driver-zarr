@@ -36,6 +36,8 @@ else ()
             write-zarr-v2-compressed-multiscale
             multiscales-metadata
             write-zarr-v3-raw
+            write-zarr-v3-raw-with-ragged-sharding
+            write-zarr-v3-raw-chunk-exceeds-array
             write-zarr-v3-compressed
     )
 
