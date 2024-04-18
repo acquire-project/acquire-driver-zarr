@@ -16,8 +16,15 @@ namespace {
 fs::path
 as_path(const StorageProperties& props)
 {
-    return { props.filename.str,
-             props.filename.str + props.filename.nbytes - 1 };
+    if (!props.uri.str) {
+        return {};
+    }
+
+    const size_t offset =
+      strlen(props.uri.str) > 7 && strcmp(props.uri.str, "file://") == 0 ? 7
+                                                                         : 0;
+    return { props.uri.str + offset,
+             props.uri.str + offset + props.uri.nbytes - (offset + 1) };
 }
 
 /// \brief Check that the JSON string is valid. (Valid can mean empty.)
@@ -47,18 +54,20 @@ validate_json(const char* str, size_t nbytes)
 void
 validate_props(const StorageProperties* props)
 {
-    EXPECT(props->filename.str, "Filename string is NULL.");
-    EXPECT(props->filename.nbytes, "Filename string is zero size.");
+    EXPECT(props->uri.str, "URI string is NULL.");
+    EXPECT(props->uri.nbytes, "URI string is zero size.");
 
     // check that JSON is correct (throw std::exception if not)
     validate_json(props->external_metadata_json.str,
                   props->external_metadata_json.nbytes);
 
-    // check that the filename value points to a writable directory
-    {
+    std::string uri{ props->uri.str, props->uri.nbytes - 1 };
+    EXPECT(!uri.starts_with("s3://"), "S3 URIs are not yet supported.");
 
-        auto path = as_path(*props);
-        auto parent_path = path.parent_path().string();
+    // check that the URI value points to a writable directory
+    {
+        const fs::path path = as_path(*props);
+        fs::path parent_path = path.parent_path().string();
         if (parent_path.empty())
             parent_path = ".";
 
@@ -335,6 +344,8 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // checks the directory exists and is writable
     validate_props(props);
+    // TODO (aliddell): we will eventually support S3 URIs,
+    //  dataset_root_ should be a string
     dataset_root_ = as_path(*props);
 
     if (props->external_metadata_json.str) {
@@ -362,9 +373,17 @@ zarr::Zarr::get(StorageProperties* props) const
     storage_properties_destroy(props);
 
     const std::string dataset_root = dataset_root_.string();
-    const char* filename =
-      dataset_root.empty() ? nullptr : dataset_root.c_str();
-    const size_t bytes_of_filename = filename ? dataset_root.size() + 1 : 0;
+    char* uri = nullptr;
+    if (!dataset_root_.empty()) {
+        fs::path dataset_root_abs = fs::absolute(dataset_root_);
+        CHECK(uri = (char*)malloc(dataset_root_abs.string().size() + 8));
+        snprintf(uri,
+                 dataset_root_abs.string().size() + 8,
+                 "file://%s",
+                 dataset_root_abs.string().c_str());
+    }
+
+    const size_t bytes_of_filename = uri ? strlen(uri) + 1 : 0;
 
     const char* metadata = external_metadata_json_.empty()
                              ? nullptr
@@ -374,7 +393,7 @@ zarr::Zarr::get(StorageProperties* props) const
 
     CHECK(storage_properties_init(props,
                                   0,
-                                  filename,
+                                  uri,
                                   bytes_of_filename,
                                   metadata,
                                   bytes_of_metadata,
@@ -395,6 +414,10 @@ zarr::Zarr::get(StorageProperties* props) const
 
     storage_properties_set_enable_multiscale(props,
                                              (uint8_t)enable_multiscale_);
+
+    if (uri) {
+        free(uri);
+    }
 }
 
 void

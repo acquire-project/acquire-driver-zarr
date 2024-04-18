@@ -92,9 +92,9 @@ main()
                 // unconfigured behavior
                 CHECK(storage_get(storage, &props) == Device_Ok);
 
-                CHECK(props.filename.str);
-                CHECK(strcmp(props.filename.str, "") == 0);
-                CHECK(props.filename.nbytes == 1);
+                CHECK(props.uri.str);
+                CHECK(strcmp(props.uri.str, "") == 0);
+                CHECK(props.uri.nbytes == 1);
 
                 CHECK(props.external_metadata_json.str);
                 CHECK(strcmp(props.external_metadata_json.str, "") == 0);
@@ -132,7 +132,8 @@ main()
                 CHECK(Device_Ok == storage_set(storage, &props));
                 CHECK(Device_Ok == storage_get(storage, &props));
 
-                CHECK(strcmp(props.filename.str, TEST ".zarr") == 0);
+                std::string uri{ props.uri.str };
+                CHECK(uri.ends_with(TEST ".zarr"));
                 CHECK(strcmp(props.external_metadata_json.str,
                              R"({"foo":"bar"})") == 0);
 
