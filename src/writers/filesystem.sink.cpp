@@ -293,8 +293,7 @@ extern "C"
 {
     acquire_export int unit_test__file_creator__create_chunk_sinks()
     {
-        const std::string base_dir =
-          (fs::temp_directory_path() / "acquire").string();
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
         int retval = 0;
 
         try {
@@ -310,7 +309,8 @@ extern "C"
               "z", DimensionType_Space, 0, 3, 0); // 3 timepoints per chunk
 
             std::vector<zarr::FilesystemSink*> files;
-            CHECK(file_creator.create_chunk_sinks(base_dir, dims, files));
+            CHECK(
+              file_creator.create_chunk_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 5 * 2);
             std::for_each(files.begin(),
@@ -341,8 +341,7 @@ extern "C"
 
     acquire_export int unit_test__file_creator__create_shard_sinks()
     {
-        const std::string base_dir =
-          (fs::temp_directory_path() / "acquire").string();
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
         int retval = 0;
 
         try {
@@ -360,7 +359,8 @@ extern "C"
               "z", DimensionType_Space, 8, 2, 2); // 4 chunks, 2 shards
 
             std::vector<zarr::FilesystemSink*> files;
-            CHECK(file_creator.create_shard_sinks(base_dir, dims, files));
+            CHECK(
+              file_creator.create_shard_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 2);
             std::for_each(files.begin(),
