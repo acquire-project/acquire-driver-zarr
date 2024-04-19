@@ -122,7 +122,9 @@ zarr::ZarrV3Writer::flush_impl_()
     const std::string data_root =
       (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
         .string();
-    if (sinks_.empty() && !file_creator_.create_shard_sinks(
+
+    FileCreator file_creator(thread_pool_);
+    if (sinks_.empty() && !file_creator.create_shard_sinks(
                             data_root, config_.dimensions, sinks_)) {
         return false;
     }

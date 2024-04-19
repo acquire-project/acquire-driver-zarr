@@ -23,9 +23,6 @@ struct ZarrV2 final : public Zarr
     void write_external_metadata_() const override;
     void write_base_metadata_() const override;
     void write_group_metadata_() const override;
-
-    /// Filesystem
-    fs::path get_data_directory_() const override;
 };
 } // namespace acquire::sink::zarr
 

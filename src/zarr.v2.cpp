@@ -244,12 +244,6 @@ zarr::ZarrV2::write_group_metadata_() const
     common::write_string(zattrs_path, zgroup_attrs.dump(4));
 }
 
-fs::path
-zarr::ZarrV2::get_data_directory_() const
-{
-    return dataset_root_;
-}
-
 extern "C"
 {
     struct Storage* zarr_v2_init()

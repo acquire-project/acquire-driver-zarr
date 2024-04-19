@@ -49,7 +49,6 @@ struct Zarr : public Storage
     fs::path dataset_root_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
-    uint32_t planes_per_chunk_;
     bool enable_multiscale_;
 
     /// changes on reserve_image_shape
@@ -79,9 +78,6 @@ struct Zarr : public Storage
     virtual void write_external_metadata_() const = 0;
     virtual void write_base_metadata_() const = 0;
     virtual void write_group_metadata_() const = 0;
-
-    /// Filesystem
-    virtual fs::path get_data_directory_() const = 0;
 
     /// Multiscale
     void write_multiscale_frames_(const VideoFrame* frame);

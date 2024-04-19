@@ -180,7 +180,6 @@ zarr::Writer::Writer(const ArrayConfig& config,
                      std::shared_ptr<common::ThreadPool> thread_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
-  , file_creator_{ thread_pool }
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
   , append_chunk_index_{ 0 }

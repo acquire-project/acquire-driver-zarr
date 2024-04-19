@@ -61,7 +61,6 @@ struct Writer
     std::vector<std::vector<uint8_t>> chunk_buffers_;
 
     /// Filesystem
-    FileCreator file_creator_;
     std::string data_root_;
     std::vector<FilesystemSink*> sinks_;
 

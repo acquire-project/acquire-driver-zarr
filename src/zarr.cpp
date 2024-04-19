@@ -568,7 +568,6 @@ zarr::Zarr::Zarr()
   }
   , thread_pool_{ nullptr }
   , pixel_scale_um_{ 1, 1 }
-  , planes_per_chunk_{ 0 }
   , enable_multiscale_{ false }
   , error_{ false }
 {
