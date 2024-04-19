@@ -18,28 +18,29 @@ bool
 zarr::ZarrV2Writer::flush_impl_()
 {
     // create chunk files
-    CHECK(files_.empty());
-    if (!file_creator_.create_chunk_files(data_root_ /
-                                            std::to_string(append_chunk_index_),
-                                          config_.dimensions,
-                                          files_)) {
+    CHECK(sinks_.empty());
+    const std::string data_root =
+      (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
+
+    if (!file_creator_.create_chunk_sinks(
+          data_root, config_.dimensions, sinks_)) {
         return false;
     }
-    CHECK(files_.size() == chunk_buffers_.size());
+    CHECK(sinks_.size() == chunk_buffers_.size());
 
     std::latch latch(chunk_buffers_.size());
     {
         std::scoped_lock lock(buffers_mutex_);
-        for (auto i = 0; i < files_.size(); ++i) {
+        for (auto i = 0; i < sinks_.size(); ++i) {
             auto& chunk = chunk_buffers_.at(i);
             thread_pool_->push_to_job_queue(
-              std::move([fh = &files_.at(i),
+              std::move([sink = sinks_.at(i),
                          data = chunk.data(),
                          size = chunk.size(),
                          &latch](std::string& err) -> bool {
                   bool success = false;
                   try {
-                      CHECK(file_write(fh, 0, data, data + size));
+                      CHECK(sink->write(0, data, size));
                       success = true;
                   } catch (const std::exception& exc) {
                       char buf[128];
