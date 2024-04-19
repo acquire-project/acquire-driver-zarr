@@ -156,6 +156,18 @@ zarr::FileCreator::create_metadata_sinks(
   const std::vector<std::string>& paths,
   std::vector<FilesystemSink*>& metadata_sinks)
 {
+    if (paths.empty()) {
+        return true;
+    }
+
+    std::queue<fs::path> file_paths;
+    for (const auto& path : paths) {
+        fs::path p = path;
+        fs::create_directories(p.parent_path());
+        file_paths.push(p);
+    }
+
+    return make_files_(file_paths, metadata_sinks);
 }
 
 bool
