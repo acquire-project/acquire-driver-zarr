@@ -443,16 +443,14 @@ zarr::Zarr::start()
     }
     fs::create_directories(dataset_root_);
 
-    write_base_metadata_();
-    write_group_metadata_();
-    write_all_array_metadata_();
-    write_external_metadata_();
-
     thread_pool_ = std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
 
     allocate_writers_();
+
+    make_metadata_sinks_();
+    write_fixed_metadata_();
 
     state = DeviceState_Running;
     error_ = false;
@@ -468,8 +466,12 @@ zarr::Zarr::stop() noexcept
         is_ok = 0;
 
         try {
-            write_all_array_metadata_(); // must precede close of chunk file
-            write_group_metadata_();
+            // must precede close of chunk file
+            write_mutable_metadata_();
+            for (FilesystemSink* sink : metadata_sinks_) {
+                sink_close(sink);
+            }
+            metadata_sinks_.clear();
 
             for (auto& writer : writers_) {
                 writer->finalize();
@@ -607,8 +609,16 @@ zarr::Zarr::set_error(const std::string& msg) noexcept
 }
 
 void
-zarr::Zarr::write_all_array_metadata_() const
+zarr::Zarr::write_fixed_metadata_() const
 {
+    write_base_metadata_();
+    write_external_metadata_();
+}
+
+void
+zarr::Zarr::write_mutable_metadata_() const
+{
+    write_group_metadata_();
     for (auto i = 0; i < writers_.size(); ++i) {
         write_array_metadata_(i);
     }

@@ -68,6 +68,161 @@ zarr::ZarrV2::allocate_writers_()
 }
 
 void
+zarr::ZarrV2::make_metadata_sinks_()
+{
+    std::vector<std::string> metadata_sink_paths = {
+        (dataset_root_ / ".metadata").string(),     // base metadata
+        (dataset_root_ / "0" / ".zattrs").string(), // external metadata
+        (dataset_root_ / ".zattrs").string(),       // group metadata
+    };
+
+    for (auto i = 0; i < writers_.size(); ++i) {
+        metadata_sink_paths.push_back(
+          (dataset_root_ / std::to_string(i) / ".zarray").string());
+    }
+
+    FileCreator creator(thread_pool_);
+    CHECK(creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+}
+
+void
+zarr::ZarrV2::write_base_metadata_() const
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    const json metadata = { { "zarr_format", 2 } };
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    FilesystemSink* sink = metadata_sinks_.at(0);
+    CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
+}
+
+void
+zarr::ZarrV2::write_external_metadata_() const
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
+    std::string metadata_str = external_metadata_json_.empty()
+                                 ? "{}"
+                                 : json::parse(external_metadata_json_,
+                                               nullptr, // callback
+                                               true,    // allow exceptions
+                                               true     // ignore comments
+                                               )
+                                     .dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    FilesystemSink* sink = metadata_sinks_.at(1);
+    CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
+}
+
+void
+zarr::ZarrV2::write_group_metadata_() const
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    json metadata;
+    metadata["multiscales"] = json::array({ json::object() });
+    metadata["multiscales"][0]["version"] = "0.4";
+
+    auto& axes = metadata["multiscales"][0]["axes"];
+    for (auto dim = acquisition_dimensions_.rbegin();
+         dim != acquisition_dimensions_.rend();
+         ++dim) {
+        std::string type;
+        switch (dim->kind) {
+            case DimensionType_Space:
+                type = "space";
+                break;
+            case DimensionType_Channel:
+                type = "channel";
+                break;
+            case DimensionType_Time:
+                type = "time";
+                break;
+            case DimensionType_Other:
+                type = "other";
+                break;
+            default:
+                throw std::runtime_error("Unknown dimension type");
+        }
+
+        if (dim < acquisition_dimensions_.rend() - 2) {
+            axes.push_back({ { "name", dim->name }, { "type", type } });
+        } else {
+            axes.push_back({ { "name", dim->name },
+                             { "type", type },
+                             { "unit", "micrometer" } });
+        }
+    }
+
+    // spatial multiscale metadata
+    if (writers_.empty()) {
+        std::vector<double> scales;
+        for (auto i = 0; i < acquisition_dimensions_.size() - 2; ++i) {
+            scales.push_back(1.);
+        }
+        scales.push_back(pixel_scale_um_.y);
+        scales.push_back(pixel_scale_um_.x);
+
+        metadata["multiscales"][0]["datasets"] = {
+            {
+              { "path", "0" },
+              { "coordinateTransformations",
+                {
+                  {
+                    { "type", "scale" },
+                    { "scale", scales },
+                  },
+                } },
+            },
+        };
+    } else {
+        for (auto i = 0; i < writers_.size(); ++i) {
+            std::vector<double> scales;
+            scales.push_back(std::pow(2, i)); // append
+            for (auto k = 0; k < acquisition_dimensions_.size() - 3; ++k) {
+                scales.push_back(1.);
+            }
+            scales.push_back(std::pow(2, i) * pixel_scale_um_.y); // y
+            scales.push_back(std::pow(2, i) * pixel_scale_um_.x); // x
+
+            metadata["multiscales"][0]["datasets"].push_back({
+              { "path", std::to_string(i) },
+              { "coordinateTransformations",
+                {
+                  {
+                    { "type", "scale" },
+                    { "scale", scales },
+                  },
+                } },
+            });
+        }
+
+        // downsampling metadata
+        metadata["multiscales"][0]["type"] = "local_mean";
+        metadata["multiscales"][0]["metadata"] = {
+            { "description",
+              "The fields in the metadata describe how to reproduce this "
+              "multiscaling in scikit-image. The method and its parameters are "
+              "given here." },
+            { "method", "skimage.transform.downscale_local_mean" },
+            { "version", "0.21.0" },
+            { "args", "[2]" },
+            { "kwargs", { "cval", 0 } },
+        };
+    }
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    FilesystemSink* sink = metadata_sinks_.at(2);
+    CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
+}
+
+void
 zarr::ZarrV2::write_array_metadata_(size_t level) const
 {
     namespace fs = std::filesystem;
@@ -109,139 +264,10 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
         metadata["compressor"] = nullptr;
     }
 
-    std::string zarray_path = (fs::path(config.data_root) / ".zarray").string();
-    common::write_string(zarray_path, metadata.dump());
-}
-
-void
-zarr::ZarrV2::write_external_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
-    std::string external_metadata = external_metadata_json_.empty()
-                                      ? "{}"
-                                      : json::parse(external_metadata_json_,
-                                                    nullptr, // callback
-                                                    true,    // allow exceptions
-                                                    true     // ignore comments
-                                                    )
-                                          .dump();
-    common::write_string(zattrs_path, external_metadata);
-}
-
-void
-zarr::ZarrV2::write_base_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    const json zgroup = { { "zarr_format", 2 } };
-    std::string zgroup_path = (dataset_root_ / ".zgroup").string();
-    common::write_string(zgroup_path, zgroup.dump());
-}
-
-void
-zarr::ZarrV2::write_group_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    json zgroup_attrs;
-    zgroup_attrs["multiscales"] = json::array({ json::object() });
-    zgroup_attrs["multiscales"][0]["version"] = "0.4";
-
-    auto& axes = zgroup_attrs["multiscales"][0]["axes"];
-    for (auto dim = acquisition_dimensions_.rbegin();
-         dim != acquisition_dimensions_.rend();
-         ++dim) {
-        std::string type;
-        switch (dim->kind) {
-            case DimensionType_Space:
-                type = "space";
-                break;
-            case DimensionType_Channel:
-                type = "channel";
-                break;
-            case DimensionType_Time:
-                type = "time";
-                break;
-            case DimensionType_Other:
-                type = "other";
-                break;
-            default:
-                throw std::runtime_error("Unknown dimension type");
-        }
-
-        if (dim < acquisition_dimensions_.rend() - 2) {
-            axes.push_back({ { "name", dim->name }, { "type", type } });
-        } else {
-            axes.push_back({ { "name", dim->name },
-                             { "type", type },
-                             { "unit", "micrometer" } });
-        }
-    }
-
-    // spatial multiscale metadata
-    if (writers_.empty()) {
-        std::vector<double> scales;
-        for (auto i = 0; i < acquisition_dimensions_.size() - 2; ++i) {
-            scales.push_back(1.);
-        }
-        scales.push_back(pixel_scale_um_.y);
-        scales.push_back(pixel_scale_um_.x);
-
-        zgroup_attrs["multiscales"][0]["datasets"] = {
-            {
-              { "path", "0" },
-              { "coordinateTransformations",
-                {
-                  {
-                    { "type", "scale" },
-                    { "scale", scales },
-                  },
-                } },
-            },
-        };
-    } else {
-        for (auto i = 0; i < writers_.size(); ++i) {
-            std::vector<double> scales;
-            scales.push_back(std::pow(2, i)); // append
-            for (auto k = 0; k < acquisition_dimensions_.size() - 3; ++k) {
-                scales.push_back(1.);
-            }
-            scales.push_back(std::pow(2, i) * pixel_scale_um_.y); // y
-            scales.push_back(std::pow(2, i) * pixel_scale_um_.x); // x
-
-            zgroup_attrs["multiscales"][0]["datasets"].push_back({
-              { "path", std::to_string(i) },
-              { "coordinateTransformations",
-                {
-                  {
-                    { "type", "scale" },
-                    { "scale", scales },
-                  },
-                } },
-            });
-        }
-
-        // downsampling metadata
-        zgroup_attrs["multiscales"][0]["type"] = "local_mean";
-        zgroup_attrs["multiscales"][0]["metadata"] = {
-            { "description",
-              "The fields in the metadata describe how to reproduce this "
-              "multiscaling in scikit-image. The method and its parameters are "
-              "given here." },
-            { "method", "skimage.transform.downscale_local_mean" },
-            { "version", "0.21.0" },
-            { "args", "[2]" },
-            { "kwargs", { "cval", 0 } },
-        };
-    }
-
-    std::string zattrs_path = (dataset_root_ / ".zattrs").string();
-    common::write_string(zattrs_path, zgroup_attrs.dump(4));
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    FilesystemSink* sink = metadata_sinks_.at(3 + level);
+    CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
 extern "C"

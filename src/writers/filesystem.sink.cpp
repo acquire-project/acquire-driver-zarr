@@ -15,19 +15,23 @@ template<>
 void
 zarr::sink_close(FilesystemSink* sink)
 {
-    file_close(&sink->file_);
+    file_close(sink->file_);
+    sink->file_ = nullptr;
     delete sink;
 }
 
 zarr::FilesystemSink::FilesystemSink(const std::string& uri)
-  : file_{}
+  : file_{ new struct file }
 {
-    CHECK(file_create(&file_, uri.c_str(), uri.size() + 1));
+    CHECK(file_create(file_, uri.c_str(), uri.size() + 1));
 }
 
 zarr::FilesystemSink::~FilesystemSink()
 {
-    file_close(&file_);
+    if (file_) {
+        file_close(file_);
+        file_ = nullptr;
+    }
 }
 
 bool
@@ -35,7 +39,11 @@ zarr::FilesystemSink::write(size_t offset,
                             const uint8_t* buf,
                             size_t bytes_of_buf)
 {
-    return file_write(&file_, offset, buf, buf + bytes_of_buf);
+    if (!file_) {
+        return false;
+    }
+
+    return file_write(file_, offset, buf, buf + bytes_of_buf);
 }
 
 zarr::FileCreator::FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)

@@ -16,7 +16,7 @@ struct FilesystemSink
 
     bool write(size_t offset, const uint8_t* buf, size_t bytes_of_buf);
 
-    struct file file_;
+    struct file* file_;
 };
 
 struct FileCreator

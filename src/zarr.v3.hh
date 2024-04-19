@@ -19,10 +19,15 @@ struct ZarrV3 final : public Zarr
     void allocate_writers_() override;
 
     /// Metadata
-    void write_array_metadata_(size_t level) const override;
-    void write_external_metadata_() const override;
+    void make_metadata_sinks_() override;
+
+    // fixed metadata
     void write_base_metadata_() const override;
+    void write_external_metadata_() const override;
+
+    // mutable metadata, changes on flush
     void write_group_metadata_() const override;
+    void write_array_metadata_(size_t level) const override;
 };
 } // namespace acquire::sink::zarr
 #endif // H_ACQUIRE_STORAGE_ZARR_V3_V0

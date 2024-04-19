@@ -69,6 +69,76 @@ zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
 }
 
 void
+zarr::ZarrV3::make_metadata_sinks_()
+{
+    std::vector<std::string> metadata_sink_paths;
+    metadata_sink_paths.push_back((dataset_root_ / "zarr.json").string());
+    metadata_sink_paths.push_back(
+      (dataset_root_ / "meta" / "root.group.json").string());
+    for (auto i = 0; i < writers_.size(); ++i) {
+        metadata_sink_paths.push_back((dataset_root_ / "meta" / "root" /
+                                       (std::to_string(i) + ".array.json"))
+                                        .string());
+    }
+
+    FileCreator creator(thread_pool_);
+    CHECK(creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+}
+
+/// @brief Write the metadata for the dataset.
+void
+zarr::ZarrV3::write_base_metadata_() const
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    json metadata;
+    metadata["extensions"] = json::array();
+    metadata["metadata_encoding"] =
+      "https://purl.org/zarr/spec/protocol/core/3.0";
+    metadata["metadata_key_suffix"] = ".json";
+    metadata["zarr_format"] = "https://purl.org/zarr/spec/protocol/core/3.0";
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    FilesystemSink* sink = metadata_sinks_.at(0);
+    CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
+}
+
+/// @brief Write the external metadata.
+/// @details This is a no-op for ZarrV3. Instead, external metadata is
+/// stored in the group metadata.
+void
+zarr::ZarrV3::write_external_metadata_() const
+{
+    // no-op
+}
+
+/// @brief Write the metadata for the group.
+/// @details Zarr v3 stores group metadata in
+/// /meta/{group_name}.group.json. We will call the group "root".
+void
+zarr::ZarrV3::write_group_metadata_() const
+{
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    json metadata;
+    metadata["attributes"]["acquire"] =
+      external_metadata_json_.empty() ? ""
+                                      : json::parse(external_metadata_json_,
+                                                    nullptr, // callback
+                                                    true,    // allow exceptions
+                                                    true     // ignore comments
+                                        );
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    FilesystemSink* sink = metadata_sinks_.at(1);
+    CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
+}
+
+void
 zarr::ZarrV3::write_array_metadata_(size_t level) const
 {
     namespace fs = std::filesystem;
@@ -143,59 +213,10 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
         }) },
     });
 
-    auto path = (dataset_root_ / "meta" / "root" /
-                 (std::to_string(level) + ".array.json"))
-                  .string();
-    common::write_string(path, metadata.dump(4));
-}
-
-/// @brief Write the external metadata.
-/// @details This is a no-op for ZarrV3. Instead, external metadata is
-/// stored in the group metadata.
-void
-zarr::ZarrV3::write_external_metadata_() const
-{
-    // no-op
-}
-
-/// @brief Write the metadata for the dataset.
-void
-zarr::ZarrV3::write_base_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    json metadata;
-    metadata["extensions"] = json::array();
-    metadata["metadata_encoding"] =
-      "https://purl.org/zarr/spec/protocol/core/3.0";
-    metadata["metadata_key_suffix"] = ".json";
-    metadata["zarr_format"] = "https://purl.org/zarr/spec/protocol/core/3.0";
-
-    auto path = (dataset_root_ / "zarr.json").string();
-    common::write_string(path, metadata.dump(4));
-}
-
-/// @brief Write the metadata for the group.
-/// @details Zarr v3 stores group metadata in
-/// /meta/{group_name}.group.json. We will call the group "root".
-void
-zarr::ZarrV3::write_group_metadata_() const
-{
-    namespace fs = std::filesystem;
-    using json = nlohmann::json;
-
-    json metadata;
-    metadata["attributes"]["acquire"] =
-      external_metadata_json_.empty() ? ""
-                                      : json::parse(external_metadata_json_,
-                                                    nullptr, // callback
-                                                    true,    // allow exceptions
-                                                    true     // ignore comments
-                                        );
-
-    auto path = (dataset_root_ / "meta" / "root.group.json").string();
-    common::write_string(path, metadata.dump(4));
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    FilesystemSink* sink = metadata_sinks_.at(2 + level);
+    CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
 extern "C"

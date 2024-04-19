@@ -60,6 +60,9 @@ struct Zarr : public Storage
     // scaled frames, keyed by level-of-detail
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
 
+    // changes on flush
+    std::vector<FilesystemSink*> metadata_sinks_;
+
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;
     mutable std::mutex mutex_; // for error_ / error_msg_
@@ -73,11 +76,17 @@ struct Zarr : public Storage
     virtual void allocate_writers_() = 0;
 
     /// Metadata
-    void write_all_array_metadata_() const;
-    virtual void write_array_metadata_(size_t level) const = 0;
-    virtual void write_external_metadata_() const = 0;
+    virtual void make_metadata_sinks_() = 0;
+
+    // fixed metadata
+    void write_fixed_metadata_() const;
     virtual void write_base_metadata_() const = 0;
+    virtual void write_external_metadata_() const = 0;
+
+    // mutable metadata, changes on flush
+    void write_mutable_metadata_() const;
     virtual void write_group_metadata_() const = 0;
+    virtual void write_array_metadata_(size_t level) const = 0;
 
     /// Multiscale
     void write_multiscale_frames_(const VideoFrame* frame);
