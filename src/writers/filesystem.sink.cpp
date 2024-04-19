@@ -152,6 +152,13 @@ zarr::FileCreator::create_shard_sinks(const std::string& base_uri,
 }
 
 bool
+zarr::FileCreator::create_metadata_sinks(
+  const std::vector<std::string>& paths,
+  std::vector<FilesystemSink*>& metadata_sinks)
+{
+}
+
+bool
 zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
 {
     if (dir_paths.empty()) {
@@ -286,7 +293,8 @@ extern "C"
 {
     acquire_export int unit_test__file_creator__create_chunk_sinks()
     {
-        const auto base_dir = fs::temp_directory_path() / "acquire";
+        const std::string base_dir =
+          (fs::temp_directory_path() / "acquire").string();
         int retval = 0;
 
         try {
@@ -333,7 +341,8 @@ extern "C"
 
     acquire_export int unit_test__file_creator__create_shard_sinks()
     {
-        const auto base_dir = fs::temp_directory_path() / "acquire";
+        const std::string base_dir =
+          (fs::temp_directory_path() / "acquire").string();
         int retval = 0;
 
         try {
