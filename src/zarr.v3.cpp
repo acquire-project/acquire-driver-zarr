@@ -68,8 +68,8 @@ zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
     meta->multiscale_is_supported = 0;
 }
 
-void
-zarr::ZarrV3::make_metadata_sinks_()
+std::vector<std::string>
+zarr::ZarrV3::make_metadata_sink_paths_()
 {
     std::vector<std::string> metadata_sink_paths;
     metadata_sink_paths.push_back((dataset_root_ / "zarr.json").string());
@@ -81,8 +81,7 @@ zarr::ZarrV3::make_metadata_sinks_()
                                         .string());
     }
 
-    FileCreator creator(thread_pool_);
-    CHECK(creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+    return metadata_sink_paths;
 }
 
 /// @brief Write the metadata for the dataset.
@@ -101,7 +100,7 @@ zarr::ZarrV3::write_base_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    FilesystemSink* sink = metadata_sinks_.at(0);
+    Sink* sink = metadata_sinks_.at(0);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -134,7 +133,7 @@ zarr::ZarrV3::write_group_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    FilesystemSink* sink = metadata_sinks_.at(1);
+    Sink* sink = metadata_sinks_.at(1);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -215,7 +214,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    FilesystemSink* sink = metadata_sinks_.at(2 + level);
+    Sink* sink = metadata_sinks_.at(2 + level);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 

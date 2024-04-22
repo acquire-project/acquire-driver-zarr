@@ -123,11 +123,14 @@ zarr::ZarrV3Writer::flush_impl_()
       (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
         .string();
 
-    FileCreator file_creator(thread_pool_);
-    if (sinks_.empty() && !file_creator.create_shard_sinks(
-                            data_root, config_.dimensions, sinks_)) {
-        return false;
+    {
+        FileCreator file_creator(thread_pool_);
+        if (sinks_.empty() && !file_creator.create_shard_sinks(
+                                data_root, config_.dimensions, sinks_)) {
+            return false;
+        }
     }
+
     const auto n_shards = common::number_of_shards(config_.dimensions);
     CHECK(sinks_.size() == n_shards);
 

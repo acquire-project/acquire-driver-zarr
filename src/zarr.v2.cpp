@@ -67,8 +67,8 @@ zarr::ZarrV2::allocate_writers_()
     }
 }
 
-void
-zarr::ZarrV2::make_metadata_sinks_()
+std::vector<std::string>
+zarr::ZarrV2::make_metadata_sink_paths_()
 {
     std::vector<std::string> metadata_sink_paths = {
         (dataset_root_ / ".metadata").string(),     // base metadata
@@ -81,8 +81,7 @@ zarr::ZarrV2::make_metadata_sinks_()
           (dataset_root_ / std::to_string(i) / ".zarray").string());
     }
 
-    FileCreator creator(thread_pool_);
-    CHECK(creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+    return metadata_sink_paths;
 }
 
 void
@@ -94,7 +93,7 @@ zarr::ZarrV2::write_base_metadata_() const
     const json metadata = { { "zarr_format", 2 } };
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    FilesystemSink* sink = metadata_sinks_.at(0);
+    Sink* sink = metadata_sinks_.at(0);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -114,7 +113,7 @@ zarr::ZarrV2::write_external_metadata_() const
                                                )
                                      .dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    FilesystemSink* sink = metadata_sinks_.at(1);
+    Sink* sink = metadata_sinks_.at(1);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -218,7 +217,7 @@ zarr::ZarrV2::write_group_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    FilesystemSink* sink = metadata_sinks_.at(2);
+    Sink* sink = metadata_sinks_.at(2);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -266,7 +265,7 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    FilesystemSink* sink = metadata_sinks_.at(3 + level);
+    Sink* sink = metadata_sinks_.at(3 + level);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 

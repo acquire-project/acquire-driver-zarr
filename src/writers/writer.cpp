@@ -437,8 +437,10 @@ zarr::Writer::flush_()
 void
 zarr::Writer::close_files_()
 {
-    for (auto* sink : sinks_) {
-        sink_close(sink);
+    for (Sink* sink_ : sinks_) {
+        if (auto* sink = dynamic_cast<FileSink*>(sink_)) {
+            sink_close<FileSink>(sink_);
+        }
     }
     sinks_.clear();
 }

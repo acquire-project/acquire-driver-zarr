@@ -1,32 +1,37 @@
-#include "filesystem.sink.hh"
+#include "file.sink.hh"
 
 #include <latch>
 
 namespace zarr = acquire::sink::zarr;
 
 template<>
-zarr::FilesystemSink*
-zarr::sink_open(const std::string& uri)
+zarr::Sink*
+zarr::sink_open<zarr::FileSink>(const std::string& uri)
 {
-    return new FilesystemSink(uri);
+    return (Sink*)new FileSink(uri);
 }
 
 template<>
 void
-zarr::sink_close(FilesystemSink* sink)
+zarr::sink_close<zarr::FileSink>(Sink* sink_)
 {
+    if (!sink_) {
+        return;
+    }
+
+    auto* sink = static_cast<FileSink*>(sink_);
     file_close(sink->file_);
     sink->file_ = nullptr;
     delete sink;
 }
 
-zarr::FilesystemSink::FilesystemSink(const std::string& uri)
+zarr::FileSink::FileSink(const std::string& uri)
   : file_{ new struct file }
 {
     CHECK(file_create(file_, uri.c_str(), uri.size() + 1));
 }
 
-zarr::FilesystemSink::~FilesystemSink()
+zarr::FileSink::~FileSink()
 {
     if (file_) {
         file_close(file_);
@@ -35,9 +40,7 @@ zarr::FilesystemSink::~FilesystemSink()
 }
 
 bool
-zarr::FilesystemSink::write(size_t offset,
-                            const uint8_t* buf,
-                            size_t bytes_of_buf)
+zarr::FileSink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
 {
     if (!file_) {
         return false;
@@ -54,7 +57,7 @@ zarr::FileCreator::FileCreator(std::shared_ptr<common::ThreadPool> thread_pool)
 bool
 zarr::FileCreator::create_chunk_sinks(const std::string& base_uri,
                                       const std::vector<Dimension>& dimensions,
-                                      std::vector<FilesystemSink*>& chunk_sinks)
+                                      std::vector<Sink*>& chunk_sinks)
 {
     const std::string base_dir =
       base_uri.starts_with("file://") ? base_uri.substr(7) : base_uri;
@@ -107,7 +110,7 @@ zarr::FileCreator::create_chunk_sinks(const std::string& base_uri,
 bool
 zarr::FileCreator::create_shard_sinks(const std::string& base_uri,
                                       const std::vector<Dimension>& dimensions,
-                                      std::vector<FilesystemSink*>& shard_sinks)
+                                      std::vector<Sink*>& shard_sinks)
 {
     const std::string base_dir =
       base_uri.starts_with("file://") ? base_uri.substr(7) : base_uri;
@@ -160,9 +163,8 @@ zarr::FileCreator::create_shard_sinks(const std::string& base_uri,
 }
 
 bool
-zarr::FileCreator::create_metadata_sinks(
-  const std::vector<std::string>& paths,
-  std::vector<FilesystemSink*>& metadata_sinks)
+zarr::FileCreator::create_metadata_sinks(const std::vector<std::string>& paths,
+                                         std::vector<Sink*>& metadata_sinks)
 {
     if (paths.empty()) {
         return true;
@@ -243,7 +245,7 @@ zarr::FileCreator::make_dirs_(std::queue<fs::path>& dir_paths)
 
 bool
 zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
-                               std::vector<FilesystemSink*>& files)
+                               std::vector<Sink*>& files)
 {
     if (file_paths.empty()) {
         return true;
@@ -260,7 +262,7 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
         const auto filename = file_paths.front();
         file_paths.pop();
 
-        FilesystemSink** psink = files.data() + i;
+        Sink** psink = files.data() + i;
 
         thread_pool_->push_to_job_queue(
           [filename, psink, &latch, &all_successful](std::string& err) -> bool {
@@ -268,7 +270,8 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
 
               try {
                   if (all_successful) {
-                      *psink = sink_open<FilesystemSink>(filename.string());
+                      *psink =
+                        (FileSink*)sink_open<FileSink>(filename.string());
                   }
                   success = true;
               } catch (const std::exception& exc) {
@@ -328,14 +331,14 @@ extern "C"
             dims.emplace_back(
               "z", DimensionType_Space, 0, 3, 0); // 3 timepoints per chunk
 
-            std::vector<zarr::FilesystemSink*> files;
+            std::vector<zarr::Sink*> files;
             CHECK(
               file_creator.create_chunk_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 5 * 2);
-            std::for_each(files.begin(),
-                          files.end(),
-                          [](zarr::FilesystemSink* f) { sink_close(f); });
+            std::for_each(files.begin(), files.end(), [](zarr::Sink* f) {
+                sink_close<zarr::FileSink>(f);
+            });
 
             CHECK(fs::is_directory(base_dir));
             for (auto y = 0; y < 2; ++y) {
@@ -378,14 +381,14 @@ extern "C"
             dims.emplace_back(
               "z", DimensionType_Space, 8, 2, 2); // 4 chunks, 2 shards
 
-            std::vector<zarr::FilesystemSink*> files;
+            std::vector<zarr::Sink*> files;
             CHECK(
               file_creator.create_shard_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 2);
-            std::for_each(files.begin(),
-                          files.end(),
-                          [](zarr::FilesystemSink* f) { sink_close(f); });
+            std::for_each(files.begin(), files.end(), [](zarr::Sink* f) {
+                sink_close<zarr::FileSink>(f);
+            });
 
             CHECK(fs::is_directory(base_dir));
             for (auto y = 0; y < 2; ++y) {

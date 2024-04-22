@@ -9,18 +9,27 @@
 #include "../common.hh"
 
 namespace acquire::sink::zarr {
+struct Sink
+{
+    virtual ~Sink() noexcept = default;
+
+    virtual bool write(size_t offset,
+                       const uint8_t* buf,
+                       size_t bytes_of_buf) = 0;
+};
+
 template<typename SinkT>
-concept Sink =
+concept SinkType =
   requires(SinkT sink, size_t offset, const uint8_t* buf, size_t bytes_of_buf) {
       { sink.write(offset, buf, bytes_of_buf) } -> std::convertible_to<bool>;
   };
 
-template<typename SinkCreatorT, typename SinkT>
+template<typename SinkCreatorT>
 concept SinkCreator = requires(SinkCreatorT sink_creator,
                                const std::string& base_uri,
                                std::vector<Dimension> dimensions,
                                const std::vector<std::string>& paths,
-                               std::vector<SinkT*>& sinks) {
+                               std::vector<Sink*>& sinks) {
     {
         sink_creator.create_chunk_sinks(base_uri, dimensions, sinks)
     } -> std::convertible_to<bool>;
@@ -32,13 +41,13 @@ concept SinkCreator = requires(SinkCreatorT sink_creator,
     } -> std::convertible_to<bool>;
 };
 
-template<Sink SinkT>
-SinkT*
+template<SinkType T>
+Sink*
 sink_open(const std::string& uri);
 
-template<Sink SinkT>
+template<SinkType SinkT>
 void
-sink_close(SinkT* sink);
+sink_close(Sink* sink);
 
 } // namespace acquire::sink::zarr
 

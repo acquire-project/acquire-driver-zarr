@@ -9,12 +9,14 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
-struct FilesystemSink
+struct FileSink : public Sink
 {
-    explicit FilesystemSink(const std::string& uri);
-    ~FilesystemSink();
+    explicit FileSink(const std::string& uri);
+    ~FileSink() override;
 
-    bool write(size_t offset, const uint8_t* buf, size_t bytes_of_buf);
+    [[nodiscard]] bool write(size_t offset,
+                             const uint8_t* buf,
+                             size_t bytes_of_buf) override;
 
     struct file* file_;
 };
@@ -29,16 +31,16 @@ struct FileCreator
     [[nodiscard]] bool create_chunk_sinks(
       const std::string& base_uri,
       const std::vector<Dimension>& dimensions,
-      std::vector<FilesystemSink*>& chunk_sinks);
+      std::vector<Sink*>& chunk_sinks);
 
     [[nodiscard]] bool create_shard_sinks(
       const std::string& base_uri,
       const std::vector<Dimension>& dimensions,
-      std::vector<FilesystemSink*>& shard_sinks);
+      std::vector<Sink*>& shard_sinks);
 
     [[nodiscard]] bool create_metadata_sinks(
       const std::vector<std::string>& paths,
-      std::vector<FilesystemSink*>& metadata_sinks);
+      std::vector<Sink*>& metadata_sinks);
 
   private:
     std::shared_ptr<common::ThreadPool> thread_pool_;
@@ -54,7 +56,7 @@ struct FileCreator
     /// @param[out] files The files created.
     /// @return True iff all files were created successfully.
     [[nodiscard]] bool make_files_(std::queue<fs::path>& file_paths,
-                                   std::vector<FilesystemSink*>& files);
+                                   std::vector<Sink*>& files);
 };
 } // namespace acquire::sink::zarr
 

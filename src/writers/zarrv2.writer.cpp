@@ -22,11 +22,14 @@ zarr::ZarrV2Writer::flush_impl_()
     const std::string data_root =
       (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
 
-    FileCreator file_creator(thread_pool_);
-    if (!file_creator.create_chunk_sinks(
-          data_root, config_.dimensions, sinks_)) {
-        return false;
+    {
+        FileCreator file_creator(thread_pool_);
+        if (!file_creator.create_chunk_sinks(
+              data_root, config_.dimensions, sinks_)) {
+            return false;
+        }
     }
+
     CHECK(sinks_.size() == chunk_buffers_.size());
 
     std::latch latch(chunk_buffers_.size());

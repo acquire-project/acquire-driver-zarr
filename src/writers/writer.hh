@@ -10,7 +10,7 @@
 
 #include "../common.hh"
 #include "blosc.compressor.hh"
-#include "filesystem.sink.hh"
+#include "file.sink.hh"
 
 #include <condition_variable>
 #include <filesystem>
@@ -62,7 +62,7 @@ struct Writer
 
     /// Filesystem
     std::string data_root_;
-    std::vector<FilesystemSink*> sinks_;
+    std::vector<Sink*> sinks_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;
