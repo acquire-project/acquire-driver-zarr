@@ -563,6 +563,8 @@ zarr::Zarr::set_dimensions_(const StorageProperties* props)
     const auto dimension_count = props->acquisition_dimensions.size;
     EXPECT(dimension_count > 2, "Expected at least 3 dimensions.");
 
+    acquisition_dimensions_.clear();
+
     for (auto i = 0; i < dimension_count; ++i) {
         CHECK(props->acquisition_dimensions.data[i].name.str);
         Dimension dim(props->acquisition_dimensions.data[i]);
