@@ -460,6 +460,9 @@ zarr::Zarr::stop() noexcept
             // don't clear before all working threads have shut down
             writers_.clear();
 
+            // keep no record of
+            acquisition_dimensions_.clear();
+
             // should be empty, but just in case
             for (auto& [_, frame] : scaled_frames_) {
                 if (frame.has_value() && frame.value()) {
