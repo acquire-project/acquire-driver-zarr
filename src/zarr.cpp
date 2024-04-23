@@ -16,8 +16,8 @@ namespace {
 fs::path
 as_path(const StorageProperties& props)
 {
-    return { props.filename.str,
-             props.filename.str + props.filename.nbytes - 1 };
+    return { props.uri.str,
+             props.uri.str + props.uri.nbytes - 1 };
 }
 
 /// \brief Check that the JSON string is valid. (Valid can mean empty.)
@@ -47,8 +47,8 @@ validate_json(const char* str, size_t nbytes)
 void
 validate_props(const StorageProperties* props)
 {
-    EXPECT(props->filename.str, "Filename string is NULL.");
-    EXPECT(props->filename.nbytes, "Filename string is zero size.");
+    EXPECT(props->uri.str, "Filename string is NULL.");
+    EXPECT(props->uri.nbytes, "Filename string is zero size.");
 
     // check that JSON is correct (throw std::exception if not)
     validate_json(props->external_metadata_json.str,
@@ -194,6 +194,7 @@ zarr_set(Storage* self_, const StorageProperties* props) noexcept
     try {
         CHECK(self_);
         auto* self = (zarr::Zarr*)self_;
+        LOGE("Number of dimensions: %d", props->acquisition_dimensions.size);
         self->set(props);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -329,6 +330,7 @@ zarr::Zarr::set(const StorageProperties* props)
     EXPECT(state != DeviceState_Running,
            "Cannot set properties while running.");
     CHECK(props);
+    LOGE("Number of dimensions: %d", props->acquisition_dimensions.size);
 
     StoragePropertyMetadata meta{};
     get_meta(&meta);
@@ -560,6 +562,7 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 void
 zarr::Zarr::set_dimensions_(const StorageProperties* props)
 {
+    LOGE("Zarr::set_dimensions_: %d", props->acquisition_dimensions.size);
     const auto dimension_count = props->acquisition_dimensions.size;
     EXPECT(dimension_count > 2, "Expected at least 3 dimensions.");
 

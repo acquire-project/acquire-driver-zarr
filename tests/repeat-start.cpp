@@ -141,7 +141,7 @@ validate(AcquireRuntime* runtime)
     AcquireProperties props = { 0 };
     OK(acquire_get_configuration(runtime, &props));
 
-    const fs::path test_path(props.video[0].storage.settings.filename.str);
+    const fs::path test_path(props.video[0].storage.settings.uri.str);
     EXPECT(fs::is_directory(test_path),
            "Expected %s to be a directory",
            test_path.string().c_str());
