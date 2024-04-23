@@ -194,7 +194,6 @@ zarr_set(Storage* self_, const StorageProperties* props) noexcept
     try {
         CHECK(self_);
         auto* self = (zarr::Zarr*)self_;
-        LOGE("Number of dimensions: %d", props->acquisition_dimensions.size);
         self->set(props);
     } catch (const std::exception& exc) {
         LOGE("Exception: %s\n", exc.what());
@@ -330,7 +329,6 @@ zarr::Zarr::set(const StorageProperties* props)
     EXPECT(state != DeviceState_Running,
            "Cannot set properties while running.");
     CHECK(props);
-    LOGE("Number of dimensions: %d", props->acquisition_dimensions.size);
 
     StoragePropertyMetadata meta{};
     get_meta(&meta);
