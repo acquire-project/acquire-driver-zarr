@@ -46,7 +46,8 @@ jobs:
         working-directory: ${{github.workspace}}/../aws-sdk-cpp
 
       - name: Configure
-        run: cmake -B ${{github.workspace}}/../build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF aws-sdk-cpp
+        run: cmake -B ${{github.workspace}}/../build . -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF
+        working-directory: ${{github.workspace}}/../aws-sdk-cpp
 
       - name: Build
         run: cmake --build ${{github.workspace}}/../build --config ${{matrix.build_type}}
