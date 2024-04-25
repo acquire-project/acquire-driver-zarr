@@ -10,7 +10,7 @@ on:
 
 jobs:
   build:
-    name: ${{ matrix.platform }}
+    name: Build aws-sdk-cpp ${{ matrix.build_type }} on ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
     timeout-minutes: 10
     strategy:
@@ -33,15 +33,22 @@ jobs:
         with:
           access_token: ${{ github.token }}
 
+      - name: Install Dependencies
+        if: matrix.platform == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install libcurl-dev
+
       - name: Checkout
         uses: actions/checkout@v3
         with:
           repository: aws/aws-sdk-cpp
           ref: 1.11.315
-          recursive: true
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
+        working-directory: aws-sdk-cpp
 
       - name: Configure
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF aws-sdk-cpp
 
       - name: Build
         run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
