@@ -53,9 +53,7 @@ jobs:
         run: cmake --build ${{github.workspace}}/../build --config ${{matrix.build_type}}
 
       - name: Install
-        run: |
-          cmake --install ${{github.workspace}}/../build --config ${{matrix.build_type}}
-          mv ${{github.workspace}}/../install/ ${{github.workspace}}/install
+        run: cmake --install ${{github.workspace}}/../build --config ${{matrix.build_type}}
 
       - name: Upload
         uses: actions/upload-artifact@v2
