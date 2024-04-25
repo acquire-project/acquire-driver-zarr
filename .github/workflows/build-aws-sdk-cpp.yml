@@ -42,10 +42,11 @@ jobs:
         with:
           repository: aws/aws-sdk-cpp
           ref: 1.11.315
+          working-directory: ${{github.workspace}}
 
       - name: Checkout submodules
         run: git submodule update --init --recursive
-        working-directory: aws-sdk-cpp
+        working-directory: ${{github.workspace}}/aws-sdk-cpp
 
       - name: Configure
         run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF aws-sdk-cpp
