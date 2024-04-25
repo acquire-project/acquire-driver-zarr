@@ -37,12 +37,9 @@ jobs:
         if: matrix.platform == 'ubuntu-latest'
         run: sudo apt-get update && sudo apt-get install libcurl4-openssl-dev
 
-      - name: Checkout
-        uses: actions/checkout@v3
-        with:
-          repository: aws/aws-sdk-cpp
-          ref: 1.11.315
-          working-directory: ${{github.workspace}}
+      - name: Clone
+        run: git clone --recursive https://github.com/aws/aws-sdk-cpp.git
+        working-directory: ${{github.workspace}}/..
 
       - name: Checkout submodules
         run: git submodule update --init --recursive
