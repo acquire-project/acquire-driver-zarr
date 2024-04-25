@@ -43,19 +43,19 @@ jobs:
 
       - name: Checkout submodules
         run: git submodule update --init --recursive
-        working-directory: ${{github.workspace}}/aws-sdk-cpp
+        working-directory: ${{github.workspace}}/../aws-sdk-cpp
 
       - name: Configure
-        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF aws-sdk-cpp
+        run: cmake -B ${{github.workspace}}/../build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF aws-sdk-cpp
 
       - name: Build
-        run: cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+        run: cmake --build ${{github.workspace}}/../build --config ${{matrix.build_type}}
 
       - name: Install
-        run: cmake --install ${{github.workspace}}/build --config ${{matrix.build_type}}
+        run: cmake --install ${{github.workspace}}/../build --config ${{matrix.build_type}}
 
       - name: Upload
         uses: actions/upload-artifact@v2
         with:
           name: aws-sdk-cpp-${{matrix.build_type}}-${{matrix.platform}}
-          path: ${{github.workspace}}/install
+          path: ${{github.workspace}}/../install
