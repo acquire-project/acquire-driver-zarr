@@ -46,17 +46,19 @@ jobs:
         working-directory: ${{github.workspace}}/../aws-sdk-cpp
 
       - name: Configure
-        run: cmake -B ${{github.workspace}}/../build . -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF
+        run: cmake -B ${{github.workspace}}/../build . -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_INSTALL_PREFIX=${{github.workspace}}/install -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF -DBUILD_SHARED_LIBS=OFF
         working-directory: ${{github.workspace}}/../aws-sdk-cpp
 
       - name: Build
         run: cmake --build ${{github.workspace}}/../build --config ${{matrix.build_type}}
 
       - name: Install
-        run: cmake --install ${{github.workspace}}/../build --config ${{matrix.build_type}}
+        run: |
+          cmake --install ${{github.workspace}}/../build --config ${{matrix.build_type}}
+          mv ${{github.workspace}}/../install/ ${{github.workspace}}/install
 
       - name: Upload
         uses: actions/upload-artifact@v2
         with:
           name: aws-sdk-cpp-${{matrix.build_type}}-${{matrix.platform}}
-          path: ${{github.workspace}}/../install
+          path: ${{github.workspace}}/install
