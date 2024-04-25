@@ -35,7 +35,7 @@ jobs:
 
       - name: Install Dependencies
         if: matrix.platform == 'ubuntu-latest'
-        run: sudo apt-get update && sudo apt-get install libcurl-dev
+        run: sudo apt-get update && sudo apt-get install libcurl4-openssl-dev
 
       - name: Checkout
         uses: actions/checkout@v3
