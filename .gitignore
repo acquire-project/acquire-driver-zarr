@@ -11,3 +11,5 @@ cmake-build*
 *.zip
 _CPack_Packages/
 .PVS-Studio
+src/3rdParty/aws-sdk-cpp/include
+src/3rdParty/aws-sdk-cpp/lib

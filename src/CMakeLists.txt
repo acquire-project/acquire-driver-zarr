@@ -11,6 +11,7 @@ add_library(${tgt} MODULE
         writers/sink.hh
         writers/file.sink.hh
         writers/file.sink.cpp
+        writers/s3.sink.hh
         writers/writer.hh
         writers/writer.cpp
         writers/zarrv2.writer.hh
@@ -35,6 +36,7 @@ target_link_libraries(${tgt} PRIVATE
         acquire-device-properties
         cblosc
         json
+        ${AWSSDK_LINK_LIBRARIES}
 )
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
