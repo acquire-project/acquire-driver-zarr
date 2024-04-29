@@ -34,11 +34,11 @@ jobs:
           submodules: recursive
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Install Cmake 3.23
+      - name: Install Dependencies
         if: ${{ matrix.platform == 'ubuntu-latest' }}
         run: |
           sudo apt-get update
-          sudo apt-get install cmake-data
+          sudo apt-get install cmake-data libcurl4-openssl-dev
           wget -O cmake.sh https://cmake.org/files/v3.23/cmake-3.23.2-linux-x86_64.sh
           sudo bash cmake.sh --skip-license --exclude-subdir --prefix=/usr/local
         shell: bash
