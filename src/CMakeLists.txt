@@ -4,6 +4,12 @@ if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
+ExternalProject_Get_Property(aws-sdk-cpp INSTALL_DIR)
+SET(AWS_OUTPUT_DIR ${INSTALL_DIR}/../aws-sdk-cpp-install) 
+INCLUDE_DIRECTORIES(${AWS_OUTPUT_DIR}/include)
+LINK_DIRECTORIES(${AWS_OUTPUT_DIR}/lib)
+
+
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         common.hh
@@ -28,6 +34,7 @@ add_library(${tgt} MODULE
         zarr.v3.cpp
         zarr.driver.c
 )
+add_dependencies(${tgt} acquire-core-logger acquire-core-platform acquire-device-kit acquire-device-properties cblosc json aws-sdk-cpp)
 target_enable_simd(${tgt})
 target_link_libraries(${tgt} PRIVATE
         acquire-core-logger
@@ -36,8 +43,9 @@ target_link_libraries(${tgt} PRIVATE
         acquire-device-properties
         cblosc
         json
-        ${AWSSDK_LINK_LIBRARIES}
+#        ${AWSSDK_LINK_LIBRARIES}
 )
+
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 )

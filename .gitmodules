@@ -1,3 +1,6 @@
 [submodule "acquire-common"]
 	path = acquire-common
 	url = ../acquire-common.git
+[submodule "src/3rdParty/aws-sdk-cpp"]
+	path = src/3rdParty/aws-sdk-cpp
+	url = https://github.com/aws/aws-sdk-cpp.git
