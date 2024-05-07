@@ -373,17 +373,13 @@ zarr::Zarr::get(StorageProperties* props) const
     storage_properties_destroy(props);
 
     const std::string dataset_root = dataset_root_.string();
-    char* uri = nullptr;
+
+    std::string uri;
     if (!dataset_root_.empty()) {
         fs::path dataset_root_abs = fs::absolute(dataset_root_);
-        CHECK(uri = (char*)malloc(dataset_root_abs.string().size() + 8));
-        snprintf(uri,
-                 dataset_root_abs.string().size() + 8,
-                 "file://%s",
-                 dataset_root_abs.string().c_str());
+        uri = "file://" + dataset_root_abs.string();
     }
-
-    const size_t bytes_of_filename = uri ? strlen(uri) + 1 : 0;
+    const size_t bytes_of_filename = uri.empty() ? 0 : uri.size() + 1;
 
     const char* metadata = external_metadata_json_.empty()
                              ? nullptr
@@ -393,7 +389,7 @@ zarr::Zarr::get(StorageProperties* props) const
 
     CHECK(storage_properties_init(props,
                                   0,
-                                  uri,
+                                  uri.c_str(),
                                   bytes_of_filename,
                                   metadata,
                                   bytes_of_metadata,
@@ -414,10 +410,6 @@ zarr::Zarr::get(StorageProperties* props) const
 
     storage_properties_set_enable_multiscale(props,
                                              (uint8_t)enable_multiscale_);
-
-    if (uri) {
-        free(uri);
-    }
 }
 
 void
