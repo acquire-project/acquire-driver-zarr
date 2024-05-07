@@ -10,6 +10,7 @@
 
 #include "../common.hh"
 #include "blosc.compressor.hh"
+#include "file.sink.hh"
 
 #include <condition_variable>
 #include <filesystem>
@@ -18,49 +19,6 @@ namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
 struct Zarr;
-
-struct FileCreator
-{
-    FileCreator() = delete;
-    explicit FileCreator(std::shared_ptr<common::ThreadPool> thread_pool);
-    ~FileCreator() noexcept = default;
-
-    /// @brief Create the directory structure for a Zarr v2 dataset.
-    /// @param[in] base_dir The root directory for the dataset.
-    /// @param[in] dimensions The dimensions of the dataset.
-    /// @param[out] files The chunk files created.
-    /// @return True iff the directory structure was created successfully.
-    [[nodiscard]] bool create_chunk_files(
-      const fs::path& base_dir,
-      const std::vector<Dimension>& dimensions,
-      std::vector<file>& files);
-
-    /// @brief Create the directory structure for a Zarr v3 dataset.
-    /// @param[in] base_dir The root directory for the dataset.
-    /// @param[in] dimensions The dimensions of the dataset.
-    /// @param[out] files The shard files created.
-    /// @return True iff the directory structure was created successfully.
-    [[nodiscard]] bool create_shard_files(
-      const fs::path& base_dir,
-      const std::vector<Dimension>& dimensions,
-      std::vector<file>& files);
-
-  private:
-    std::shared_ptr<common::ThreadPool> thread_pool_;
-
-    /// @brief Parallel create a collection of directories.
-    /// @param[in] dir_paths The directories to create.
-    /// @return True iff all directories were created successfully.
-    [[nodiscard]] bool make_dirs_(std::queue<fs::path>& dir_paths);
-
-    /// @brief Parallel create a collection of files.
-    /// @param[in,out] file_paths The files to create. Unlike `make_dirs_`,
-    /// this function drains the queue.
-    /// @param[out] files The files created.
-    /// @return True iff all files were created successfully.
-    [[nodiscard]] bool make_files_(std::queue<fs::path>& file_paths,
-                                   std::vector<struct file>& files);
-};
 
 struct ArrayConfig
 {
@@ -103,9 +61,8 @@ struct Writer
     std::vector<std::vector<uint8_t>> chunk_buffers_;
 
     /// Filesystem
-    FileCreator file_creator_;
-    fs::path data_root_;
-    std::vector<file> files_;
+    std::string data_root_;
+    std::vector<Sink*> sinks_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;

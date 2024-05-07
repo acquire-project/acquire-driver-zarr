@@ -8,6 +8,9 @@ set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         common.hh
         common.cpp
+        writers/sink.hh
+        writers/file.sink.hh
+        writers/file.sink.cpp
         writers/writer.hh
         writers/writer.cpp
         writers/zarrv2.writer.hh

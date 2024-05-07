@@ -119,15 +119,20 @@ bool
 zarr::ZarrV3Writer::flush_impl_()
 {
     // create shard files if they don't exist
-    if (files_.empty() &&
-        !file_creator_.create_shard_files(
-          data_root_ / ("c" + std::to_string(append_chunk_index_)),
-          config_.dimensions,
-          files_)) {
-        return false;
+    const std::string data_root =
+      (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
+        .string();
+
+    {
+        FileCreator file_creator(thread_pool_);
+        if (sinks_.empty() && !file_creator.create_shard_sinks(
+                                data_root, config_.dimensions, sinks_)) {
+            return false;
+        }
     }
+
     const auto n_shards = common::number_of_shards(config_.dimensions);
-    CHECK(files_.size() == n_shards);
+    CHECK(sinks_.size() == n_shards);
 
     // get shard indices for each chunk
     std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
@@ -144,7 +149,7 @@ zarr::ZarrV3Writer::flush_impl_()
         auto& chunk_table = shard_tables_.at(i);
         size_t* file_offset = &shard_file_offsets_.at(i);
 
-        thread_pool_->push_to_job_queue([fh = &files_.at(i),
+        thread_pool_->push_to_job_queue([sink = sinks_.at(i),
                                          &chunks,
                                          &chunk_table,
                                          file_offset,
@@ -157,10 +162,8 @@ zarr::ZarrV3Writer::flush_impl_()
                 for (const auto& chunk_idx : chunks) {
                     auto& chunk = chunk_buffers_.at(chunk_idx);
 
-                    success = file_write(fh,
-                                         *file_offset,
-                                         chunk.data(),
-                                         chunk.data() + chunk.size());
+                    success =
+                      sink->write(*file_offset, chunk.data(), chunk.size());
                     if (!success) {
                         break;
                     }
@@ -177,10 +180,9 @@ zarr::ZarrV3Writer::flush_impl_()
                     const auto* table =
                       reinterpret_cast<const uint8_t*>(chunk_table.data());
                     success =
-                      file_write(fh,
-                                 *file_offset,
-                                 table,
-                                 table + chunk_table.size() * sizeof(uint64_t));
+                      sink->write(*file_offset,
+                                  table,
+                                  chunk_table.size() * sizeof(uint64_t));
                 }
             } catch (const std::exception& exc) {
                 char buf[128];

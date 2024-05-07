@@ -16,8 +16,15 @@ namespace {
 fs::path
 as_path(const StorageProperties& props)
 {
-    return { props.filename.str,
-             props.filename.str + props.filename.nbytes - 1 };
+    if (!props.uri.str) {
+        return {};
+    }
+
+    const size_t offset =
+      strlen(props.uri.str) > 7 && strcmp(props.uri.str, "file://") == 0 ? 7
+                                                                         : 0;
+    return { props.uri.str + offset,
+             props.uri.str + offset + props.uri.nbytes - (offset + 1) };
 }
 
 /// \brief Check that the JSON string is valid. (Valid can mean empty.)
@@ -47,18 +54,20 @@ validate_json(const char* str, size_t nbytes)
 void
 validate_props(const StorageProperties* props)
 {
-    EXPECT(props->filename.str, "Filename string is NULL.");
-    EXPECT(props->filename.nbytes, "Filename string is zero size.");
+    EXPECT(props->uri.str, "URI string is NULL.");
+    EXPECT(props->uri.nbytes, "URI string is zero size.");
 
     // check that JSON is correct (throw std::exception if not)
     validate_json(props->external_metadata_json.str,
                   props->external_metadata_json.nbytes);
 
-    // check that the filename value points to a writable directory
-    {
+    std::string uri{ props->uri.str, props->uri.nbytes - 1 };
+    EXPECT(!uri.starts_with("s3://"), "S3 URIs are not yet supported.");
 
-        auto path = as_path(*props);
-        auto parent_path = path.parent_path().string();
+    // check that the URI value points to a writable directory
+    {
+        const fs::path path = as_path(*props);
+        fs::path parent_path = path.parent_path().string();
         if (parent_path.empty())
             parent_path = ".";
 
@@ -335,6 +344,8 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // checks the directory exists and is writable
     validate_props(props);
+    // TODO (aliddell): we will eventually support S3 URIs,
+    //  dataset_root_ should be a string
     dataset_root_ = as_path(*props);
 
     if (props->external_metadata_json.str) {
@@ -362,9 +373,13 @@ zarr::Zarr::get(StorageProperties* props) const
     storage_properties_destroy(props);
 
     const std::string dataset_root = dataset_root_.string();
-    const char* filename =
-      dataset_root.empty() ? nullptr : dataset_root.c_str();
-    const size_t bytes_of_filename = filename ? dataset_root.size() + 1 : 0;
+
+    std::string uri;
+    if (!dataset_root_.empty()) {
+        fs::path dataset_root_abs = fs::absolute(dataset_root_);
+        uri = "file://" + dataset_root_abs.string();
+    }
+    const size_t bytes_of_filename = uri.empty() ? 0 : uri.size() + 1;
 
     const char* metadata = external_metadata_json_.empty()
                              ? nullptr
@@ -374,7 +389,7 @@ zarr::Zarr::get(StorageProperties* props) const
 
     CHECK(storage_properties_init(props,
                                   0,
-                                  filename,
+                                  uri.c_str(),
                                   bytes_of_filename,
                                   metadata,
                                   bytes_of_metadata,
@@ -420,16 +435,17 @@ zarr::Zarr::start()
     }
     fs::create_directories(dataset_root_);
 
-    write_base_metadata_();
-    write_group_metadata_();
-    write_all_array_metadata_();
-    write_external_metadata_();
-
     thread_pool_ = std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
 
     allocate_writers_();
+
+    if (!dataset_root_.string().starts_with("s3://")) {
+        make_metadata_sinks_<FileCreator>();
+    }
+
+    write_fixed_metadata_();
 
     state = DeviceState_Running;
     error_ = false;
@@ -445,8 +461,14 @@ zarr::Zarr::stop() noexcept
         is_ok = 0;
 
         try {
-            write_all_array_metadata_(); // must precede close of chunk file
-            write_group_metadata_();
+            // must precede close of chunk file
+            write_mutable_metadata_();
+            for (Sink* sink_ : metadata_sinks_) {
+                if (auto* sink = dynamic_cast<FileSink*>(sink_)) {
+                    sink_close<FileSink>(sink);
+                }
+            }
+            metadata_sinks_.clear();
 
             for (auto& writer : writers_) {
                 writer->finalize();
@@ -545,7 +567,6 @@ zarr::Zarr::Zarr()
   }
   , thread_pool_{ nullptr }
   , pixel_scale_um_{ 1, 1 }
-  , planes_per_chunk_{ 0 }
   , enable_multiscale_{ false }
   , error_{ false }
 {
@@ -587,8 +608,16 @@ zarr::Zarr::set_error(const std::string& msg) noexcept
 }
 
 void
-zarr::Zarr::write_all_array_metadata_() const
+zarr::Zarr::write_fixed_metadata_() const
 {
+    write_base_metadata_();
+    write_external_metadata_();
+}
+
+void
+zarr::Zarr::write_mutable_metadata_() const
+{
+    write_group_metadata_();
     for (auto i = 0; i < writers_.size(); ++i) {
         write_array_metadata_(i);
     }

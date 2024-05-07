@@ -49,7 +49,6 @@ struct Zarr : public Storage
     fs::path dataset_root_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
-    uint32_t planes_per_chunk_;
     bool enable_multiscale_;
 
     /// changes on reserve_image_shape
@@ -60,6 +59,9 @@ struct Zarr : public Storage
     /// changes on append
     // scaled frames, keyed by level-of-detail
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
+
+    // changes on flush
+    std::vector<Sink*> metadata_sinks_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;
@@ -74,14 +76,26 @@ struct Zarr : public Storage
     virtual void allocate_writers_() = 0;
 
     /// Metadata
-    void write_all_array_metadata_() const;
-    virtual void write_array_metadata_(size_t level) const = 0;
-    virtual void write_external_metadata_() const = 0;
-    virtual void write_base_metadata_() const = 0;
-    virtual void write_group_metadata_() const = 0;
+    virtual std::vector<std::string> make_metadata_sink_paths_() = 0;
 
-    /// Filesystem
-    virtual fs::path get_data_directory_() const = 0;
+    template<SinkCreator SinkCreatorT>
+    void make_metadata_sinks_()
+    {
+        const auto metadata_sink_paths = make_metadata_sink_paths_();
+        SinkCreatorT creator(thread_pool_);
+        CHECK(
+          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+    }
+
+    // fixed metadata
+    void write_fixed_metadata_() const;
+    virtual void write_base_metadata_() const = 0;
+    virtual void write_external_metadata_() const = 0;
+
+    // mutable metadata, changes on flush
+    void write_mutable_metadata_() const;
+    virtual void write_group_metadata_() const = 0;
+    virtual void write_array_metadata_(size_t level) const = 0;
 
     /// Multiscale
     void write_multiscale_frames_(const VideoFrame* frame);
