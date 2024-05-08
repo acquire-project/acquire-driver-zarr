@@ -5,7 +5,7 @@ if (NOT TARGET acquire-core-logger)
 endif ()
 
 ExternalProject_Get_Property(aws-sdk-cpp INSTALL_DIR)
-SET(AWS_OUTPUT_DIR ${INSTALL_DIR}/../aws-sdk-cpp-install) 
+SET(AWS_OUTPUT_DIR ${INSTALL_DIR}/../aws-sdk-cpp-install)
 INCLUDE_DIRECTORIES(${AWS_OUTPUT_DIR}/include)
 LINK_DIRECTORIES(${AWS_OUTPUT_DIR}/lib)
 
