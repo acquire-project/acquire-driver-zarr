@@ -5,13 +5,6 @@
 namespace zarr = acquire::sink::zarr;
 
 template<>
-zarr::Sink*
-zarr::sink_open<zarr::FileSink>(const std::string& uri)
-{
-    return (Sink*)new FileSink(uri);
-}
-
-template<>
 void
 zarr::sink_close<zarr::FileSink>(Sink* sink_)
 {
@@ -19,10 +12,13 @@ zarr::sink_close<zarr::FileSink>(Sink* sink_)
         return;
     }
 
-    auto* sink = static_cast<FileSink*>(sink_);
-    file_close(sink->file_);
-    sink->file_ = nullptr;
-    delete sink;
+    if (auto* sink = dynamic_cast<FileSink*>(sink_); !sink) {
+        LOGE("Failed to cast Sink to FileSink");
+    } else {
+        file_close(sink->file_);
+        sink->file_ = nullptr;
+        delete sink;
+    }
 }
 
 zarr::FileSink::FileSink(const std::string& uri)

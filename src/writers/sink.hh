@@ -43,7 +43,10 @@ concept SinkCreator = requires(SinkCreatorT sink_creator,
 
 template<SinkType T>
 Sink*
-sink_open(const std::string& uri);
+sink_open(const std::string& uri)
+{
+    return (Sink*)new T(uri);
+}
 
 template<SinkType SinkT>
 void

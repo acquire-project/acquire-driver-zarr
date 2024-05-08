@@ -19,8 +19,15 @@ struct S3Sink : public Sink
                              const uint8_t* buf,
                              size_t bytes_of_buf) override;
 
+    Aws::Client::ClientConfiguration config_;
     Aws::S3::S3Client s3_client_;
     std::string upload_id_;
+
+  private:
+    std::string bucket_;
+    std::string object_key_;
+
+    void close_();
 };
 
 struct S3SinkCreator
