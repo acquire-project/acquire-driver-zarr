@@ -7,7 +7,8 @@ endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
-        api.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include/acquire-zarr/acquire-zarr.h
+        api.cpp
         common.hh
         common.cpp
         writers/sink.hh
