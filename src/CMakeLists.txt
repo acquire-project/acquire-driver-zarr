@@ -4,8 +4,10 @@ if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
+
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
+        api.c
         common.hh
         common.cpp
         writers/sink.hh

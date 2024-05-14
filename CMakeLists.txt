@@ -13,6 +13,8 @@ include(cmake/simd.cmake)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
+
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(examples)
