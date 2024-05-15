@@ -53,6 +53,7 @@ else ()
                 acquire-core-logger
                 acquire-core-platform
                 acquire-video-runtime
+                ${AWSSDK_LINK_LIBRARIES}
         )
 
         add_test(NAME test-${tgt} COMMAND ${tgt})
@@ -67,6 +68,7 @@ else ()
     foreach (driver
             acquire-driver-common
             acquire-driver-zarr
+            ${AWSSDK_LINK_LIBRARIES}
     )
         add_custom_target(${project}-copy-${driver}-for-tests
                 COMMAND ${CMAKE_COMMAND} -E copy

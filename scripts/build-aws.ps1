@@ -8,26 +8,23 @@ param(
     [string]$InstallDir = "aws-sdk-cpp-install"
 )
 
-# Clone aws-sdk-cpp into a temporary directory
-Push-Location $ENV:Temp
-git clone --recursive https://github.com/aws/aws-sdk-cpp.git --branch 1.11.328
-
-# Initialize submodules
-Push-Location aws-sdk-cpp
-git submodule update --init --recursive
-Pop-Location # aws-sdk-cpp
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+$baseDir = Split-Path -Parent $scriptDir
+$awsDir = Join-Path $baseDir "aws-sdk-cpp"
+$buildDir = Join-Path $ENV:Temp "aws-sdk-cpp-build-$BuildType"
 
 # Build the SDK
-mkdir aws-sdk-cpp-build-$BuildType
+if (!(Test-Path $buildDir)) {
+    New-Item -ItemType Directory -Path $buildDir
+}
+Push-Location $buildDir
 
-Push-Location aws-sdk-cpp-build-$BuildType
-cmake -B . -S ../aws-sdk-cpp -DCMAKE_BUILD_TYPE="$BuildType" -DCMAKE_INSTALL_PREFIX="$InstallDir" -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF
+cmake -B . -S $awsDir -DCMAKE_BUILD_TYPE="$BuildType" -DCMAKE_INSTALL_PREFIX="$InstallDir" -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF
 cmake --build . --config $BuildType
 cmake --install . --config $BuildType
-Pop-Location # aws-sdk-cpp-build
+Pop-Location # $buildDir
 
 # Cleanup
-Remove-Item -Recurse -Force aws-sdk-cpp
-Remove-Item -Recurse -Force aws-sdk-cpp-build
-
-Pop-Location # $ENV:Temp
+if (Test-Path $buildDir) {
+    Remove-Item -Recurse -Force $buildDir
+}
