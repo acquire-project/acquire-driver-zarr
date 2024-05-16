@@ -12,25 +12,29 @@
 // Forward declaration of AcquireZarrSinkWrapper
 struct AcquireZarrSinkWrapper;
 
-// Compression options for Zarr
-enum AcquireZarrCompression
-{
-    AcquireZarrCompression_NONE = 0,
-    AcquireZarrCompression_BLOSC
-};
 
-// Zarr Version
-enum AcquireZarrVersion
-{
-    AcquireZarrVersion_2 = 2,
-    AcquireZarrVersion_3 = 3
-};
 
 // Configuration for Zarr sink
 struct AcquireZarrSinkConfig
 {
     char filename[512];
-    enum AcquireZarrCompression compression;
+   
+
+    // Zarr Version
+    enum AcquireZarrVersion
+    {
+        AcquireZarrVersion_2 = 2,
+        AcquireZarrVersion_3 = 3
+    } zarr_version;
+
+    // Compression options for Zarr
+    enum AcquireZarrCompression
+    {
+        AcquireZarrCompression_NONE = 0,
+        AcquireZarrCompression_BLOSC_LZ4 = 1,
+        AcquireZarrCompression_BLOSC_ZSTD = 2,
+    } compression;
+
     int multiscale; // 0 or 1, because I don't have bool in C
 };
 
