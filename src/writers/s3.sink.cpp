@@ -24,8 +24,6 @@ zarr::sink_close<zarr::S3Sink>(acquire::sink::zarr::Sink* sink_)
 zarr::S3Sink::S3Sink(const std::string& uri)
 {
     Aws::Client::ClientConfiguration config;
-
-
 }
 
 zarr::S3Sink::~S3Sink()

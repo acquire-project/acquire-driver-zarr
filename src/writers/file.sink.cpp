@@ -266,8 +266,7 @@ zarr::FileCreator::make_files_(std::queue<fs::path>& file_paths,
 
               try {
                   if (all_successful) {
-                      *psink =
-                        (FileSink*)sink_open<FileSink>(filename.string());
+                      *psink = new FileSink(filename.string());
                   }
                   success = true;
               } catch (const std::exception& exc) {
