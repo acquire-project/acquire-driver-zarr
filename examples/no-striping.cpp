@@ -1,4 +1,4 @@
-/// @file
+/// @file no-striping.cpp
 /// @brief Generate a Zarr dataset with a single chunk using the simulated
 /// radial sine pattern with a u16 sample type. This example was used to
 /// generate data for a visual EXAMPLE of a fix for a striping artifact observed
