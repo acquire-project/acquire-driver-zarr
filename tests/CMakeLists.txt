@@ -68,6 +68,7 @@ else ()
     foreach (driver
             acquire-driver-common
             acquire-driver-zarr
+            ${AWSSDK_LINK_LIBRARIES}
     )
         add_custom_target(${project}-copy-${driver}-for-tests
                 COMMAND ${CMAKE_COMMAND} -E copy

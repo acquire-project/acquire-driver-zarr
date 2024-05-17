@@ -23,6 +23,7 @@ if (${WITH_EXAMPLES})
                 acquire-core-logger
                 acquire-core-platform
                 acquire-video-runtime
+                ${AWSSDK_LINK_LIBRARIES}
         )
     endforeach ()
 
@@ -34,6 +35,7 @@ if (${WITH_EXAMPLES})
     foreach (driver
             acquire-driver-common
             acquire-driver-zarr
+            ${AWSSDK_LINK_LIBRARIES}
     )
         add_custom_target(${project}-copy-${driver}-for-examples
                 COMMAND ${CMAKE_COMMAND} -E copy
@@ -47,4 +49,8 @@ if (${WITH_EXAMPLES})
             add_dependencies(${tgt} ${project}-copy-${driver}-for-examples)
         endforeach ()
     endforeach ()
+
+    if (MSVC)
+        AWSSDK_CPY_DYN_LIBS(SERVICE_COMPONENTS "" ${CMAKE_CURRENT_BINARY_DIR})
+    endif ()
 endif ()
