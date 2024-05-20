@@ -98,6 +98,7 @@ zarr::ZarrV3::write_base_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    CHECK(!metadata_sinks_.empty());
     Sink* sink = metadata_sinks_.at(0);
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
@@ -132,6 +133,7 @@ zarr::ZarrV3::write_group_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    CHECK(metadata_sinks_.size() > 1);
     Sink* sink = metadata_sinks_.at(1);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
@@ -213,6 +215,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    CHECK(metadata_sinks_.size() > 2 + level);
     Sink* sink = metadata_sinks_.at(2 + level);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
