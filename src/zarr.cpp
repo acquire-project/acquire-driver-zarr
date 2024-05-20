@@ -389,6 +389,7 @@ zarr::Zarr::set(const StorageProperties* props)
         std::vector<std::string> tokens = string_spit(uri, '/');
         CHECK(tokens.size() > 2); // s3://bucket/key
         dataset_root_ = uri;
+        aws_options_ = Aws::SDKOptions();
     } else {
         dataset_root_ = as_path(*props).string();
     }
@@ -481,6 +482,10 @@ zarr::Zarr::start()
 {
     error_ = true;
 
+    if (aws_options_) {
+        TRACE(Aws::InitAPI(*aws_options_));
+    }
+
     thread_pool_ = std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
@@ -536,6 +541,11 @@ zarr::Zarr::stop() noexcept
 
             for (auto& writer : writers_) {
                 writer->finalize();
+            }
+
+            if (aws_options_) {
+                TRACE(Aws::ShutdownAPI(*aws_options_));
+                aws_options_ = std::nullopt;
             }
 
             // call await_stop() before destroying to give jobs a chance to
