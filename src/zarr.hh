@@ -46,7 +46,9 @@ struct Zarr : public Storage
     std::optional<BloscCompressionParams> blosc_compression_params_;
 
     /// changes on set
-    fs::path dataset_root_;
+    std::string dataset_root_;
+    std::string access_key_id_;
+    std::string secret_access_key_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     bool enable_multiscale_;
@@ -77,15 +79,6 @@ struct Zarr : public Storage
 
     /// Metadata
     virtual std::vector<std::string> make_metadata_sink_paths_() = 0;
-
-    template<SinkCreator SinkCreatorT>
-    void make_metadata_sinks_()
-    {
-        const auto metadata_sink_paths = make_metadata_sink_paths_();
-        SinkCreatorT creator(thread_pool_);
-        CHECK(
-          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
-    }
 
     // fixed metadata
     void write_fixed_metadata_() const;

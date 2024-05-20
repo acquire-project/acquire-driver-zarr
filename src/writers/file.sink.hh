@@ -11,6 +11,7 @@ namespace fs = std::filesystem;
 namespace acquire::sink::zarr {
 struct FileSink : public Sink
 {
+  public:
     explicit FileSink(const std::string& uri);
     ~FileSink() override;
 
@@ -18,6 +19,7 @@ struct FileSink : public Sink
                              const uint8_t* buf,
                              size_t bytes_of_buf) override;
 
+  private:
     struct file* file_;
 };
 

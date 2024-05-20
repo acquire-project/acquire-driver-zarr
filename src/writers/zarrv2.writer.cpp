@@ -1,11 +1,23 @@
 #include "zarrv2.writer.hh"
+
 #include "../zarr.hh"
+#include "file.sink.hh"
+#include "s3.sink.hh"
 
 #include <cmath>
 #include <latch>
 #include <stdexcept>
 
 namespace zarr = acquire::sink::zarr;
+
+namespace {
+bool
+is_s3_uri(const std::string& uri)
+{
+    return uri.starts_with("s3://") || uri.starts_with("http://") ||
+           uri.starts_with("https://");
+}
+} // namespace
 
 zarr::ZarrV2Writer::ZarrV2Writer(
   const ArrayConfig& config,
@@ -17,12 +29,15 @@ zarr::ZarrV2Writer::ZarrV2Writer(
 bool
 zarr::ZarrV2Writer::flush_impl_()
 {
-    // create chunk files
+    // create chunk sinks
     CHECK(sinks_.empty());
-    const std::string data_root =
-      (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
 
-    {
+    if (is_s3_uri(data_root_)) {
+
+    } else {
+        const std::string data_root =
+          (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
+
         FileCreator file_creator(thread_pool_);
         if (!file_creator.create_chunk_sinks(
               data_root, config_.dimensions, sinks_)) {

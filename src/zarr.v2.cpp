@@ -45,7 +45,7 @@ zarr::ZarrV2::allocate_writers_()
     ArrayConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
-        .data_root = (dataset_root_ / "0").string(),
+        .data_root = (fs::path(dataset_root_) / "0").string(),
         .compression_params = blosc_compression_params_,
     };
     writers_.push_back(std::make_shared<ZarrV2Writer>(config, thread_pool_));
@@ -71,14 +71,14 @@ std::vector<std::string>
 zarr::ZarrV2::make_metadata_sink_paths_()
 {
     std::vector<std::string> metadata_sink_paths = {
-        (dataset_root_ / ".metadata").string(),     // base metadata
-        (dataset_root_ / "0" / ".zattrs").string(), // external metadata
-        (dataset_root_ / ".zattrs").string(),       // group metadata
+        dataset_root_ + "/.metadata", // base metadata
+        dataset_root_ + "/0/.zattrs", // external metadata
+        dataset_root_ + "/.zattrs",   // group metadata
     };
 
     for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back(
-          (dataset_root_ / std::to_string(i) / ".zarray").string());
+        metadata_sink_paths.push_back(dataset_root_ + "/" + std::to_string(i) +
+                                      "/.zarray");
     }
 
     return metadata_sink_paths;
@@ -94,6 +94,7 @@ zarr::ZarrV2::write_base_metadata_() const
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     Sink* sink = metadata_sinks_.at(0);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -103,7 +104,8 @@ zarr::ZarrV2::write_external_metadata_() const
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
-    std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
+    std::string zattrs_path =
+      (fs::path(dataset_root_) / "0" / ".zattrs").string();
     std::string metadata_str = external_metadata_json_.empty()
                                  ? "{}"
                                  : json::parse(external_metadata_json_,

@@ -1,8 +1,11 @@
 #include "zarr.hh"
 
-#include "writers/zarrv2.writer.hh"
+#include "writers/writer.hh"
+#include "writers/file.sink.hh"
+#include "writers/s3.sink.hh"
 #include "json.hpp"
 
+#include <regex>
 #include <tuple> // std::ignore
 
 namespace zarr = acquire::sink::zarr;
@@ -10,6 +13,39 @@ namespace common = zarr::common;
 using json = nlohmann::json;
 
 namespace {
+/// \brief Split a string by a delimiter.
+/// \param str String to split.
+/// \param delim Delimiter character.
+/// \return Vector of strings.
+std::vector<std::string>
+string_spit(const std::string& str, char delim)
+{
+    size_t begin = 0;
+    auto end = str.find_first_of(delim);
+
+    std::vector<std::string> out;
+    while (end <= std::string::npos) {
+        if (end > begin) {
+            out.emplace_back(str.substr(begin, end - begin));
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+
+        begin = end + 1;
+        end = str.find_first_of(delim, begin);
+    }
+    return out;
+}
+
+bool
+is_s3_uri(const std::string& uri)
+{
+    return uri.starts_with("s3://") || uri.starts_with("http://") ||
+           uri.starts_with("https://");
+}
+
 /// \brief Get the filename from a StorageProperties as fs::path.
 /// \param props StorageProperties for the Zarr Storage device.
 /// \return fs::path representation of the Zarr data directory.
@@ -62,10 +98,12 @@ validate_props(const StorageProperties* props)
                   props->external_metadata_json.nbytes);
 
     std::string uri{ props->uri.str, props->uri.nbytes - 1 };
-    EXPECT(!uri.starts_with("s3://"), "S3 URIs are not yet supported.");
 
-    // check that the URI value points to a writable directory
-    {
+    if (is_s3_uri(uri)) {
+        std::vector<std::string> tokens = string_spit(uri, '/');
+        CHECK(tokens.size() > 2); // s3://bucket/key
+    } else {
+        // check that the URI value points to a writable directory
         const fs::path path = as_path(*props);
         fs::path parent_path = path.parent_path().string();
         if (parent_path.empty())
@@ -344,12 +382,31 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // checks the directory exists and is writable
     validate_props(props);
-    // TODO (aliddell): we will eventually support S3 URIs,
-    //  dataset_root_ should be a string
-    dataset_root_ = as_path(*props);
+
+    std::string uri{ props->uri.str, props->uri.nbytes - 1 };
+
+    if (is_s3_uri(uri)) {
+        std::vector<std::string> tokens = string_spit(uri, '/');
+        CHECK(tokens.size() > 2); // s3://bucket/key
+        dataset_root_ = uri;
+    } else {
+        dataset_root_ = as_path(*props).string();
+    }
+
+    if (props->access_key_id.str) {
+        access_key_id_ = std::string(props->access_key_id.str,
+                                     props->access_key_id.nbytes - 1);
+    }
+
+    if (props->secret_access_key.str) {
+        secret_access_key_ = std::string(props->secret_access_key.str,
+                                         props->secret_access_key.nbytes - 1);
+    }
 
     if (props->external_metadata_json.str) {
-        external_metadata_json_ = props->external_metadata_json.str;
+        external_metadata_json_ =
+          std::string(props->external_metadata_json.str,
+                      props->external_metadata_json.nbytes - 1);
     }
 
     pixel_scale_um_ = props->pixel_scale_um;
@@ -371,8 +428,6 @@ zarr::Zarr::get(StorageProperties* props) const
 {
     CHECK(props);
     storage_properties_destroy(props);
-
-    const std::string dataset_root = dataset_root_.string();
 
     std::string uri;
     if (!dataset_root_.empty()) {
@@ -426,23 +481,32 @@ zarr::Zarr::start()
 {
     error_ = true;
 
-    if (fs::exists(dataset_root_)) {
-        std::error_code ec;
-        EXPECT(fs::remove_all(dataset_root_, ec),
-               R"(Failed to remove folder for "%s": %s)",
-               dataset_root_.c_str(),
-               ec.message().c_str());
-    }
-    fs::create_directories(dataset_root_);
-
     thread_pool_ = std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
 
     allocate_writers_();
 
-    if (!dataset_root_.string().starts_with("s3://")) {
-        make_metadata_sinks_<FileCreator>();
+    const auto metadata_sink_paths = make_metadata_sink_paths_();
+    if (is_s3_uri(dataset_root_)) {
+        S3SinkCreator creator{ thread_pool_,
+                               access_key_id_,
+                               secret_access_key_ };
+        CHECK(
+          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+    } else {
+        if (fs::exists(dataset_root_)) {
+            std::error_code ec;
+            EXPECT(fs::remove_all(dataset_root_, ec),
+                   R"(Failed to remove folder for "%s": %s)",
+                   dataset_root_.c_str(),
+                   ec.message().c_str());
+        }
+        fs::create_directories(dataset_root_);
+
+        FileCreator creator{ thread_pool_ };
+        CHECK(
+          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
     }
 
     write_fixed_metadata_();

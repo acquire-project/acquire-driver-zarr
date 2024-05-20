@@ -10,7 +10,7 @@
 
 #include "../common.hh"
 #include "blosc.compressor.hh"
-#include "file.sink.hh"
+#include "sink.hh"
 
 #include <condition_variable>
 #include <filesystem>

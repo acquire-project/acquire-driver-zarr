@@ -15,8 +15,6 @@ zarr::sink_close<zarr::FileSink>(Sink* sink_)
     if (auto* sink = dynamic_cast<FileSink*>(sink_); !sink) {
         LOGE("Failed to cast Sink to FileSink");
     } else {
-        file_close(sink->file_);
-        sink->file_ = nullptr;
         delete sink;
     }
 }

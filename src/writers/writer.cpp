@@ -1,10 +1,13 @@
-#include <stdexcept>
 #include "writer.hh"
+
 #include "../zarr.hh"
+#include "file.sink.hh"
+#include "s3.sink.hh"
 
 #include <cmath>
 #include <functional>
 #include <latch>
+#include <stdexcept>
 
 namespace zarr = acquire::sink::zarr;
 
@@ -438,8 +441,10 @@ void
 zarr::Writer::close_files_()
 {
     for (Sink* sink_ : sinks_) {
-        if (auto* sink = dynamic_cast<FileSink*>(sink_)) {
+        if (!dynamic_cast<FileSink*>(sink_)) {
             sink_close<FileSink>(sink_);
+        } else if (!dynamic_cast<S3Sink*>(sink_)) {
+            sink_close<S3Sink>(sink_);
         }
     }
     sinks_.clear();

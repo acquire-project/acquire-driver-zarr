@@ -1,10 +1,22 @@
 #include "zarrv3.writer.hh"
+
 #include "../zarr.hh"
+#include "file.sink.hh"
+#include "s3.sink.hh"
 
 #include <latch>
 #include <stdexcept>
 
 namespace zarr = acquire::sink::zarr;
+
+namespace {
+bool
+is_s3_uri(const std::string& uri)
+{
+    return uri.starts_with("s3://") || uri.starts_with("http://") ||
+           uri.starts_with("https://");
+}
+} // namespace
 
 namespace {
 /// @brief Get the shard index for a given chunk index.
@@ -118,12 +130,14 @@ zarr::ZarrV3Writer::ZarrV3Writer(
 bool
 zarr::ZarrV3Writer::flush_impl_()
 {
-    // create shard files if they don't exist
-    const std::string data_root =
-      (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
-        .string();
+    // create shard sinks if they don't exist
+    if (is_s3_uri(data_root_)) {
 
-    {
+    } else {
+        const std::string data_root =
+          (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
+            .string();
+
         FileCreator file_creator(thread_pool_);
         if (sinks_.empty() && !file_creator.create_shard_sinks(
                                 data_root, config_.dimensions, sinks_)) {
