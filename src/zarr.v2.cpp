@@ -259,8 +259,8 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     metadata["filters"] = nullptr;
     metadata["dimension_separator"] = "/";
 
-    if (config.compression_params.has_value()) {
-        metadata["compressor"] = config.compression_params.value();
+    if (config.compression_params) {
+        metadata["compressor"] = *config.compression_params;
     } else {
         metadata["compressor"] = nullptr;
     }

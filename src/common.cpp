@@ -121,9 +121,9 @@ common::ThreadPool::thread_worker_()
             break;
         }
 
-        if (auto job = pop_from_job_queue_(); job.has_value()) {
+        if (auto job = pop_from_job_queue_(); job) {
             lock.unlock();
-            if (std::string err_msg; !job.value()(err_msg)) {
+            if (std::string err_msg; !(*job)(err_msg)) {
                 error_handler_(err_msg);
             }
         }

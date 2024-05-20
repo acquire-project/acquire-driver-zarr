@@ -548,8 +548,8 @@ zarr::Zarr::stop() noexcept
 
             // should be empty, but just in case
             for (auto& [_, frame] : scaled_frames_) {
-                if (frame.has_value() && frame.value()) {
-                    free(frame.value());
+                if (frame && *frame) {
+                    free(*frame);
                 }
             }
             scaled_frames_.clear();
@@ -730,14 +730,14 @@ zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
 
     for (auto i = 1; i < writers_.size(); ++i) {
         dst = scale(src);
-        if (scaled_frames_.at(i).has_value()) {
+        if (scaled_frames_.at(i)) {
             // average
-            average2(dst, scaled_frames_.at(i).value());
+            average2(dst, *scaled_frames_.at(i));
 
             CHECK(writers_.at(i)->write(dst));
 
             // clean up this level of detail
-            free(scaled_frames_.at(i).value());
+            free(*scaled_frames_.at(i));
             scaled_frames_.at(i).reset();
 
             // setup for next iteration

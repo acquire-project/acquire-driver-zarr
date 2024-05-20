@@ -183,8 +183,8 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
     metadata["fill_value"] = 0;
     metadata["shape"] = array_shape;
 
-    if (config.compression_params.has_value()) {
-        const auto params = config.compression_params.value();
+    if (config.compression_params) {
+        const auto params = *config.compression_params;
         metadata["compressor"] = json::object({
           { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
           { "configuration",

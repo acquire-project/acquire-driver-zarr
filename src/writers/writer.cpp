@@ -357,13 +357,13 @@ zarr::Writer::should_flush_() const
 void
 zarr::Writer::compress_buffers_() noexcept
 {
-    if (!config_.compression_params.has_value()) {
+    if (!config_.compression_params) {
         return;
     }
 
     TRACE("Compressing");
 
-    BloscCompressionParams params = config_.compression_params.value();
+    BloscCompressionParams params = *config_.compression_params;
     const auto bytes_per_px = bytes_of_type(config_.image_shape.type);
 
     std::scoped_lock lock(buffers_mutex_);
@@ -441,9 +441,9 @@ void
 zarr::Writer::close_files_()
 {
     for (Sink* sink_ : sinks_) {
-        if (!dynamic_cast<FileSink*>(sink_)) {
+        if (dynamic_cast<FileSink*>(sink_)) {
             sink_close<FileSink>(sink_);
-        } else if (!dynamic_cast<S3Sink*>(sink_)) {
+        } else if (dynamic_cast<S3Sink*>(sink_)) {
             sink_close<S3Sink>(sink_);
         }
     }
@@ -907,7 +907,7 @@ extern "C"
                   (base_dir / "data" / "root" / "1").string());
 
             // check compression params
-            CHECK(!downsampled_config.compression_params.has_value());
+            CHECK(!downsampled_config.compression_params);
 
             // downsample again
             config = std::move(downsampled_config);
@@ -959,7 +959,7 @@ extern "C"
                   (base_dir / "data" / "root" / "2").string());
 
             // check compression params
-            CHECK(!downsampled_config.compression_params.has_value());
+            CHECK(!downsampled_config.compression_params);
 
             retval = 1;
         } catch (const std::exception& exc) {
