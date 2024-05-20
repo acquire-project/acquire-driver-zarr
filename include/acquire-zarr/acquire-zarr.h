@@ -35,7 +35,7 @@ struct AcquireZarrSinkConfig
         AcquireZarrCompression_BLOSC_ZSTD = 2,
     } compression;
 
-    int multiscale; // 0 or 1, because I don't have bool in C
+    uint8_t multiscale; // 0 or 1, because I don't have bool in C
 };
 
 
@@ -45,9 +45,9 @@ struct AcquireZarrSinkConfig
 EXTERNC struct AcquireZarrSinkWrapper* zarr_sink_open(const struct AcquireZarrSinkConfig* config);
 
 // Close the Zarr sink
-EXTERNC void zarr_sink_close();
+EXTERNC void zarr_sink_close(struct AcquireZarrSinkWrapper*);
 
-EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper*, uint8_t* image_data, uint8_t dimensions, uint16_t shape);
+EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper* zarr_sink, uint8_t* image_data, uint8_t dimensions, uint16_t shape[]);
 
 
 #endif // ACQUIRE_ZARR_H

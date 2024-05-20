@@ -10,10 +10,11 @@ using namespace acquire::sink::zarr;
 struct AcquireZarrSinkWrapper 
 {
   public:
-    AcquireZarrSinkWrapper(const struct AcquireZarrSinkConfig* config);
+    AcquireZarrSinkWrapper() = default;
     ~AcquireZarrSinkWrapper() = default;
 
-    int open();
+    bool configure(const struct AcquireZarrSinkConfig* config);
+    bool open();
   protected:
     AcquireZarrSinkConfig config_;
 
@@ -22,7 +23,7 @@ struct AcquireZarrSinkWrapper
 };
 
 
-AcquireZarrSinkWrapper::AcquireZarrSinkWrapper(const struct AcquireZarrSinkConfig* config)
+bool AcquireZarrSinkWrapper::configure(const struct AcquireZarrSinkConfig* config)
 {
     config_ = *config;
 
@@ -52,32 +53,52 @@ AcquireZarrSinkWrapper::AcquireZarrSinkWrapper(const struct AcquireZarrSinkConfi
             zarr_sink_ = std::make_shared<struct ZarrV2>(std::move(blosc_params));
         else
             zarr_sink_ = std::make_shared<struct ZarrV3>(std::move(blosc_params));
-        }
-
+    }
+    return true;
 }
 
-
-int AcquireZarrSinkWrapper::open()
+bool AcquireZarrSinkWrapper::open()
 {
-    return 0;
+    zarr_sink_->start();
+    return true;
 }
-
 
 EXTERNC struct AcquireZarrSinkWrapper* zarr_sink_open(const struct AcquireZarrSinkConfig* config)
 {
-    auto myptr = new AcquireZarrSinkWrapper(config);
-    
-    //myptr->open();
-    return myptr;
+    try
+    {
+        struct AcquireZarrSinkWrapper* newptr = new struct AcquireZarrSinkWrapper();
+
+        if(!newptr->configure(config))
+        {
+            throw std::runtime_error("Failed to configure Zarr sink");
+        }
+
+        if(!newptr->open())
+        {
+            throw std::runtime_error("Failed to open Zarr sink");
+        }
+        return newptr;
+
+    }
+    catch (...)
+    {
+        return NULL;
+    }
+
     
 }
 
-EXTERNC void zarr_sink_close()
+EXTERNC void zarr_sink_close(struct AcquireZarrSinkWrapper* zarr_sink)
 {
-
+    if (zarr_sink != NULL)
+    {
+        delete zarr_sink;
+        zarr_sink = nullptr;
+    }
 }
 
-EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper*, uint8_t* image_data, uint8_t dimensions, uint16_t shape)
+EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper* zarr_sink, uint8_t* image_data, uint8_t dimensions, uint16_t shape[])
 {
     return -1;
 }
