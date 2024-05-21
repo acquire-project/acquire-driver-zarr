@@ -13,32 +13,6 @@ namespace common = zarr::common;
 using json = nlohmann::json;
 
 namespace {
-/// \brief Split a string by a delimiter.
-/// \param str String to split.
-/// \param delim Delimiter character.
-/// \return Vector of strings.
-std::vector<std::string>
-string_spit(const std::string& str, char delim)
-{
-    size_t begin = 0;
-    auto end = str.find_first_of(delim);
-
-    std::vector<std::string> out;
-    while (end <= std::string::npos) {
-        if (end > begin) {
-            out.emplace_back(str.substr(begin, end - begin));
-        }
-
-        if (end == std::string::npos) {
-            break;
-        }
-
-        begin = end + 1;
-        end = str.find_first_of(delim, begin);
-    }
-    return out;
-}
-
 bool
 is_s3_uri(const std::string& uri)
 {
@@ -100,7 +74,7 @@ validate_props(const StorageProperties* props)
     std::string uri{ props->uri.str, props->uri.nbytes - 1 };
 
     if (is_s3_uri(uri)) {
-        std::vector<std::string> tokens = string_spit(uri, '/');
+        std::vector<std::string> tokens = common::split_uri(uri);
         CHECK(tokens.size() > 2); // s3://bucket/key
     } else {
         // check that the URI value points to a writable directory
@@ -386,7 +360,7 @@ zarr::Zarr::set(const StorageProperties* props)
     std::string uri{ props->uri.str, props->uri.nbytes - 1 };
 
     if (is_s3_uri(uri)) {
-        std::vector<std::string> tokens = string_spit(uri, '/');
+        std::vector<std::string> tokens = common::split_uri(uri);
         CHECK(tokens.size() > 2); // s3://bucket/key
         dataset_root_ = uri;
         aws_options_ = Aws::SDKOptions();
@@ -483,7 +457,7 @@ zarr::Zarr::start()
     error_ = true;
 
     if (aws_options_) {
-        TRACE(Aws::InitAPI(*aws_options_));
+        Aws::InitAPI(*aws_options_);
     }
 
     thread_pool_ = std::make_shared<common::ThreadPool>(
@@ -492,9 +466,15 @@ zarr::Zarr::start()
 
     allocate_writers_();
 
-    const auto metadata_sink_paths = make_metadata_sink_paths_();
+    std::vector<std::string> metadata_sink_paths = make_metadata_sink_paths_();
     if (is_s3_uri(dataset_root_)) {
+        std::vector<std::string> uri_parts = common::split_uri(dataset_root_);
+        CHECK(uri_parts.size() > 2); // s3://bucket/key
+        std::string endpoint = uri_parts.at(0) + "//" + uri_parts.at(1);
+        std::string bucket_name = uri_parts.at(2);
         S3SinkCreator creator{ thread_pool_,
+                               endpoint,
+                               bucket_name,
                                access_key_id_,
                                secret_access_key_ };
         CHECK(
@@ -510,6 +490,9 @@ zarr::Zarr::start()
         fs::create_directories(dataset_root_);
 
         FileCreator creator{ thread_pool_ };
+        for (auto & path : metadata_sink_paths) {
+            path = dataset_root_ + "/" + path;
+        }
         CHECK(
           creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
     }
@@ -532,9 +515,11 @@ zarr::Zarr::stop() noexcept
         try {
             // must precede close of chunk file
             write_mutable_metadata_();
-            for (Sink* sink_ : metadata_sinks_) {
-                if (auto* sink = dynamic_cast<FileSink*>(sink_)) {
+            for (Sink* sink : metadata_sinks_) {
+                if (dynamic_cast<FileSink*>(sink)) {
                     sink_close<FileSink>(sink);
+                } else if (dynamic_cast<S3Sink*>(sink)) {
+                    sink_close<S3Sink>(sink);
                 }
             }
             metadata_sinks_.clear();
@@ -544,7 +529,7 @@ zarr::Zarr::stop() noexcept
             }
 
             if (aws_options_) {
-                TRACE(Aws::ShutdownAPI(*aws_options_));
+                Aws::ShutdownAPI(*aws_options_);
                 aws_options_ = std::nullopt;
             }
 
@@ -650,6 +635,11 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
   : Zarr()
 {
     blosc_compression_params_ = std::move(compression_params);
+}
+
+zarr::Zarr::~Zarr() noexcept
+{
+    //    stop();
 }
 
 void

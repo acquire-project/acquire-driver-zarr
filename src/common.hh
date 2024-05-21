@@ -13,6 +13,7 @@
 #include <queue>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 #define LOG(...) aq_logger(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define LOGE(...) aq_logger(1, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
@@ -144,11 +145,12 @@ sample_type_to_dtype(SampleType t);
 const char*
 sample_type_to_string(SampleType t) noexcept;
 
-/// @brief Write a string to a file.
-/// @param path The path of the file to write.
-/// @param str The string to write.
-void
-write_string(const std::string& path, const std::string& value);
+
+/// \brief Split a URI by the '/' delimiter.
+/// \param uri String to split.
+/// \return Vector of strings.
+std::vector<std::string>
+split_uri(const std::string& uri);
 } // namespace acquire::sink::zarr::common
 } // namespace acquire::sink::zarr
 

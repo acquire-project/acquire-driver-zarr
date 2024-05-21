@@ -17,7 +17,7 @@ if (${WITH_EXAMPLES})
         add_executable(${tgt} ${name}.cpp)
         target_compile_definitions(${tgt} PUBLIC "EXAMPLE=\"${tgt}\"")
         set_target_properties(${tgt} PROPERTIES
-                MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+                MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
         )
         target_include_directories(${tgt} PRIVATE "${CMAKE_CURRENT_LIST_DIR}/../")
         target_link_libraries(${tgt}

@@ -25,6 +25,8 @@ struct ArrayConfig
     ImageShape image_shape;
     std::vector<Dimension> dimensions;
     std::string data_root;
+    std::string access_key_id;
+    std::string secret_access_key;
     std::optional<BloscCompressionParams> compression_params;
 };
 

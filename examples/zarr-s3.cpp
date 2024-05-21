@@ -113,7 +113,8 @@ configure(AcquireRuntime* runtime)
                                 SIZED("ZarrV3"),
                                 &props.video[0].storage.identifier));
 
-    std::string uri = ZARR_S3_ENDPOINT "/acquire-test";
+    // this bucket must already exist
+    std::string uri = ZARR_S3_ENDPOINT "/acquire-s3-test";
     storage_properties_init(&props.video[0].storage.settings,
                             0,
                             uri.c_str(),
@@ -124,8 +125,8 @@ configure(AcquireRuntime* runtime)
                             3);
     CHECK(storage_properties_set_access_key_and_secret(
       &props.video[0].storage.settings,
-      SIZED(ZARR_S3_ACCESS_KEY_ID),
-      SIZED(ZARR_S3_SECRET_ACCESS_KEY)));
+      SIZED(ZARR_S3_ACCESS_KEY_ID) + 1,
+      SIZED(ZARR_S3_SECRET_ACCESS_KEY) + 1));
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
@@ -150,28 +151,6 @@ configure(AcquireRuntime* runtime)
                                            1));
 
     OK(acquire_configure(runtime, &props));
-}
-
-std::vector<std::string>
-string_spit(const std::string& s, char delim)
-{
-    size_t begin = 0;
-    auto end = s.find_first_of(delim);
-
-    std::vector<std::string> out;
-    while (end <= std::string::npos) {
-        if (end > begin) {
-            out.emplace_back(s.substr(begin, end - begin));
-        }
-
-        if (end == std::string::npos) {
-            break;
-        }
-
-        begin = end + 1;
-        end = s.find_first_of(delim, begin);
-    }
-    return out;
 }
 
 void

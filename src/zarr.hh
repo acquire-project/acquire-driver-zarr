@@ -29,7 +29,7 @@ struct Zarr : public Storage
   public:
     Zarr();
     explicit Zarr(BloscCompressionParams&& compression_params);
-    virtual ~Zarr() noexcept = default;
+    virtual ~Zarr() noexcept;
 
     /// Storage interface
     void set(const StorageProperties* props);

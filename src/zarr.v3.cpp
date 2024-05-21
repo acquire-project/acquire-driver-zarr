@@ -38,7 +38,9 @@ zarr::ZarrV3::allocate_writers_()
     ArrayConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
-        .data_root = (fs::path(dataset_root_) / "data" / "root" / "0").string(),
+        .data_root = dataset_root_ + "/data/root/0",
+        .access_key_id = access_key_id_,
+        .secret_access_key = secret_access_key_,
         .compression_params = blosc_compression_params_,
     };
     writers_.push_back(std::make_shared<ZarrV3Writer>(config, thread_pool_));
@@ -72,11 +74,11 @@ std::vector<std::string>
 zarr::ZarrV3::make_metadata_sink_paths_()
 {
     std::vector<std::string> metadata_sink_paths;
-    metadata_sink_paths.push_back(dataset_root_ + "/zarr.json");
-    metadata_sink_paths.push_back(dataset_root_ + "/meta/root.group.json");
+    metadata_sink_paths.emplace_back("zarr.json");
+    metadata_sink_paths.emplace_back("meta/root.group.json");
     for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back(dataset_root_ + "/meta/root/" +
-                                      std::to_string(i) + ".array.json");
+        metadata_sink_paths.push_back("meta/root/" + std::to_string(i) +
+                                      ".array.json");
     }
 
     return metadata_sink_paths;

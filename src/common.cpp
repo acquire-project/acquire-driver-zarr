@@ -224,20 +224,26 @@ common::sample_type_to_string(SampleType t) noexcept
     }
 }
 
-void
-common::write_string(const std::string& path, const std::string& str)
+std::vector<std::string>
+common::split_uri(const std::string& uri)
 {
-    if (auto p = fs::path(path); !fs::exists(p.parent_path()))
-        fs::create_directories(p.parent_path());
+    const char delim = '/';
 
-    struct file f = { 0 };
-    auto is_ok = file_create(&f, path.c_str(), path.size());
-    is_ok &= file_write(&f,                                  // file
-                        0,                                   // offset
-                        (uint8_t*)str.c_str(),               // cur
-                        (uint8_t*)(str.c_str() + str.size()) // end
-    );
-    EXPECT(is_ok, "Write to \"%s\" failed.", path.c_str());
-    TRACE("Wrote %d bytes to \"%s\".", str.size(), path.c_str());
-    file_close(&f);
+    size_t begin = 0;
+    auto end = uri.find_first_of(delim);
+
+    std::vector<std::string> out;
+    while (end <= std::string::npos) {
+        if (end > begin) {
+            out.emplace_back(uri.substr(begin, end - begin));
+        }
+
+        if (end == std::string::npos) {
+            break;
+        }
+
+        begin = end + 1;
+        end = uri.find_first_of(delim, begin);
+    }
+    return out;
 }

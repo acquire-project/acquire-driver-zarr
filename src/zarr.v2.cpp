@@ -45,7 +45,9 @@ zarr::ZarrV2::allocate_writers_()
     ArrayConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
-        .data_root = (fs::path(dataset_root_) / "0").string(),
+        .data_root = dataset_root_ + "/0",
+        .access_key_id = access_key_id_,
+        .secret_access_key = secret_access_key_,
         .compression_params = blosc_compression_params_,
     };
     writers_.push_back(std::make_shared<ZarrV2Writer>(config, thread_pool_));
@@ -71,14 +73,13 @@ std::vector<std::string>
 zarr::ZarrV2::make_metadata_sink_paths_()
 {
     std::vector<std::string> metadata_sink_paths = {
-        dataset_root_ + "/.metadata", // base metadata
-        dataset_root_ + "/0/.zattrs", // external metadata
-        dataset_root_ + "/.zattrs",   // group metadata
+        ".metadata", // base metadata
+        "0/.zattrs", // external metadata
+        ".zattrs",   // group metadata
     };
 
     for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back(dataset_root_ + "/" + std::to_string(i) +
-                                      "/.zarray");
+        metadata_sink_paths.push_back(std::to_string(i) + "/.zarray");
     }
 
     return metadata_sink_paths;
@@ -105,8 +106,7 @@ zarr::ZarrV2::write_external_metadata_() const
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
-    std::string zattrs_path =
-      (fs::path(dataset_root_) / "0" / ".zattrs").string();
+    std::string zattrs_path = dataset_root_ + "/0/.zattrs";
     std::string metadata_str = external_metadata_json_.empty()
                                  ? "{}"
                                  : json::parse(external_metadata_json_,

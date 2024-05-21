@@ -57,7 +57,7 @@ zarr::FileCreator::create_chunk_sinks(const std::string& base_uri,
       base_uri.starts_with("file://") ? base_uri.substr(7) : base_uri;
 
     std::queue<fs::path> paths;
-    paths.push(base_dir);
+    paths.emplace(base_dir);
 
     if (!make_dirs_(paths)) {
         return false;
@@ -110,7 +110,7 @@ zarr::FileCreator::create_shard_sinks(const std::string& base_uri,
       base_uri.starts_with("file://") ? base_uri.substr(7) : base_uri;
 
     std::queue<fs::path> paths;
-    paths.push(base_dir);
+    paths.emplace(base_dir);
 
     if (!make_dirs_(paths)) {
         return false;
