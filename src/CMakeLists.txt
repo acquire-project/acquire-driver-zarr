@@ -4,11 +4,10 @@ if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
-set(tgt acquire-driver-zarr)
-set(ACQUIRE_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../include/acquire-zarr/acquire-zarr.h)
 
+set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
-        ${ACQUIRE_API_INCLUDE_FILE}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include/acquire-zarr/acquire-zarr.h
         api.cpp
         common.hh
         common.cpp
@@ -31,11 +30,6 @@ add_library(${tgt} MODULE
         zarr.v3.cpp
         zarr.driver.c
 )
-target_include_directories(${tgt} PUBLIC
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include/>
-  $<INSTALL_INTERFACE:include> 
-)
-
 target_enable_simd(${tgt})
 target_link_libraries(${tgt} PRIVATE
         acquire-core-logger
@@ -45,13 +39,8 @@ target_link_libraries(${tgt} PRIVATE
         cblosc
         json
 )
-
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-        PUBLIC_HEADER ${ACQUIRE_API_INCLUDE_FILE}
 )
 
-install(TARGETS ${tgt} 
-        LIBRARY DESTINATION lib
-        PUBLIC_HEADER DESTINATION install/aqcuire-zarr
-)
+install(TARGETS ${tgt} LIBRARY DESTINATION lib)

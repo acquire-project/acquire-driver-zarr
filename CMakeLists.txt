@@ -13,7 +13,7 @@ include(cmake/simd.cmake)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
-set(ACQUIRE_API_HEADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include/acquire)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
 
 add_subdirectory(src)
 add_subdirectory(tests)
