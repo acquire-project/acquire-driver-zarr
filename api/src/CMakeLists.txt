@@ -1,3 +1,5 @@
+project(acquire-zarr-api LANGUAGES C)
+
 set(tgt acquire-zarr)
 set(ACQUIRE_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../include/acquire-zarr/acquire-zarr.h)
 
@@ -6,11 +8,11 @@ add_library(${tgt} SHARED
         api.cpp
 )
 
-add_dependencies(${tgt} acquire-core-logger acquire-core-platform acquire-device-kit acquire-device-properties cblosc json)
+
 target_include_directories(${tgt} PRIVATE
   $<BUILD_INTERFACE: 
         ${CMAKE_CURRENT_SOURCE_DIR}/../include 
-        ${CMAKE_SOURCE_DIR}/src>
+        ${tgt}_inc
   $<INSTALL_INTERFACE: include> 
 )
 
@@ -20,6 +22,7 @@ target_link_libraries(${tgt} PRIVATE
         acquire-core-platform
         acquire-device-kit
         acquire-device-properties
+        acquire-driver-zarr-obj
         cblosc
         json
 )
