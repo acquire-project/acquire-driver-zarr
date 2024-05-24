@@ -1,4 +1,4 @@
-project(acquire-zarr-api LANGUAGES C)
+project(acquire-zarr-api)
 
 set(tgt acquire-zarr)
 set(ACQUIRE_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/../include/acquire-zarr/acquire-zarr.h)
