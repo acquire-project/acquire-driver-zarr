@@ -1,6 +1,7 @@
 add_subdirectory(3rdParty)
 
 if (NOT TARGET acquire-core-logger)
+    set(ACQUIRE_MSVC_USE_MD ON)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 

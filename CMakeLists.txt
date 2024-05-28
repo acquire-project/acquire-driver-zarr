@@ -10,7 +10,6 @@ include(cmake/git-versioning.cmake)
 include(cmake/ide.cmake)
 include(cmake/install-prefix.cmake)
 include(cmake/wsl.cmake)
-include(cmake/msvc.cmake)
 include(cmake/simd.cmake)
 include(cmake/aws.cmake)
 
