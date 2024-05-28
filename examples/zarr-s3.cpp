@@ -5,13 +5,12 @@
 #include "acquire.h"
 #include "logger.h"
 
-#include <iostream>
 #include <stdexcept>
-#include <string>
 #include <vector>
 
 /// Defines the following constants:
-/// - ZARR_S3_ENDPOINT ("s3://...") - the URI of the S3 server
+/// - ZARR_S3_ENDPOINT ("http://...") - the URI of the S3 server
+/// - ZARR_S3_BUCKET_NAME ("acquire-s3-test") - the name of the bucket
 /// - ZARR_S3_ACCESS_KEY_ID - the access key ID for the S3 server
 /// - ZARR_S3_SECRET_ACCESS_KEY - the secret access key for the S3 server
 #include "credentials.hpp"
@@ -102,7 +101,7 @@ configure(AcquireRuntime* runtime)
                                 &props.video[0].camera.identifier));
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u16;
-    props.video[0].camera.settings.shape = { .x = 64, .y = 48 };
+    props.video[0].camera.settings.shape = { .x = 1920, .y = 1080 };
     // we may drop frames with lower exposure
     props.video[0].camera.settings.exposure_time_us = 2e5;
 
@@ -114,7 +113,7 @@ configure(AcquireRuntime* runtime)
                                 &props.video[0].storage.identifier));
 
     // this bucket must already exist
-    std::string uri = ZARR_S3_ENDPOINT "/acquire-s3-test";
+    std::string uri = ZARR_S3_ENDPOINT "/" ZARR_S3_BUCKET_NAME;
     storage_properties_init(&props.video[0].storage.settings,
                             0,
                             uri.c_str(),
@@ -132,16 +131,16 @@ configure(AcquireRuntime* runtime)
                                            0,
                                            SIZED("x") + 1,
                                            DimensionType_Space,
-                                           64,
-                                           32,
-                                           2));
+                                           1920,
+                                           1920,
+                                           1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
                                            SIZED("y") + 1,
                                            DimensionType_Space,
-                                           48,
-                                           24,
-                                           1));
+                                           1080,
+                                           540,
+                                           2));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            2,
                                            SIZED("t") + 1,

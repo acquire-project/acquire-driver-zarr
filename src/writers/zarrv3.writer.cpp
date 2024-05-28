@@ -150,8 +150,17 @@ zarr::ZarrV3Writer::flush_impl_()
                                bucket_name,
                                config_.access_key_id,
                                config_.secret_access_key };
+
+        size_t min_chunk_size_bytes = 0;
+        for (const auto& buf : chunk_buffers_) {
+            min_chunk_size_bytes = std::max(min_chunk_size_bytes, buf.size());
+        }
+
         CHECK(
-          creator.create_shard_sinks(data_root, config_.dimensions, sinks_));
+          creator.create_shard_sinks(data_root,
+                                     config_.dimensions,
+                                     sinks_,
+                                     min_chunk_size_bytes));
     } else {
         const std::string data_root =
           (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))

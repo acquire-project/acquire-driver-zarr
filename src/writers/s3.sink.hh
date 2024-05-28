@@ -22,16 +22,28 @@ struct S3Sink : public Sink
     };
 
     explicit S3Sink(S3Sink::Config&& config);
-    ~S3Sink() override;
+    ~S3Sink() override = default;
+
+    [[nodiscard]] bool write(size_t offset,
+                             const uint8_t* buf,
+                             size_t bytes_of_buf) override;
+
+  protected:
+    S3Sink::Config config_;
+    std::unique_ptr<Aws::S3::S3Client> s3_client_;
+    std::string upload_id_;
+};
+
+struct S3MultipartSink : public S3Sink
+{
+    explicit S3MultipartSink(S3Sink::Config&& config);
+    ~S3MultipartSink() override;
 
     [[nodiscard]] bool write(size_t offset,
                              const uint8_t* buf,
                              size_t bytes_of_buf) override;
 
   private:
-    S3Sink::Config config_;
-    std::unique_ptr<Aws::S3::S3Client> s3_client_;
-    std::string upload_id_;
     std::vector<Aws::S3::Model::CompletedPart> completed_parts_;
 
     void close_();
@@ -51,12 +63,14 @@ struct S3SinkCreator
     [[nodiscard]] bool create_chunk_sinks(
       const std::string& data_root,
       const std::vector<Dimension>& dimensions,
-      std::vector<Sink*>& chunk_sinks);
+      std::vector<Sink*>& chunk_sinks,
+      size_t chunk_size_bytes);
 
     [[nodiscard]] bool create_shard_sinks(
       const std::string& data_root,
       const std::vector<Dimension>& dimensions,
-      std::vector<Sink*>& shard_sinks);
+      std::vector<Sink*>& shard_sinks,
+      size_t shard_size_bytes);
 
     [[nodiscard]] bool create_metadata_sinks(
       const std::vector<std::string>& paths,
@@ -69,13 +83,13 @@ struct S3SinkCreator
     std::string access_key_id_;
     std::string secret_access_key_;
 
-    /// @brief Parallel create a collection of files.
-    /// @param[in,out] paths The files to create. Unlike
-    /// `make_intermediate_paths_`, this function drains the queue.
-    /// @param[out] sinks The files created.
-    /// @return True iff all files were created successfully.
+    /// @brief Parallel create a collection of S3 objects.
+    /// @param[in,out] paths Paths to S3 objects to create.
+    /// @param[out] sinks Sink representations of objects created.
+    /// @return True iff all S3 sinks were created successfully.
     [[nodiscard]] bool make_s3_objects_(std::queue<std::string>& paths,
-                                        std::vector<Sink*>& sinks);
+                                        std::vector<Sink*>& sinks,
+                                        bool multipart);
 };
 } // namespace acquire::sink::zarr
 

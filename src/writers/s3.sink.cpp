@@ -7,6 +7,7 @@
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/CreateMultipartUploadRequest.h>
 #include <aws/s3/model/CompleteMultipartUploadRequest.h>
+#include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/UploadPartRequest.h>
 
 namespace zarr = acquire::sink::zarr;
@@ -36,7 +37,33 @@ zarr::S3Sink::S3Sink(Config&& config)
     s3_client_ =
       std::make_unique<Aws::S3::S3Client>(credentials, nullptr, client_config);
     CHECK(s3_client_);
+}
 
+bool
+zarr::S3Sink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
+{
+    Aws::S3::Model::PutObjectRequest request;
+    request.SetBucket(config_.bucket_name.c_str());
+    request.SetKey(config_.object_key.c_str());
+    request.SetContentType("application/octet-stream");
+
+    // TODO (aliddell): better tag
+    auto upload_stream_ptr = Aws::MakeShared<Aws::StringStream>("ExampleTag");
+    upload_stream_ptr->write((const char*)buf, (std::streamsize)bytes_of_buf);
+    request.SetBody(upload_stream_ptr);
+
+    Aws::S3::Model::PutObjectOutcome outcome = s3_client_->PutObject(request);
+
+    if (!outcome.IsSuccess()) {
+        LOGE("Error: PutObject: %s", outcome.GetError().GetMessage().c_str());
+    }
+
+    return outcome.IsSuccess();
+}
+
+zarr::S3MultipartSink::S3MultipartSink(S3Sink::Config&& config)
+  : S3Sink(std::move(config))
+{
     // initiate upload request
     Aws::S3::Model::CreateMultipartUploadRequest create_request;
     create_request.SetBucket(config_.bucket_name.c_str());
@@ -47,19 +74,21 @@ zarr::S3Sink::S3Sink(Config&& config)
     upload_id_ = create_outcome.GetResult().GetUploadId();
 }
 
-zarr::S3Sink::~S3Sink()
+zarr::S3MultipartSink::~S3MultipartSink()
 {
     try {
         close_();
     } catch (const std::exception& e) {
-        LOGE("Failed to close S3Sink: {}", e.what());
+        LOGE("Failed to close S3MultipartSink: {}", e.what());
     } catch (...) {
-        LOGE("Failed to close S3Sink");
+        LOGE("Failed to close S3MultipartSink: (unknown)");
     }
 }
 
 bool
-zarr::S3Sink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
+zarr::S3MultipartSink::write(size_t offset,
+                             const uint8_t* buf,
+                             size_t bytes_of_buf)
 {
     auto part_number = (int)completed_parts_.size() + 1;
 
@@ -69,6 +98,7 @@ zarr::S3Sink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
     request.SetPartNumber(part_number);
     request.SetUploadId(upload_id_.c_str());
 
+    // TODO (aliddell): better tag
     auto upload_stream_ptr = Aws::MakeShared<Aws::StringStream>("ExampleTag");
     upload_stream_ptr->write((const char*)buf, (std::streamsize)bytes_of_buf);
     request.SetBody(upload_stream_ptr);
@@ -91,7 +121,7 @@ zarr::S3Sink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
 }
 
 void
-zarr::S3Sink::close_()
+zarr::S3MultipartSink::close_()
 {
     if (completed_parts_.empty()) {
         return;
@@ -130,7 +160,8 @@ bool
 zarr::S3SinkCreator::create_chunk_sinks(
   const std::string& data_root,
   const std::vector<Dimension>& dimensions,
-  std::vector<Sink*>& chunk_sinks)
+  std::vector<Sink*>& chunk_sinks,
+  size_t chunk_size_bytes)
 {
     std::queue<std::string> paths;
     paths.push(data_root);
@@ -151,14 +182,15 @@ zarr::S3SinkCreator::create_chunk_sinks(
         }
     }
 
-    return make_s3_objects_(paths, chunk_sinks);
+    return make_s3_objects_(paths, chunk_sinks, chunk_size_bytes >= 5 << 20);
 }
 
 bool
 zarr::S3SinkCreator::create_shard_sinks(
   const std::string& data_root,
   const std::vector<Dimension>& dimensions,
-  std::vector<Sink*>& shard_sinks)
+  std::vector<Sink*>& shard_sinks,
+  size_t shard_size_bytes)
 {
     std::queue<std::string> paths;
     paths.push(data_root);
@@ -179,7 +211,7 @@ zarr::S3SinkCreator::create_shard_sinks(
         }
     }
 
-    return make_s3_objects_(paths, shard_sinks);
+    return make_s3_objects_(paths, shard_sinks, shard_size_bytes >= 5 << 20);
 }
 
 bool
@@ -187,28 +219,18 @@ zarr::S3SinkCreator::create_metadata_sinks(
   const std::vector<std::string>& paths,
   std::vector<Sink*>& metadata_sinks)
 {
-    if (paths.empty()) {
-        return true;
-    }
-
-    metadata_sinks.clear();
+    std::queue<std::string> metadata_paths;
     for (const auto& path : paths) {
-        S3Sink::Config config{
-            .endpoint = endpoint_,
-            .bucket_name = bucket_name_,
-            .object_key = path,
-            .access_key_id = access_key_id_,
-            .secret_access_key = secret_access_key_,
-        };
-
-        metadata_sinks.push_back(new S3Sink(std::move(config)));
+        metadata_paths.push(path);
     }
-    return metadata_sinks.size() == paths.size();
+
+    return make_s3_objects_(metadata_paths, metadata_sinks, false);
 }
 
 bool
 zarr::S3SinkCreator::make_s3_objects_(std::queue<std::string>& paths,
-                                      std::vector<Sink*>& sinks)
+                                      std::vector<Sink*>& sinks,
+                                      bool multipart)
 {
     if (paths.empty()) {
         return true;
@@ -225,65 +247,60 @@ zarr::S3SinkCreator::make_s3_objects_(std::queue<std::string>& paths,
         const auto path = paths.front();
         paths.pop();
 
-        //        S3Sink::Config config{
-        //            .endpoint = endpoint_,
-        //            .bucket_name = bucket_name_,
-        //            .object_key = path,
-        //            .access_key_id = access_key_id_,
-        //            .secret_access_key = secret_access_key_,
-        //        };
         std::string endpoint = endpoint_;
         std::string bucket_name = bucket_name_;
         std::string access_key_id = access_key_id_;
         std::string secret_access_key = secret_access_key_;
 
         Sink** psink = &sinks[i];
-        thread_pool_->push_to_job_queue(
-          [endpoint,
-           bucket_name,
-           path,
-           access_key_id,
-           secret_access_key,
-           psink,
-           &latch,
-           &all_successful](std::string& err) -> bool {
-              bool success = false;
+        thread_pool_->push_to_job_queue([endpoint,
+                                         bucket_name,
+                                         path,
+                                         access_key_id,
+                                         secret_access_key,
+                                         multipart,
+                                         psink,
+                                         &latch,
+                                         &all_successful](
+                                          std::string& err) -> bool {
+            bool success = false;
 
-              S3Sink::Config config{
-                  .endpoint = endpoint,
-                  .bucket_name = bucket_name,
-                  .object_key = path,
-                  .access_key_id = access_key_id,
-                  .secret_access_key = secret_access_key,
-              };
+            S3Sink::Config config{
+                .endpoint = endpoint,
+                .bucket_name = bucket_name,
+                .object_key = path,
+                .access_key_id = access_key_id,
+                .secret_access_key = secret_access_key,
+            };
 
-              try {
-                  if (all_successful) {
-                      *psink = new S3Sink(std::move(config));
-                  }
-                  success = true;
-              } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create sink '%s': %s.",
-                           config.object_key.c_str(),
-                           exc.what());
-                  err = buf;
-              } catch (...) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create file '%s': (unknown).",
-                           config.object_key.c_str());
-                  err = buf;
-              }
+            try {
+                if (all_successful) {
+                    *psink = multipart ? new S3MultipartSink(std::move(config))
+                                       : new S3Sink(std::move(config));
+                }
+                success = true;
+            } catch (const std::exception& exc) {
+                char buf[128];
+                snprintf(buf,
+                         sizeof(buf),
+                         "Failed to create sink '%s': %s.",
+                         config.object_key.c_str(),
+                         exc.what());
+                err = buf;
+            } catch (...) {
+                char buf[128];
+                snprintf(buf,
+                         sizeof(buf),
+                         "Failed to create file '%s': (unknown).",
+                         config.object_key.c_str());
+                err = buf;
+            }
 
-              latch.count_down();
-              all_successful = all_successful && success;
+            latch.count_down();
+            all_successful = all_successful && success;
 
-              return success;
-          });
+            return success;
+        });
     }
 
     latch.wait();
