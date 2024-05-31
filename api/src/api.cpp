@@ -1,7 +1,7 @@
+#include <iostream>
 #include "acquire-zarr/acquire-zarr.h"
 #include "zarr.v2.hh"
 #include "zarr.v3.hh"
-
 
 
 // C++ implementation of the ZarrSink, which is just a wrapper around the Zarr storage class heirarchy.
@@ -13,17 +13,21 @@ struct AcquireZarrSinkWrapper
     AcquireZarrSinkWrapper() = default;
     ~AcquireZarrSinkWrapper() = default;
 
-    bool configure(const struct AcquireZarrSinkConfig* config);
-    bool open();
+    void configure(const struct AcquireZarrSinkConfig* config);
+    void open();
+    void append(uint8_t* image_data, size_t image_size);
   protected:
     AcquireZarrSinkConfig config_;
 
     // use shared_ptr for polymorphism of zarr version.
     std::shared_ptr<struct Zarr> zarr_sink_ = nullptr;
-};
+
+    struct VideoFrame video_frame_;
+
+}; 
 
 
-bool AcquireZarrSinkWrapper::configure(const struct AcquireZarrSinkConfig* config)
+void AcquireZarrSinkWrapper::configure(const struct AcquireZarrSinkConfig* config)
 {
     config_ = *config;
 
@@ -54,13 +58,31 @@ bool AcquireZarrSinkWrapper::configure(const struct AcquireZarrSinkConfig* confi
         else
             zarr_sink_ = std::make_shared<struct ZarrV3>(std::move(blosc_params));
     }
-    return true;
+
+    // todo: get these from config data structure
+    video_frame_.shape.dims.channels = 1;
+    video_frame_.shape.dims.width = 512;
+    video_frame_.shape.dims.height = 512;
+    video_frame_.shape.dims.planes = 1;
+    video_frame_.shape.strides.channels = 1;
+    video_frame_.shape.strides.width = 1;
+    video_frame_.shape.strides.height = 512;
+    video_frame_.shape.strides.planes = 512;
+    video_frame_.shape.type = SampleType_u8;
 }
 
-bool AcquireZarrSinkWrapper::open()
+void AcquireZarrSinkWrapper::open()
 {
     zarr_sink_->start();
-    return true;
+}
+
+void AcquireZarrSinkWrapper::append(uint8_t* image_data, size_t image_size)
+{
+
+    // todo: check image size against expected size
+    memcpy(video_frame_.data, image_data, image_size);
+    const VideoFrame* const_frame = &video_frame_;
+    zarr_sink_->append(const_frame, image_size);
 }
 
 EXTERNC struct AcquireZarrSinkWrapper* zarr_sink_open(const struct AcquireZarrSinkConfig* config)
@@ -69,20 +91,14 @@ EXTERNC struct AcquireZarrSinkWrapper* zarr_sink_open(const struct AcquireZarrSi
     {
         struct AcquireZarrSinkWrapper* newptr = new struct AcquireZarrSinkWrapper();
 
-        if(!newptr->configure(config))
-        {
-            throw std::runtime_error("Failed to configure Zarr sink");
-        }
-
-        if(!newptr->open())
-        {
-            throw std::runtime_error("Failed to open Zarr sink");
-        }
+        newptr->configure(config);
+        newptr->open();
         return newptr;
 
     }
     catch (...)
     {
+        LOG("Error opening Zarr sink");
         return NULL;
     }
 
@@ -91,14 +107,32 @@ EXTERNC struct AcquireZarrSinkWrapper* zarr_sink_open(const struct AcquireZarrSi
 
 EXTERNC void zarr_sink_close(struct AcquireZarrSinkWrapper* zarr_sink)
 {
-    if (zarr_sink != NULL)
+    try
     {
-        delete zarr_sink;
-        zarr_sink = nullptr;
+        
+        if (zarr_sink != NULL)
+        {
+            delete zarr_sink;
+            zarr_sink = nullptr;
+        }
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
     }
 }
 
-EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper* zarr_sink, uint8_t* image_data, uint8_t dimensions, uint16_t shape[])
+EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper* zarr_sink, uint8_t* image_data, size_t image_size)
 {
-    return -1;
+    try
+    {
+        zarr_sink->append(image_data, image_size);
+        return 0;
+    }
+    catch(const std::exception& e)
+    {
+        std::cerr << e.what() << '\n';
+        return -1;
+    }
+    
 }

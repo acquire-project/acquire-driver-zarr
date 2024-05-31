@@ -73,29 +73,25 @@ reporter(int is_error,
 
 #include "acquire-zarr/acquire-zarr.h"
 
-void setup()
-{
-    printf("setting up\n");
-}
-
-
-void teardown()
-{
-    printf("tearing down\n");
-}
 
 int
 main()
 {
     struct AcquireZarrSinkConfig config = {
-        .filename = "test.zr",
+        .filename = "test.zarr",
         .zarr_version = AcquireZarrVersion_2,
         .compression = AcquireZarrCompression_BLOSC_LZ4,
         .multiscale = 0
     };
 
-    setup();
     struct AcquireZarrSinkWrapper* zarr = zarr_sink_open(&config);
-    teardown();
+
+    uint8_t image_data[512*512] = { 0 };
+    size_t image_size = sizeof(image_data);
+
+    zarr_sink_append(zarr, image_data, image_size);
+
+    zarr_sink_close(zarr);
+
     return 0;
 }
