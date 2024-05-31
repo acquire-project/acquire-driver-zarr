@@ -9,6 +9,8 @@ set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         common/thread.pool.hh
         common/thread.pool.cpp
+        common/connection.pool.hh
+        common/connection.pool.cpp
 #        common.hh
 #        common.cpp
 #        writers/sink.hh
