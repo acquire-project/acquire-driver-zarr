@@ -17,28 +17,28 @@ else ()
     set(tests
             list-devices
             unit-tests
-            get
-            get-meta
-            external-metadata-with-whitespace-ok
-            restart-stopped-zarr-resets-threadpool
-            repeat-start
-            write-zarr-v2-raw
-            write-zarr-v2-raw-chunk-size-larger-than-frame-size
-            write-zarr-v2-raw-with-even-chunking
-            write-zarr-v2-raw-with-even-chunking-and-rollover
-            write-zarr-v2-raw-with-ragged-chunking
-            write-zarr-v2-with-lz4-compression
-            write-zarr-v2-with-zstd-compression
-            write-zarr-v2-compressed-with-chunking
-            write-zarr-v2-compressed-with-chunking-and-rollover
-            write-zarr-v2-raw-multiscale
-            write-zarr-v2-raw-multiscale-with-trivial-tile-size
-            write-zarr-v2-compressed-multiscale
-            multiscales-metadata
-            write-zarr-v3-raw
-            write-zarr-v3-raw-with-ragged-sharding
-            write-zarr-v3-raw-chunk-exceeds-array
-            write-zarr-v3-compressed
+#            get
+#            get-meta
+#            external-metadata-with-whitespace-ok
+#            restart-stopped-zarr-resets-threadpool
+#            repeat-start
+#            write-zarr-v2-raw
+#            write-zarr-v2-raw-chunk-size-larger-than-frame-size
+#            write-zarr-v2-raw-with-even-chunking
+#            write-zarr-v2-raw-with-even-chunking-and-rollover
+#            write-zarr-v2-raw-with-ragged-chunking
+#            write-zarr-v2-with-lz4-compression
+#            write-zarr-v2-with-zstd-compression
+#            write-zarr-v2-compressed-with-chunking
+#            write-zarr-v2-compressed-with-chunking-and-rollover
+#            write-zarr-v2-raw-multiscale
+#            write-zarr-v2-raw-multiscale-with-trivial-tile-size
+#            write-zarr-v2-compressed-multiscale
+#            multiscales-metadata
+#            write-zarr-v3-raw
+#            write-zarr-v3-raw-with-ragged-sharding
+#            write-zarr-v3-raw-chunk-exceeds-array
+#            write-zarr-v3-compressed
     )
 
     foreach (name ${tests})

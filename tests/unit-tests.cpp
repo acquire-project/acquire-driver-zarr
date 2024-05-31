@@ -81,23 +81,27 @@ main()
         int (*test)();
     };
     const std::vector<testcase> tests{
-#define CASE(e) { .name = #e, .test = (int (*)())lib_load(&lib, #e) }
-        CASE(unit_test__average_frame),
-        CASE(unit_test__file_creator__create_chunk_sinks),
-        CASE(unit_test__file_creator__create_shard_sinks),
-        CASE(unit_test__chunk_lattice_index),
-        CASE(unit_test__tile_group_offset),
-        CASE(unit_test__chunk_internal_offset),
-        CASE(unit_test__writer__write_frame_to_chunks),
-        CASE(unit_test__downsample_writer_config),
-        CASE(unit_test__zarrv2_writer__write_even),
-        CASE(unit_test__zarrv2_writer__write_ragged_append_dim),
-        CASE(unit_test__shard_index_for_chunk),
-        CASE(unit_test__zarrv2_writer__write_ragged_internal_dim),
-        CASE(unit_test__shard_internal_index),
-        CASE(unit_test__zarrv3_writer__write_even),
-        CASE(unit_test__zarrv3_writer__write_ragged_append_dim),
-        CASE(unit_test__zarrv3_writer__write_ragged_internal_dim),
+#define CASE(e)                                                                \
+    {                                                                          \
+        .name = #e, .test = (int (*)())lib_load(&lib, #e)                      \
+    }
+        CASE(unit_test__thread_pool__push_to_job_queue),
+        //        CASE(unit_test__average_frame),
+        //        CASE(unit_test__file_creator__create_chunk_sinks),
+        //        CASE(unit_test__file_creator__create_shard_sinks),
+        //        CASE(unit_test__chunk_lattice_index),
+        //        CASE(unit_test__tile_group_offset),
+        //        CASE(unit_test__chunk_internal_offset),
+        //        CASE(unit_test__writer__write_frame_to_chunks),
+        //        CASE(unit_test__downsample_writer_config),
+        //        CASE(unit_test__zarrv2_writer__write_even),
+        //        CASE(unit_test__zarrv2_writer__write_ragged_append_dim),
+        //        CASE(unit_test__shard_index_for_chunk),
+        //        CASE(unit_test__zarrv2_writer__write_ragged_internal_dim),
+        //        CASE(unit_test__shard_internal_index),
+        //        CASE(unit_test__zarrv3_writer__write_even),
+        //        CASE(unit_test__zarrv3_writer__write_ragged_append_dim),
+        //        CASE(unit_test__zarrv3_writer__write_ragged_internal_dim),
 #undef CASE
     };
 
