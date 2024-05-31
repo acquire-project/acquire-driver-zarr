@@ -174,5 +174,4 @@ extern "C"
         return retval;
     }
 }
-
 #endif // NO_UNIT_TESTS

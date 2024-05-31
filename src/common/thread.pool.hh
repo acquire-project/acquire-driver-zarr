@@ -1,5 +1,5 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_THEAD_POOL_V0
-#define H_ACQUIRE_STORAGE_ZARR_THEAD_POOL_V0
+#ifndef H_ACQUIRE_STORAGE_ZARR_THREAD_POOL_V0
+#define H_ACQUIRE_STORAGE_ZARR_THREAD_POOL_V0
 
 #include <condition_variable>
 #include <functional>
@@ -49,4 +49,4 @@ struct ThreadPool final
 };
 } // namespace acquire::sink::zarr
 
-#endif // H_ACQUIRE_STORAGE_ZARR_THEAD_POOL_V0
+#endif // H_ACQUIRE_STORAGE_ZARR_THREAD_POOL_V0

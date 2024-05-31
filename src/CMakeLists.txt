@@ -7,8 +7,8 @@ endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
-        thread.pool.hh
-        thread.pool.cpp
+        common/thread.pool.hh
+        common/thread.pool.cpp
 #        common.hh
 #        common.cpp
 #        writers/sink.hh
