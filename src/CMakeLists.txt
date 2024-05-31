@@ -11,13 +11,13 @@ add_library(${tgt} MODULE
         common/thread.pool.cpp
         common/connection.pool.hh
         common/connection.pool.cpp
+        writers/s3.sink.hh
+        writers/s3.sink.cpp
 #        common.hh
 #        common.cpp
 #        writers/sink.hh
 #        writers/file.sink.hh
 #        writers/file.sink.cpp
-#        writers/s3.sink.hh
-#        writers/s3.sink.cpp
 #        writers/writer.hh
 #        writers/writer.cpp
 #        writers/zarrv2.writer.hh

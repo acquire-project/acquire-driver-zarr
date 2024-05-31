@@ -86,6 +86,8 @@ main()
         .name = #e, .test = (int (*)())lib_load(&lib, #e)                      \
     }
         CASE(unit_test__thread_pool__push_to_job_queue),
+        CASE(unit_test__s3_sink__write_put_object),
+        CASE(unit_test__s3_sink__write_multipart),
         //        CASE(unit_test__average_frame),
         //        CASE(unit_test__file_creator__create_chunk_sinks),
         //        CASE(unit_test__file_creator__create_shard_sinks),

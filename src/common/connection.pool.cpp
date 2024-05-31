@@ -30,13 +30,19 @@ zarr::S3Connection::S3Connection(const std::string& endpoint,
     config.endpointOverride = endpoint;
     const Aws::Auth::AWSCredentials credentials(access_key_id,
                                                 secret_access_key);
-    client_ = std::make_unique<Aws::S3::S3Client>(credentials, nullptr, config);
+    client_ = std::make_shared<Aws::S3::S3Client>(credentials, nullptr, config);
     CHECK(client_);
 }
 
 zarr::S3Connection::~S3Connection() noexcept
 {
     client_.reset();
+}
+
+std::shared_ptr<Aws::S3::S3Client>
+zarr::S3Connection::client() const noexcept
+{
+    return client_;
 }
 
 zarr::S3ConnectionPool::S3ConnectionPool(

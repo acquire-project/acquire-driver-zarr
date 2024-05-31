@@ -8,13 +8,17 @@
 namespace acquire::sink::zarr {
 struct S3Connection final
 {
+    S3Connection(const S3Connection&) = delete;
     explicit S3Connection(const std::string& endpoint,
                           const std::string& access_key_id,
                           const std::string& secret_access_key);
+
     ~S3Connection() noexcept;
 
+    std::shared_ptr<Aws::S3::S3Client> client() const noexcept;
+
   private:
-    std::unique_ptr<Aws::S3::S3Client> client_;
+    std::shared_ptr<Aws::S3::S3Client> client_;
 };
 
 struct S3ConnectionPool final
