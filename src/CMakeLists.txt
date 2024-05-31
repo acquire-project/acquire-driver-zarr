@@ -9,9 +9,9 @@ set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         common.hh
         common.cpp
-        writers/sink.hh
-        writers/file.sink.hh
-        writers/file.sink.cpp
+#        writers/sink.hh
+#        writers/file.sink.hh
+#        writers/file.sink.cpp
         writers/s3.sink.hh
         writers/s3.sink.cpp
         writers/writer.hh
@@ -20,6 +20,18 @@ add_library(${tgt} MODULE
         writers/zarrv2.writer.cpp
         writers/zarrv3.writer.hh
         writers/zarrv3.writer.cpp
+        writers/file.writer.hh
+        writers/file.writer.cpp
+        writers/s3.writer.hh
+        writers/s3.writer.cpp
+        writers/zarrv2.file.writer.hh
+        writers/zarrv2.file.writer.cpp
+        writers/zarrv2.s3.writer.hh
+        writers/zarrv2.s3.writer.cpp
+        writers/zarrv3.file.writer.hh
+        writers/zarrv3.file.writer.cpp
+        writers/zarrv3.s3.writer.hh
+        writers/zarrv3.s3.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
         zarr.hh

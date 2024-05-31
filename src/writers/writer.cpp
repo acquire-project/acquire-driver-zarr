@@ -107,7 +107,7 @@ chunk_internal_offset(size_t frame_id,
 } // end ::{anonymous} namespace
 
 bool
-zarr::downsample(const ArrayConfig& config, ArrayConfig& downsampled_config)
+zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 {
     // downsample dimensions
     downsampled_config.dimensions.clear();
@@ -155,6 +155,9 @@ zarr::downsample(const ArrayConfig& config, ArrayConfig& downsampled_config)
       downsampled_config.image_shape.dims.height;
 
     // data root needs updated
+    downsampled_config.dataset_root = config.dataset_root;
+    downsampled_config.array_index = config.array_index + 1;
+
     fs::path downsampled_data_root = config.data_root;
     // increment the array number in the group
     downsampled_data_root.replace_filename(
@@ -179,16 +182,15 @@ zarr::downsample(const ArrayConfig& config, ArrayConfig& downsampled_config)
 }
 
 /// Writer
-zarr::Writer::Writer(const ArrayConfig& config,
+zarr::Writer::Writer(const WriterConfig& config,
                      std::shared_ptr<common::ThreadPool> thread_pool)
-  : config_{ config }
+  : writer_config_{ config }
   , thread_pool_{ thread_pool }
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
   , append_chunk_index_{ 0 }
   , is_finalizing_{ false }
 {
-    data_root_ = config_.data_root;
 }
 
 bool
@@ -200,7 +202,7 @@ zarr::Writer::write(const VideoFrame* frame)
     }
 
     // split the incoming frame into tiles and write them to the chunk buffers
-    const auto& dimensions = config_.dimensions;
+    const auto& dimensions = writer_config_.dimensions;
 
     const auto bytes_written = write_frame_to_chunks_(
       frame->data, frame->bytes_of_frame - sizeof(*frame));
@@ -221,14 +223,14 @@ zarr::Writer::finalize()
 {
     is_finalizing_ = true;
     flush_();
-    close_files_();
+    close_();
     is_finalizing_ = false;
 }
 
-const zarr::ArrayConfig&
+const zarr::WriterConfig&
 zarr::Writer::config() const noexcept
 {
-    return config_;
+    return writer_config_;
 }
 
 uint32_t
@@ -241,11 +243,11 @@ void
 zarr::Writer::make_buffers_() noexcept
 {
     const size_t n_chunks =
-      common::number_of_chunks_in_memory(config_.dimensions);
+      common::number_of_chunks_in_memory(writer_config_.dimensions);
     chunk_buffers_.resize(n_chunks); // no-op if already the correct size
 
-    const auto bytes_per_chunk =
-      common::bytes_per_chunk(config_.dimensions, config_.image_shape.type);
+    const auto bytes_per_chunk = common::bytes_per_chunk(
+      writer_config_.dimensions, writer_config_.image_shape.type);
 
     for (auto& buf : chunk_buffers_) {
         buf.resize(bytes_per_chunk);
@@ -258,19 +260,19 @@ zarr::Writer::validate_frame_(const VideoFrame* frame)
 {
     CHECK(frame);
 
-    EXPECT(frame->shape.dims.width == config_.image_shape.dims.width,
+    EXPECT(frame->shape.dims.width == writer_config_.image_shape.dims.width,
            "Expected frame to have %d columns. Got %d.",
-           config_.image_shape.dims.width,
+           writer_config_.image_shape.dims.width,
            frame->shape.dims.width);
 
-    EXPECT(frame->shape.dims.height == config_.image_shape.dims.height,
+    EXPECT(frame->shape.dims.height == writer_config_.image_shape.dims.height,
            "Expected frame to have %d rows. Got %d.",
-           config_.image_shape.dims.height,
+           writer_config_.image_shape.dims.height,
            frame->shape.dims.height);
 
-    EXPECT(frame->shape.type == config_.image_shape.type,
+    EXPECT(frame->shape.type == writer_config_.image_shape.type,
            "Expected frame to have pixel type %s. Got %s.",
-           common::sample_type_to_string(config_.image_shape.type),
+           common::sample_type_to_string(writer_config_.image_shape.type),
            common::sample_type_to_string(frame->shape.type));
 }
 
@@ -278,13 +280,13 @@ size_t
 zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
     // break the frame into tiles and write them to the chunk buffers
-    const auto image_shape = config_.image_shape;
+    const auto image_shape = writer_config_.image_shape;
     const auto bytes_per_px = bytes_of_type(image_shape.type);
 
     const auto frame_cols = image_shape.dims.width;
     const auto frame_rows = image_shape.dims.height;
 
-    const auto& dimensions = config_.dimensions;
+    const auto& dimensions = writer_config_.dimensions;
     const auto tile_cols = dimensions.at(0).chunk_size_px;
     const auto tile_rows = dimensions.at(1).chunk_size_px;
     const auto bytes_per_row = tile_cols * bytes_per_px;
@@ -344,7 +346,7 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 bool
 zarr::Writer::should_flush_() const
 {
-    const auto& dims = config_.dimensions;
+    const auto& dims = writer_config_.dimensions;
     size_t frames_before_flush = dims.back().chunk_size_px;
     for (auto i = 2; i < dims.size() - 1; ++i) {
         frames_before_flush *= dims.at(i).array_size_px;
@@ -357,14 +359,14 @@ zarr::Writer::should_flush_() const
 void
 zarr::Writer::compress_buffers_() noexcept
 {
-    if (!config_.compression_params) {
+    if (!writer_config_.compression_params) {
         return;
     }
 
     TRACE("Compressing");
 
-    BloscCompressionParams params = *config_.compression_params;
-    const auto bytes_per_px = bytes_of_type(config_.image_shape.type);
+    BloscCompressionParams params = *writer_config_.compression_params;
+    const auto bytes_per_px = bytes_of_type(writer_config_.image_shape.type);
 
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
@@ -438,24 +440,11 @@ zarr::Writer::flush_()
 }
 
 void
-zarr::Writer::close_files_()
-{
-    for (Sink* sink_ : sinks_) {
-        if (dynamic_cast<FileSink*>(sink_)) {
-            sink_close<FileSink>(sink_);
-        } else if (dynamic_cast<S3Sink*>(sink_)) {
-            sink_close<S3Sink>(sink_);
-        }
-    }
-    sinks_.clear();
-}
-
-void
 zarr::Writer::rollover_()
 {
     TRACE("Rolling over");
 
-    close_files_();
+    close_();
     ++append_chunk_index_;
 }
 
@@ -471,15 +460,18 @@ namespace common = zarr::common;
 class TestWriter : public zarr::Writer
 {
   public:
-    TestWriter(const zarr::ArrayConfig& array_spec,
+    TestWriter(const zarr::WriterConfig& writer_config,
                std::shared_ptr<common::ThreadPool> thread_pool)
-      : zarr::Writer(array_spec, thread_pool)
+      : zarr::Writer(writer_config, thread_pool)
     {
     }
 
   private:
     bool should_rollover_() const override { return false; }
     bool flush_impl_() override { return true; }
+    bool write_base_metadata() const override { return true; }
+    bool write_array_metadata() const override { return true; }
+    void close_() override {}
 };
 
 extern "C"
@@ -784,14 +776,15 @@ extern "C"
                 .type = SampleType_u16,
             };
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig writer_config = {
                 .image_shape = shape,
                 .dimensions = dims,
+                .dataset_root = base_dir.string(),
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            TestWriter writer(array_spec, thread_pool);
+            TestWriter writer(writer_config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
             frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
@@ -825,7 +818,7 @@ extern "C"
         try {
             const fs::path base_dir = "acquire";
 
-            zarr::ArrayConfig config {
+            zarr::WriterConfig config {
                 .image_shape = {
                     .dims = {
                       .channels = 1,
@@ -860,7 +853,7 @@ extern "C"
                                            5,
                                            1); // 5 timepoints / chunk, 1 shard
 
-            zarr::ArrayConfig downsampled_config;
+            zarr::WriterConfig downsampled_config;
             CHECK(zarr::downsample(config, downsampled_config));
 
             // check dimensions

@@ -490,7 +490,7 @@ zarr::Zarr::start()
         fs::create_directories(dataset_root_);
 
         FileCreator creator{ thread_pool_ };
-        for (auto & path : metadata_sink_paths) {
+        for (auto& path : metadata_sink_paths) {
             path = dataset_root_ + "/" + path;
         }
         CHECK(
@@ -640,6 +640,12 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
 zarr::Zarr::~Zarr() noexcept
 {
     //    stop();
+}
+
+bool
+zarr::Zarr::is_s3_() const
+{
+    return is_s3_uri(dataset_root_);
 }
 
 void

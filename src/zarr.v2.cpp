@@ -1,5 +1,6 @@
 #include "zarr.v2.hh"
-#include "writers/zarrv2.writer.hh"
+#include "writers/zarrv2.file.writer.hh"
+#include "writers/zarrv2.s3.writer.hh"
 
 #include "json.hpp"
 
@@ -42,25 +43,44 @@ zarr::ZarrV2::allocate_writers_()
 {
     writers_.clear();
 
-    ArrayConfig config = {
+    WriterConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
         .data_root = dataset_root_ + "/0",
-        .access_key_id = access_key_id_,
-        .secret_access_key = secret_access_key_,
         .compression_params = blosc_compression_params_,
     };
-    writers_.push_back(std::make_shared<ZarrV2Writer>(config, thread_pool_));
+
+    if (is_s3_()) {
+        S3Config s3_config = {
+            .access_key_id = access_key_id_,
+            .secret_access_key = secret_access_key_,
+        };
+        writers_.push_back(
+          std::make_shared<ZarrV2S3Writer>(config, s3_config, thread_pool_));
+    } else {
+        writers_.push_back(
+          std::make_shared<ZarrV2FileWriter>(config, thread_pool_));
+    }
 
     if (enable_multiscale_) {
-        ArrayConfig downsampled_config;
+        WriterConfig downsampled_config;
 
         bool do_downsample = true;
         int level = 1;
         while (do_downsample) {
             do_downsample = downsample(config, downsampled_config);
-            writers_.push_back(
-              std::make_shared<ZarrV2Writer>(downsampled_config, thread_pool_));
+
+            if (is_s3_()) {
+                S3Config s3_config = {
+                    .access_key_id = access_key_id_,
+                    .secret_access_key = secret_access_key_,
+                };
+                writers_.push_back(std::make_shared<ZarrV2S3Writer>(
+                  downsampled_config, s3_config, thread_pool_));
+            } else {
+                writers_.push_back(std::make_shared<ZarrV2FileWriter>(
+                  downsampled_config, thread_pool_));
+            }
             scaled_frames_.emplace(level++, std::nullopt);
 
             config = std::move(downsampled_config);
@@ -237,7 +257,7 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     CHECK(level < writers_.size());
     const auto& writer = writers_.at(level);
 
-    const ArrayConfig& config = writer->config();
+    const WriterConfig& config = writer->config();
     const auto& image_shape = config.image_shape;
 
     std::vector<size_t> array_shape;

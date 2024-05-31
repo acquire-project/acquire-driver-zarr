@@ -76,6 +76,8 @@ struct Zarr : public Storage
     bool error_;
     std::string error_msg_;
 
+    bool is_s3_() const;
+
     /// Setup
     void set_dimensions_(const StorageProperties* props);
     virtual void allocate_writers_() = 0;

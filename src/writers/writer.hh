@@ -20,13 +20,13 @@ namespace fs = std::filesystem;
 namespace acquire::sink::zarr {
 struct Zarr;
 
-struct ArrayConfig
+struct WriterConfig
 {
     ImageShape image_shape;
     std::vector<Dimension> dimensions;
+    std::string dataset_root;
+    size_t array_index;
     std::string data_root;
-    std::string access_key_id;
-    std::string secret_access_key;
     std::optional<BloscCompressionParams> compression_params;
 };
 
@@ -38,33 +38,38 @@ struct ArrayConfig
 /// false if and only if downsampling brings one or more dimensions lower than
 /// the chunk size along that dimension.
 [[nodiscard]] bool
-downsample(const ArrayConfig& config, ArrayConfig& downsampled_config);
+downsample(const WriterConfig& config, WriterConfig& downsampled_config);
 
 struct Writer
 {
   public:
     Writer() = delete;
-    Writer(const ArrayConfig& config,
+    Writer(const WriterConfig& config,
            std::shared_ptr<common::ThreadPool> thread_pool);
 
     virtual ~Writer() noexcept = default;
 
     [[nodiscard]] bool write(const VideoFrame* frame);
+
+    [[nodiscard]] virtual bool write_base_metadata(
+      const std::string& metadata) = 0;
+    [[nodiscard]] virtual bool write_external_metadata(
+      const std::string& metadata) = 0;
+
+    [[nodiscard]] virtual bool write_group_metadata(
+      const std::string& metadata) = 0;
+    [[nodiscard]] virtual bool write_array_metadata() = 0;
+
     void finalize();
 
-    const ArrayConfig& config() const noexcept;
-
+    const WriterConfig& config() const noexcept;
     uint32_t frames_written() const noexcept;
 
   protected:
-    ArrayConfig config_;
+    WriterConfig writer_config_;
 
     /// Chunking
     std::vector<std::vector<uint8_t>> chunk_buffers_;
-
-    /// Filesystem
-    std::string data_root_;
-    std::vector<Sink*> sinks_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;
@@ -76,6 +81,8 @@ struct Writer
     uint32_t append_chunk_index_;
     bool is_finalizing_;
 
+    virtual std::string make_array_metadata_() const = 0;
+
     void make_buffers_() noexcept;
     void validate_frame_(const VideoFrame* frame);
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
@@ -84,7 +91,7 @@ struct Writer
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
     virtual bool should_rollover_() const = 0;
-    void close_files_();
+    virtual void close_() = 0;
     void rollover_();
 };
 } // namespace acquire::sink::zarr

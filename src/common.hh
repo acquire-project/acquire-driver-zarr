@@ -124,6 +124,22 @@ number_of_shards(const std::vector<Dimension>& dimensions);
 size_t
 chunks_per_shard(const std::vector<Dimension>& dimensions);
 
+/// @brief Get the shard index for a given chunk index, given array dimensions.
+/// @param chunk_index The index of the chunk.
+/// @param dimensions The dimensions of the array.
+/// @return The index of the shard containing the chunk.
+size_t
+shard_index_for_chunk(size_t chunk_index,
+                      const std::vector<Dimension>& dimensions);
+
+/// @brief Get the internal index of a chunk within a shard.
+/// @param chunk_index The index of the chunk.
+/// @param dimensions The dimensions of the array.
+/// @return The index of the chunk within the shard.
+size_t
+shard_internal_index(size_t chunk_index,
+                     const std::vector<Dimension>& dimensions);
+
 /// @brief Get the size, in bytes, of a single chunk.
 /// @param dimensions The dimensions of the array.
 /// @param dtype The pixel type of the array.
@@ -145,12 +161,17 @@ sample_type_to_dtype(SampleType t);
 const char*
 sample_type_to_string(SampleType t) noexcept;
 
-
-/// \brief Split a URI by the '/' delimiter.
-/// \param uri String to split.
-/// \return Vector of strings.
+/// @brief Split a URI by the '/' delimiter.
+/// @param uri String to split.
+/// @return Vector of strings.
 std::vector<std::string>
 split_uri(const std::string& uri);
+
+/// @brief Check if a URI is an S3 URI.
+/// @param uri String to check.
+/// @return True if the URI is an S3 URI, false otherwise.
+bool
+is_s3_uri(const std::string& uri);
 } // namespace acquire::sink::zarr::common
 } // namespace acquire::sink::zarr
 
