@@ -39,7 +39,7 @@ zarr::S3Sink::S3Sink(const std::string& bucket_name,
 }
 
 bool
-zarr::S3Sink::write(const uint8_t* buf, size_t bytes_of_buf)
+zarr::S3Sink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
 {
     CHECK(buf);
 
@@ -52,6 +52,23 @@ zarr::S3Sink::write(const uint8_t* buf, size_t bytes_of_buf)
     }
 
     return false;
+}
+
+void
+zarr::S3Sink::close()
+{
+    try {
+        if (upload_id_.empty()) {
+            CHECK(put_object_());
+        } else {
+            CHECK(flush_part_());
+            CHECK(finalize_multipart_upload_());
+        }
+    } catch (const std::exception& exc) {
+        LOGE("Error: %s", exc.what());
+    } catch (...) {
+        LOGE("Error: (unknown)");
+    }
 }
 
 bool
@@ -230,25 +247,6 @@ zarr::S3Sink::finalize_multipart_upload_()
     return retval;
 }
 
-void
-zarr::sink_close(zarr::S3Sink* sink)
-{
-    if (sink) {
-        try {
-            if (sink->upload_id_.empty()) {
-                CHECK(sink->put_object_());
-            } else {
-                CHECK(sink->flush_part_());
-                CHECK(sink->finalize_multipart_upload_());
-            }
-        } catch (const std::exception& exc) {
-            LOGE("Error: %s", exc.what());
-        } catch (...) {
-            LOGE("Error: (unknown)");
-        }
-    }
-}
-
 #ifndef NO_UNIT_TESTS
 #ifdef _WIN32
 #define acquire_export __declspec(dllexport)
@@ -339,9 +337,9 @@ extern "C"
             zarr::S3Sink sink(ZARR_S3_BUCKET_NAME, object_key, connection_pool);
 
             const std::string data = "Hello, Acquire!";
-            CHECK(sink.write((const uint8_t*)data.c_str(), data.size()));
+            CHECK(sink.write(0, (const uint8_t*)data.c_str(), data.size()));
 
-            sink_close(&sink);
+            sink.close();
 
             auto connection = connection_pool->get_connection();
             CHECK(connection);
@@ -401,10 +399,13 @@ extern "C"
 
             const std::string data = "Hello, Acquire!";
             for (auto i = 0; i < 5 << 20; ++i) {
-                CHECK(sink.write((const uint8_t*)data.c_str(), data.size()));
+
+                CHECK(sink.write(0, // offset is ignored for S3 writes
+                                 (const uint8_t*)data.c_str(),
+                                 data.size()));
             }
 
-            sink_close(&sink);
+            sink.close();
 
             auto connection = connection_pool->get_connection();
             CHECK(connection);
