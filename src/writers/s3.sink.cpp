@@ -120,8 +120,8 @@ zarr::S3Sink::put_object_()
 bool
 zarr::S3Sink::flush_part_()
 {
-    if (buf_size_ < buf_.size()) {
-        return false;
+    if (buf_size_ == 0) {
+        return true;
     }
 
     std::shared_ptr<S3Connection> connection;
@@ -238,6 +238,7 @@ zarr::sink_close(zarr::S3Sink* sink)
             if (sink->upload_id_.empty()) {
                 CHECK(sink->put_object_());
             } else {
+                CHECK(sink->flush_part_());
                 CHECK(sink->finalize_multipart_upload_());
             }
         } catch (const std::exception& exc) {
@@ -256,10 +257,62 @@ zarr::sink_close(zarr::S3Sink* sink)
 #endif // _WIN32
 
 #include <aws/core/Aws.h>
+#include <aws/s3/model/HeadObjectRequest.h>
+#include <aws/s3/model/GetObjectRequest.h>
+#include <aws/s3/model/DeleteObjectRequest.h>
 
 #if __has_include("credentials.hpp")
 #include "credentials.hpp"
 #endif
+
+void
+validate_object_exists(const std::string& bucket_name,
+                       const std::string& object_key,
+                       const std::shared_ptr<Aws::S3::S3Client>& client)
+{
+    Aws::S3::Model::HeadObjectRequest request;
+    request.SetBucket(bucket_name.c_str());
+    request.SetKey(object_key.c_str());
+
+    auto outcome = client->HeadObject(request);
+    CHECK(outcome.IsSuccess());
+}
+
+void
+validate_object_contents(const std::string& bucket_name,
+                         const std::string& object_key,
+                         const std::shared_ptr<Aws::S3::S3Client>& client,
+                         const std::vector<uint8_t>& expected_data)
+{
+    Aws::S3::Model::GetObjectRequest request;
+    request.SetBucket(bucket_name.c_str());
+    request.SetKey(object_key.c_str());
+
+    auto outcome = client->GetObject(request);
+    CHECK(outcome.IsSuccess());
+
+    auto& stream = outcome.GetResultWithOwnership().GetBody();
+    std::string data;
+    data.resize(expected_data.size());
+    stream.read(&data[0], data.size());
+
+    for (auto i = 0; i < data.size(); ++i) {
+        CHECK(data.at(i) == expected_data.at(i));
+    }
+}
+
+void
+delete_object(const std::string& bucket_name,
+              const std::string& object_key,
+              const std::shared_ptr<Aws::S3::S3Client>& client)
+{
+    Aws::S3::Model::DeleteObjectRequest request;
+    request.SetBucket(bucket_name.c_str());
+    request.SetKey(object_key.c_str());
+
+    auto outcome = client->DeleteObject(request);
+    CHECK(outcome.IsSuccess());
+}
 
 extern "C"
 {
@@ -271,6 +324,8 @@ extern "C"
         std::function<void(const std::string&)> err =
           [](const std::string& msg) { LOGE("Error: %s", msg.c_str()); };
 
+        const std::string object_key = "test-put-object";
+
         Aws::SDKOptions options;
         Aws::InitAPI(options);
 
@@ -281,12 +336,32 @@ extern "C"
               ZARR_S3_ACCESS_KEY_ID,
               ZARR_S3_SECRET_ACCESS_KEY,
               std::move(err));
-            zarr::S3Sink sink("test-bucket", "test-object", connection_pool);
+            zarr::S3Sink sink(ZARR_S3_BUCKET_NAME, object_key, connection_pool);
 
             const std::string data = "Hello, Acquire!";
             CHECK(sink.write((const uint8_t*)data.c_str(), data.size()));
 
             sink_close(&sink);
+
+            auto connection = connection_pool->get_connection();
+            CHECK(connection);
+            auto client = connection->client();
+
+            // check that the object exists
+            validate_object_exists(ZARR_S3_BUCKET_NAME, object_key, client);
+
+            // validate object contents
+            std::vector<uint8_t> expected_data;
+
+            // contains "Hello, Acquire!" followed by ~5MB of zeros
+            expected_data.insert(expected_data.end(), data.begin(), data.end());
+            expected_data.resize(5 << 20, 0);
+
+            validate_object_contents(
+              ZARR_S3_BUCKET_NAME, object_key, client, expected_data);
+
+            // cleanup
+            delete_object(ZARR_S3_BUCKET_NAME, object_key, client);
 
             retval = 1;
         } catch (const std::exception& exc) {
@@ -310,6 +385,8 @@ extern "C"
         std::function<void(const std::string&)> err =
           [](const std::string& msg) { LOGE("Error: %s", msg.c_str()); };
 
+        const std::string object_key = "test-multipart-object";
+
         Aws::SDKOptions options;
         Aws::InitAPI(options);
 
@@ -320,7 +397,7 @@ extern "C"
               ZARR_S3_ACCESS_KEY_ID,
               ZARR_S3_SECRET_ACCESS_KEY,
               std::move(err));
-            zarr::S3Sink sink("test-bucket", "test-object", connection_pool);
+            zarr::S3Sink sink(ZARR_S3_BUCKET_NAME, object_key, connection_pool);
 
             const std::string data = "Hello, Acquire!";
             for (auto i = 0; i < 5 << 20; ++i) {
@@ -328,6 +405,28 @@ extern "C"
             }
 
             sink_close(&sink);
+
+            auto connection = connection_pool->get_connection();
+            CHECK(connection);
+            auto client = connection->client();
+
+            // check that the object exists
+            validate_object_exists(ZARR_S3_BUCKET_NAME, object_key, client);
+
+            // validate object contents
+
+            // contains "Hello, Acquire!" repeated 5MB times
+            std::vector<uint8_t> expected_data;
+            for (auto i = 0; i < 5 << 20; ++i) {
+                expected_data.insert(
+                  expected_data.end(), data.begin(), data.end());
+            }
+
+            validate_object_contents(
+              ZARR_S3_BUCKET_NAME, object_key, client, expected_data);
+
+            // cleanup
+            delete_object(ZARR_S3_BUCKET_NAME, object_key, client);
 
             retval = 1;
         } catch (const std::exception& exc) {
