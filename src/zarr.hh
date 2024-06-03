@@ -66,11 +66,14 @@ struct Zarr : public Storage
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
 
     // changes on flush
-    std::vector<Sink*> metadata_sinks_;
+    std::vector<std::shared_ptr<Sink>> metadata_sinks_;
 
     /// Multithreading
-    std::shared_ptr<common::ThreadPool> thread_pool_;
+    std::shared_ptr<ThreadPool> thread_pool_;
     mutable std::mutex mutex_; // for error_ / error_msg_
+
+    /// S3
+    std::shared_ptr<S3ConnectionPool> connection_pool_; // could be null
 
     /// Error state
     bool error_;

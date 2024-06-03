@@ -1,7 +1,6 @@
 #include "common.hh"
 
 #include <cmath>
-#include <thread>
 
 namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;

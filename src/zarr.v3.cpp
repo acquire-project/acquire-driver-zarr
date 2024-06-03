@@ -39,8 +39,6 @@ zarr::ZarrV3::allocate_writers_()
     WriterConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
-        .dataset_root = dataset_root_,
-        .array_index = 0,
         .data_root = dataset_root_ + "/data/root/0",
         .compression_params = blosc_compression_params_,
     };

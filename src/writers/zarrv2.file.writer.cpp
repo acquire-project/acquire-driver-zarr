@@ -10,69 +10,6 @@ namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 
 namespace {
-bool
-make_directories(std::queue<fs::path>& dir_paths,
-                 std::shared_ptr<common::ThreadPool>& thread_pool)
-{
-    if (dir_paths.empty()) {
-        return true;
-    }
-
-    std::atomic<bool> all_successful = true;
-
-    const auto n_dirs = dir_paths.size();
-    std::latch latch(n_dirs);
-
-    for (auto i = 0; i < n_dirs; ++i) {
-        const auto dirname = dir_paths.front();
-        dir_paths.pop();
-
-        thread_pool->push_to_job_queue(
-          [dirname, &latch, &all_successful](std::string& err) -> bool {
-              bool success = false;
-
-              try {
-                  if (fs::exists(dirname)) {
-                      EXPECT(fs::is_directory(dirname),
-                             "'%s' exists but is not a directory",
-                             dirname.c_str());
-                  } else if (all_successful) {
-                      std::error_code ec;
-                      EXPECT(fs::create_directories(dirname, ec),
-                             "%s",
-                             ec.message().c_str());
-                  }
-                  success = true;
-              } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create directory '%s': %s.",
-                           dirname.string().c_str(),
-                           exc.what());
-                  err = buf;
-              } catch (...) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create directory '%s': (unknown).",
-                           dirname.string().c_str());
-                  err = buf;
-              }
-
-              latch.count_down();
-              all_successful = all_successful && success;
-
-              return success;
-          });
-
-        dir_paths.push(dirname);
-    }
-
-    latch.wait();
-
-    return all_successful;
-}
 
 bool
 create_chunk_files(const std::string& data_root,
@@ -80,47 +17,7 @@ create_chunk_files(const std::string& data_root,
                    std::shared_ptr<common::ThreadPool>& thread_pool,
                    std::vector<std::unique_ptr<struct file>>& files)
 {
-    std::queue<fs::path> paths;
-    paths.emplace(data_root);
 
-    if (!make_directories(paths, thread_pool)) {
-        return false;
-    }
-
-    // create directories
-    for (auto i = dimensions.size() - 2; i >= 1; --i) {
-        const auto& dim = dimensions.at(i);
-        const auto n_chunks = common::chunks_along_dimension(dim);
-
-        auto n_paths = paths.size();
-        for (auto j = 0; j < n_paths; ++j) {
-            const auto path = paths.front();
-            paths.pop();
-
-            for (auto k = 0; k < n_chunks; ++k) {
-                paths.push(path / std::to_string(k));
-            }
-        }
-
-        if (!make_directories(paths, thread_pool)) {
-            return false;
-        }
-    }
-
-    // create files
-    {
-        const auto& dim = dimensions.front();
-        const auto n_chunks = common::chunks_along_dimension(dim);
-
-        auto n_paths = paths.size();
-        for (auto i = 0; i < n_paths; ++i) {
-            const auto path = paths.front();
-            paths.pop();
-            for (auto j = 0; j < n_chunks; ++j) {
-                paths.push(path / std::to_string(j));
-            }
-        }
-    }
 
     std::atomic<bool> all_successful = true;
 

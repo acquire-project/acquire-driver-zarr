@@ -11,19 +11,17 @@ add_library(${tgt} MODULE
         common/thread.pool.cpp
         common/connection.pool.hh
         common/connection.pool.cpp
+        common.hh # TODO (aliddell): rename
+        common.cpp # TODO (aliddell): rename
         writers/sink.hh
+        writers/sink.creator.hh
+        writers/sink.creator.cpp
+        writers/file.sink.hh
+        writers/file.sink.cpp
         writers/s3.sink.hh
         writers/s3.sink.cpp
-        #        common.hh
-        #        common.cpp
-        #        writers/file.sink.hh
-        #        writers/file.sink.cpp
-        #        writers/writer.hh
-        #        writers/writer.cpp
-        #        writers/zarrv2.writer.hh
-        #        writers/zarrv2.writer.cpp
-        #        writers/zarrv3.writer.hh
-        #        writers/zarrv3.writer.cpp
+        writers/writer.hh
+        writers/writer.cpp
         #        writers/file.writer.hh
         #        writers/file.writer.cpp
         #        writers/s3.writer.hh
@@ -36,10 +34,10 @@ add_library(${tgt} MODULE
         #        writers/zarrv3.file.writer.cpp
         #        writers/zarrv3.s3.writer.hh
         #        writers/zarrv3.s3.writer.cpp
-        #        writers/blosc.compressor.hh
-        #        writers/blosc.compressor.cpp
-        #        zarr.hh
-        #        zarr.cpp
+        writers/blosc.compressor.hh
+        writers/blosc.compressor.cpp
+        zarr.hh
+        zarr.cpp
         #        zarr.v2.hh
         #        zarr.v2.cpp
         #        zarr.v3.hh

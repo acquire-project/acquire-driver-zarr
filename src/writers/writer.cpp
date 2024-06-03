@@ -155,9 +155,6 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
       downsampled_config.image_shape.dims.height;
 
     // data root needs updated
-    downsampled_config.dataset_root = config.dataset_root;
-    downsampled_config.array_index = config.array_index + 1;
-
     fs::path downsampled_data_root = config.data_root;
     // increment the array number in the group
     downsampled_data_root.replace_filename(
@@ -183,14 +180,27 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 
 /// Writer
 zarr::Writer::Writer(const WriterConfig& config,
-                     std::shared_ptr<common::ThreadPool> thread_pool)
+                     std::shared_ptr<ThreadPool> thread_pool,
+                     std::shared_ptr<S3ConnectionPool> connection_pool)
   : writer_config_{ config }
   , thread_pool_{ thread_pool }
+  , connection_pool_{ connection_pool }
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
   , append_chunk_index_{ 0 }
   , is_finalizing_{ false }
 {
+}
+
+zarr::Writer::~Writer() noexcept
+{
+    try {
+        finalize();
+    } catch (const std::exception& exc) {
+        LOGE("Exception: %s\n", exc.what());
+    } catch (...) {
+        LOGE("Exception: (unknown)");
+    }
 }
 
 bool
@@ -223,7 +233,7 @@ zarr::Writer::finalize()
 {
     is_finalizing_ = true;
     flush_();
-    close_();
+    close_sinks_();
     is_finalizing_ = false;
 }
 
@@ -440,11 +450,20 @@ zarr::Writer::flush_()
 }
 
 void
+zarr::Writer::close_sinks_()
+{
+    for (auto& sink : sinks_) {
+        sink->close();
+    }
+    sinks_.clear();
+}
+
+void
 zarr::Writer::rollover_()
 {
     TRACE("Rolling over");
 
-    close_();
+    close_sinks_();
     ++append_chunk_index_;
 }
 
@@ -461,17 +480,14 @@ class TestWriter : public zarr::Writer
 {
   public:
     TestWriter(const zarr::WriterConfig& writer_config,
-               std::shared_ptr<common::ThreadPool> thread_pool)
-      : zarr::Writer(writer_config, thread_pool)
+               std::shared_ptr<zarr::ThreadPool> thread_pool)
+      : zarr::Writer(writer_config, thread_pool, nullptr)
     {
     }
 
   private:
     bool should_rollover_() const override { return false; }
     bool flush_impl_() override { return true; }
-    bool write_base_metadata() const override { return true; }
-    bool write_array_metadata() const override { return true; }
-    void close_() override {}
 };
 
 extern "C"
@@ -756,7 +772,7 @@ extern "C"
         int retval = 0;
 
         try {
-            auto thread_pool = std::make_shared<common::ThreadPool>(
+            auto thread_pool = std::make_shared<zarr::ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
@@ -779,7 +795,6 @@ extern "C"
             zarr::WriterConfig writer_config = {
                 .image_shape = shape,
                 .dimensions = dims,
-                .dataset_root = base_dir.string(),
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };

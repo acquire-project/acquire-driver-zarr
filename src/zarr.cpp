@@ -1,8 +1,8 @@
 #include "zarr.hh"
 
 #include "writers/writer.hh"
-#include "writers/file.sink.hh"
-#include "writers/s3.sink.hh"
+#include "writers/sink.hh"
+#include "writers/sink.creator.hh"
 #include "json.hpp"
 
 #include <regex>
@@ -458,44 +458,64 @@ zarr::Zarr::start()
 
     if (aws_options_) {
         Aws::InitAPI(*aws_options_);
+
+        std::vector<std::string> tokens = common::split_uri(dataset_root_);
+        CHECK(tokens.size() > 2); // s3://bucket/key
+        std::string endpoint = tokens.at(0) + "//" + tokens.at(1);
+
+        std::function<void(const std::string&)> set_error =
+          [this](const std::string& err) { this->set_error(err); };
+
+        connection_pool_ =
+          std::make_shared<S3ConnectionPool>(8,
+                                             endpoint,
+                                             access_key_id_,
+                                             secret_access_key_,
+                                             std::move(set_error));
     }
 
-    thread_pool_ = std::make_shared<common::ThreadPool>(
-      std::thread::hardware_concurrency(),
-      [this](const std::string& err) { this->set_error(err); });
+    {
+        std::function<void(const std::string&)> set_error =
+          [this](const std::string& err) { this->set_error(err); };
+
+        thread_pool_ = std::make_shared<ThreadPool>(
+          std::thread::hardware_concurrency(), std::move(set_error));
+    }
 
     allocate_writers_();
 
     std::vector<std::string> metadata_sink_paths = make_metadata_sink_paths_();
-    if (is_s3_uri(dataset_root_)) {
-        std::vector<std::string> uri_parts = common::split_uri(dataset_root_);
-        CHECK(uri_parts.size() > 2); // s3://bucket/key
-        std::string endpoint = uri_parts.at(0) + "//" + uri_parts.at(1);
-        std::string bucket_name = uri_parts.at(2);
-        S3SinkCreator creator{ thread_pool_,
-                               endpoint,
-                               bucket_name,
-                               access_key_id_,
-                               secret_access_key_ };
-        CHECK(
-          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
-    } else {
-        if (fs::exists(dataset_root_)) {
-            std::error_code ec;
-            EXPECT(fs::remove_all(dataset_root_, ec),
-                   R"(Failed to remove folder for "%s": %s)",
-                   dataset_root_.c_str(),
-                   ec.message().c_str());
-        }
-        fs::create_directories(dataset_root_);
+    SinkCreator creator(thread_pool_, connection_pool_);
 
-        FileCreator creator{ thread_pool_ };
-        for (auto& path : metadata_sink_paths) {
-            path = dataset_root_ + "/" + path;
-        }
-        CHECK(
-          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
-    }
+//    if (is_s3_uri(dataset_root_)) {
+//        std::vector<std::string> uri_parts = common::split_uri(dataset_root_);
+//        CHECK(uri_parts.size() > 2); // s3://bucket/key
+//        std::string endpoint = uri_parts.at(0) + "//" + uri_parts.at(1);
+//        std::string bucket_name = uri_parts.at(2);
+//        S3SinkCreator creator{ thread_pool_,
+//                               endpoint,
+//                               bucket_name,
+//                               access_key_id_,
+//                               secret_access_key_ };
+//        CHECK(
+//          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+//    } else {
+//        if (fs::exists(dataset_root_)) {
+//            std::error_code ec;
+//            EXPECT(fs::remove_all(dataset_root_, ec),
+//                   R"(Failed to remove folder for "%s": %s)",
+//                   dataset_root_.c_str(),
+//                   ec.message().c_str());
+//        }
+//        fs::create_directories(dataset_root_);
+//
+//        FileCreator creator{ thread_pool_ };
+//        for (auto& path : metadata_sink_paths) {
+//            path = dataset_root_ + "/" + path;
+//        }
+//        CHECK(
+//          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
+//    }
 
     write_fixed_metadata_();
 
@@ -515,12 +535,8 @@ zarr::Zarr::stop() noexcept
         try {
             // must precede close of chunk file
             write_mutable_metadata_();
-            for (Sink* sink : metadata_sinks_) {
-                if (dynamic_cast<FileSink*>(sink)) {
-                    sink_close<FileSink>(sink);
-                } else if (dynamic_cast<S3Sink*>(sink)) {
-                    sink_close<S3Sink>(sink);
-                }
+            for (auto& sink : metadata_sinks_) {
+                sink->close();
             }
             metadata_sinks_.clear();
 
@@ -625,6 +641,7 @@ zarr::Zarr::Zarr()
       .reserve_image_shape = ::zarr_reserve_image_shape,
   }
   , thread_pool_{ nullptr }
+  , connection_pool_{ nullptr }
   , pixel_scale_um_{ 1, 1 }
   , enable_multiscale_{ false }
   , error_{ false }

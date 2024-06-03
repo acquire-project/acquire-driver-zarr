@@ -1,11 +1,10 @@
 #ifndef H_ACQUIRE_ZARR_ZARRV2_FILE_WRITER_V0
 #define H_ACQUIRE_ZARR_ZARRV2_FILE_WRITER_V0
 
-#include "zarrv2.writer.hh"
 #include "file.writer.hh"
 
 namespace acquire::sink::zarr {
-struct ZarrV2FileWriter final : public ZarrV2Writer, public FileWriter
+struct ZarrV2FileWriter final : public FileWriter
 {
     ZarrV2FileWriter(const WriterConfig& config,
                      std::shared_ptr<common::ThreadPool> thread_pool);

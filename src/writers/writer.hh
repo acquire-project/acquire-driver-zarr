@@ -9,6 +9,8 @@
 #include "device/props/components.h"
 
 #include "../common.hh"
+#include "../common/thread.pool.hh"
+#include "../common/connection.pool.hh"
 #include "blosc.compressor.hh"
 #include "sink.hh"
 
@@ -24,8 +26,6 @@ struct WriterConfig
 {
     ImageShape image_shape;
     std::vector<Dimension> dimensions;
-    std::string dataset_root;
-    size_t array_index;
     std::string data_root;
     std::optional<BloscCompressionParams> compression_params;
 };
@@ -45,20 +45,12 @@ struct Writer
   public:
     Writer() = delete;
     Writer(const WriterConfig& config,
-           std::shared_ptr<common::ThreadPool> thread_pool);
+           std::shared_ptr<ThreadPool> thread_pool,
+           std::shared_ptr<S3ConnectionPool> connection_pool);
 
-    virtual ~Writer() noexcept = default;
+    ~Writer() noexcept;
 
     [[nodiscard]] bool write(const VideoFrame* frame);
-
-    [[nodiscard]] virtual bool write_base_metadata(
-      const std::string& metadata) = 0;
-    [[nodiscard]] virtual bool write_external_metadata(
-      const std::string& metadata) = 0;
-
-    [[nodiscard]] virtual bool write_group_metadata(
-      const std::string& metadata) = 0;
-    [[nodiscard]] virtual bool write_array_metadata() = 0;
 
     void finalize();
 
@@ -67,21 +59,23 @@ struct Writer
 
   protected:
     WriterConfig writer_config_;
+    std::vector<std::shared_ptr<Sink>> sinks_;
 
     /// Chunking
     std::vector<std::vector<uint8_t>> chunk_buffers_;
 
     /// Multithreading
-    std::shared_ptr<common::ThreadPool> thread_pool_;
+    std::shared_ptr<ThreadPool> thread_pool_;
     std::mutex buffers_mutex_;
+
+    /// S3
+    std::shared_ptr<S3ConnectionPool> connection_pool_; // could be null
 
     /// Bookkeeping
     uint64_t bytes_to_flush_;
     uint32_t frames_written_;
     uint32_t append_chunk_index_;
     bool is_finalizing_;
-
-    virtual std::string make_array_metadata_() const = 0;
 
     void make_buffers_() noexcept;
     void validate_frame_(const VideoFrame* frame);
@@ -91,7 +85,7 @@ struct Writer
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
     virtual bool should_rollover_() const = 0;
-    virtual void close_() = 0;
+    void close_sinks_();
     void rollover_();
 };
 } // namespace acquire::sink::zarr
