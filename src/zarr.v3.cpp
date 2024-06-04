@@ -45,18 +45,6 @@ zarr::ZarrV3::allocate_writers_()
 
     writers_.push_back(
       std::make_shared<ZarrV3Writer>(config, thread_pool_, connection_pool_));
-    //    if (is_s3_()) {
-    //        S3Config s3_config = {
-    //            .access_key_id = access_key_id_,
-    //            .secret_access_key = secret_access_key_,
-    //        };
-    //        writers_.push_back(
-    //          std::make_shared<ZarrV3S3Writer>(config, s3_config,
-    //          thread_pool_));
-    //    } else {
-    //        writers_.push_back(
-    //          std::make_shared<ZarrV3FileWriter>(config, thread_pool_));
-    //    }
 
     if (enable_multiscale_) {
         WriterConfig downsampled_config;

@@ -52,18 +52,6 @@ zarr::ZarrV2::allocate_writers_()
 
     writers_.push_back(
       std::make_shared<ZarrV2Writer>(config, thread_pool_, connection_pool_));
-    //    if (is_s3_()) {
-    //        S3Config s3_config = {
-    //            .access_key_id = access_key_id_,
-    //            .secret_access_key = secret_access_key_,
-    //        };
-    //        writers_.push_back(
-    //          std::make_shared<ZarrV2S3Writer>(config, s3_config,
-    //          thread_pool_));
-    //    } else {
-    //        writers_.push_back(
-    //          std::make_shared<ZarrV2FileWriter>(config, thread_pool_));
-    //    }
 
     if (enable_multiscale_) {
         WriterConfig downsampled_config;
@@ -74,17 +62,6 @@ zarr::ZarrV2::allocate_writers_()
             do_downsample = downsample(config, downsampled_config);
             writers_.push_back(std::make_shared<ZarrV2Writer>(
               downsampled_config, thread_pool_, connection_pool_));
-            //            if (is_s3_()) {
-            //                S3Config s3_config = {
-            //                    .access_key_id = access_key_id_,
-            //                    .secret_access_key = secret_access_key_,
-            //                };
-            //                writers_.push_back(std::make_shared<ZarrV2S3Writer>(
-            //                  downsampled_config, s3_config, thread_pool_));
-            //            } else {
-            //                writers_.push_back(std::make_shared<ZarrV2FileWriter>(
-            //                  downsampled_config, thread_pool_));
-            //            }
             scaled_frames_.emplace(level++, std::nullopt);
 
             config = std::move(downsampled_config);
@@ -122,7 +99,6 @@ zarr::ZarrV2::write_external_metadata_() const
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
-    std::string zattrs_path = dataset_root_ + "/0/.zattrs";
     std::string metadata_str = external_metadata_json_.empty()
                                  ? "{}"
                                  : json::parse(external_metadata_json_,
