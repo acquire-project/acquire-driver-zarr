@@ -142,16 +142,33 @@ zarr::SinkCreator::create_v2_metadata_sinks(
         base_dir = base_uri.substr(7);
     }
 
-    std::queue<std::string> paths;
-    paths.push(base_dir + "/.metadata"); // base metadata
-    paths.push(base_dir + "/0/.zattrs"); // external metadata
-    paths.push(base_dir + "/.zattrs");   // group metadata
-    for (auto i = 0; i < n_arrays; ++i) {
-        paths.push(base_dir + "/" + std::to_string(i) + "/.zarray");
+    // make parent directories
+    {
+        std::queue<std::string> paths;
+        paths.push(base_dir);
+        paths.push(base_dir + "/0");
+        for (auto i = 0; i < n_arrays; ++i) {
+            paths.push(base_dir + "/" + std::to_string(i));
+        }
+
+        if (!make_dirs_(paths)) {
+            return false;
+        }
     }
 
-    // TODO (aliddell): or make_s3_objects_
-    return make_files_(paths, metadata_sinks);
+    // make files
+    {
+        std::queue<std::string> paths;
+        paths.push(base_dir + "/.metadata"); // base metadata
+        paths.push(base_dir + "/0/.zattrs"); // external metadata
+        paths.push(base_dir + "/.zattrs");   // group metadata
+        for (auto i = 0; i < n_arrays; ++i) {
+            paths.push(base_dir + "/" + std::to_string(i) + "/.zarray");
+        }
+
+        // TODO (aliddell): or make_s3_objects_
+        return make_files_(paths, metadata_sinks);
+    }
 }
 
 bool
@@ -165,16 +182,31 @@ zarr::SinkCreator::create_v3_metadata_sinks(
         base_dir = base_uri.substr(7);
     }
 
-    std::queue<std::string> paths;
-    paths.push(base_dir + "/zarr.json");
-    paths.push(base_dir + "/meta/root.group.json");
-    for (auto i = 0; i < n_arrays; ++i) {
-        paths.push(base_dir + "/meta/root/" + std::to_string(i) +
-                   ".array.json");
+    // make parent directories
+    {
+        std::queue<std::string> paths;
+        paths.push(base_dir);
+        paths.push(base_dir + "/meta");
+        paths.push(base_dir + "/meta/root");
+
+        if (!make_dirs_(paths)) {
+            return false;
+        }
     }
 
-    // TODO (aliddell): or make_s3_objects_
-    return make_files_(paths, metadata_sinks);
+    // make files
+    {
+        std::queue<std::string> paths;
+        paths.push(base_dir + "/zarr.json");
+        paths.push(base_dir + "/meta/root.group.json");
+        for (auto i = 0; i < n_arrays; ++i) {
+            paths.push(base_dir + "/meta/root/" + std::to_string(i) +
+                       ".array.json");
+        }
+
+        // TODO (aliddell): or make_s3_objects_
+        return make_files_(paths, metadata_sinks);
+    }
 }
 
 bool
