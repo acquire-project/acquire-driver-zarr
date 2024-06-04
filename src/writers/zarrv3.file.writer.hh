@@ -7,7 +7,7 @@ namespace acquire::sink::zarr {
 struct ZarrV3FileWriter final : public FileWriter
 {
     ZarrV3FileWriter(const WriterConfig& config,
-                     std::shared_ptr<common::ThreadPool> thread_pool);
+                     std::shared_ptr<ThreadPool> thread_pool);
 
     ~ZarrV3FileWriter() noexcept override = default;
 

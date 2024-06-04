@@ -48,7 +48,7 @@ struct Writer
            std::shared_ptr<ThreadPool> thread_pool,
            std::shared_ptr<S3ConnectionPool> connection_pool);
 
-    ~Writer() noexcept;
+    virtual ~Writer() noexcept;
 
     [[nodiscard]] bool write(const VideoFrame* frame);
 

@@ -25,7 +25,8 @@ struct ZarrV3Writer final : public Writer
   public:
     ZarrV3Writer() = delete;
     ZarrV3Writer(const WriterConfig& array_spec,
-                 std::shared_ptr<ThreadPool> thread_pool);
+                 std::shared_ptr<ThreadPool> thread_pool,
+                 std::shared_ptr<S3ConnectionPool> connection_pool);
 
     ~ZarrV3Writer() override = default;
 

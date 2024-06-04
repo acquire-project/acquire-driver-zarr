@@ -22,27 +22,19 @@ add_library(${tgt} MODULE
         writers/s3.sink.cpp
         writers/writer.hh
         writers/writer.cpp
-        #        writers/file.writer.hh
-        #        writers/file.writer.cpp
-        #        writers/s3.writer.hh
-        #        writers/s3.writer.cpp
-        #        writers/zarrv2.file.writer.hh
-        #        writers/zarrv2.file.writer.cpp
-        #        writers/zarrv2.s3.writer.hh
-        #        writers/zarrv2.s3.writer.cpp
-        #        writers/zarrv3.file.writer.hh
-        #        writers/zarrv3.file.writer.cpp
-        #        writers/zarrv3.s3.writer.hh
-        #        writers/zarrv3.s3.writer.cpp
+        writers/zarrv2.writer.hh
+        writers/zarrv2.writer.cpp
+        writers/zarrv3.writer.hh
+        writers/zarrv3.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
         zarr.hh
         zarr.cpp
-        #        zarr.v2.hh
-        #        zarr.v2.cpp
-        #        zarr.v3.hh
-        #        zarr.v3.cpp
-        #        zarr.driver.c
+        zarr.v2.hh
+        zarr.v2.cpp
+        zarr.v3.hh
+        zarr.v3.cpp
+        zarr.driver.c
 )
 add_dependencies(${tgt} acquire-core-logger acquire-core-platform acquire-device-kit acquire-device-properties cblosc json) # aws-sdk-cpp)
 target_enable_simd(${tgt})

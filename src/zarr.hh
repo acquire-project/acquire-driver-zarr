@@ -86,7 +86,7 @@ struct Zarr : public Storage
     virtual void allocate_writers_() = 0;
 
     /// Metadata
-    virtual std::vector<std::string> make_metadata_sink_paths_() = 0;
+    virtual void make_metadata_sinks_() = 0;
 
     // fixed metadata
     void write_fixed_metadata_() const;

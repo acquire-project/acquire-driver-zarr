@@ -10,7 +10,7 @@ struct ZarrV3S3Writer final : public S3Writer
     ZarrV3S3Writer() = delete;
     ZarrV3S3Writer(const WriterConfig& writer_config,
                    const S3Config& s3_config,
-                   std::shared_ptr<common::ThreadPool> thread_pool);
+                   std::shared_ptr<ThreadPool> thread_pool);
     ~ZarrV3S3Writer() noexcept override = default;
 
   protected:

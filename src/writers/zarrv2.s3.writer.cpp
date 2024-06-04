@@ -15,7 +15,7 @@ create_chunk_sinks(const std::string& data_root,
                    const std::string& bucket_name,
                    const std::string& access_key_id,
                    const std::string& secret_access_key,
-                   std::shared_ptr<common::ThreadPool>& thread_pool,
+                   std::shared_ptr<ThreadPool>& thread_pool,
                    std::vector<std::unique_ptr<zarr::S3Sink>>& sinks)
 {
     std::queue<std::string> paths;
@@ -107,7 +107,7 @@ create_chunk_sinks(const std::string& data_root,
 zarr::ZarrV2S3Writer::ZarrV2S3Writer(
   const WriterConfig& writer_config,
   const S3Config& s3_config,
-  std::shared_ptr<common::ThreadPool> thread_pool)
+  std::shared_ptr<ThreadPool> thread_pool)
   : S3Writer(writer_config, s3_config, thread_pool)
 {
 }

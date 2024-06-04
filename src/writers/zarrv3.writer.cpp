@@ -1,8 +1,7 @@
 #include "zarrv3.writer.hh"
 
 #include "../zarr.hh"
-#include "file.sink.hh"
-#include "s3.sink.hh"
+#include "sink.creator.hh"
 
 #include <latch>
 #include <stdexcept>
@@ -19,9 +18,10 @@ is_s3_uri(const std::string& uri)
 } // namespace
 
 zarr::ZarrV3Writer::ZarrV3Writer(
-  const ArrayConfig& array_spec,
-  std::shared_ptr<common::ThreadPool> thread_pool)
-  : Writer(array_spec, thread_pool)
+  const WriterConfig& array_spec,
+  std::shared_ptr<ThreadPool> thread_pool,
+  std::shared_ptr<S3ConnectionPool> connection_pool)
+  : Writer(array_spec, thread_pool, connection_pool)
   , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
   , shard_tables_{ common::number_of_shards(array_spec.dimensions) }
 {
@@ -38,54 +38,69 @@ zarr::ZarrV3Writer::ZarrV3Writer(
 bool
 zarr::ZarrV3Writer::flush_impl_()
 {
-    // create shard sinks if they don't exist
-    if (is_s3_uri(data_root_)) {
-        std::vector<std::string> uri_parts = common::split_uri(data_root_);
-        CHECK(uri_parts.size() > 2); // s3://bucket/key
-        std::string endpoint = uri_parts.at(0) + "//" + uri_parts.at(1);
-        std::string bucket_name = uri_parts.at(2);
+    const std::string data_root = writer_config_.data_root + "/" +
+                                  ("c" + std::to_string(append_chunk_index_));
 
-        std::string data_root;
-        for (auto i = 3; i < uri_parts.size() - 1; ++i) {
-            data_root += uri_parts.at(i) + "/";
-        }
-        if (uri_parts.size() > 2) {
-            data_root += uri_parts.back();
-        }
-
-        S3SinkCreator creator{ thread_pool_,
-                               endpoint,
-                               bucket_name,
-                               array_config_.access_key_id,
-                               array_config_.secret_access_key };
-
-        size_t min_chunk_size_bytes = 0;
-        for (const auto& buf : chunk_buffers_) {
-            min_chunk_size_bytes = std::max(min_chunk_size_bytes, buf.size());
-        }
-
-        CHECK(creator.create_shard_sinks(
-          data_root, array_config_.dimensions, sinks_, min_chunk_size_bytes));
-    } else {
-        const std::string data_root =
-          (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
-            .string();
-
-        FileCreator file_creator(thread_pool_);
-        if (sinks_.empty() && !file_creator.create_shard_sinks(
-                                data_root, array_config_.dimensions, sinks_)) {
+    if (sinks_.empty()) {
+        SinkCreator creator{ thread_pool_, connection_pool_ };
+        if (!creator.create_shard_sinks(
+              data_root, writer_config_.dimensions, sinks_)) {
             return false;
         }
     }
 
-    const auto n_shards = common::number_of_shards(array_config_.dimensions);
+    //    // create shard sinks if they don't exist
+    //    if (is_s3_uri(data_root_)) {
+    //        std::vector<std::string> uri_parts =
+    //        common::split_uri(data_root_); CHECK(uri_parts.size() > 2); //
+    //        s3://bucket/key std::string endpoint = uri_parts.at(0) + "//" +
+    //        uri_parts.at(1); std::string bucket_name = uri_parts.at(2);
+    //
+    //        std::string data_root;
+    //        for (auto i = 3; i < uri_parts.size() - 1; ++i) {
+    //            data_root += uri_parts.at(i) + "/";
+    //        }
+    //        if (uri_parts.size() > 2) {
+    //            data_root += uri_parts.back();
+    //        }
+    //
+    //        S3SinkCreator creator{ thread_pool_,
+    //                               endpoint,
+    //                               bucket_name,
+    //                               array_config_.access_key_id,
+    //                               array_config_.secret_access_key };
+    //
+    //        size_t min_chunk_size_bytes = 0;
+    //        for (const auto& buf : chunk_buffers_) {
+    //            min_chunk_size_bytes = std::max(min_chunk_size_bytes,
+    //            buf.size());
+    //        }
+    //
+    //        CHECK(creator.create_shard_sinks(
+    //          data_root, array_config_.dimensions, sinks_,
+    //          min_chunk_size_bytes));
+    //    } else {
+    //        const std::string data_root =
+    //          (fs::path(data_root_) / ("c" +
+    //          std::to_string(append_chunk_index_)))
+    //            .string();
+    //
+    //        FileCreator file_creator(thread_pool_);
+    //        if (sinks_.empty() && !file_creator.create_shard_sinks(
+    //                                data_root, array_config_.dimensions,
+    //                                sinks_)) {
+    //            return false;
+    //        }
+    //    }
+
+    const auto n_shards = common::number_of_shards(writer_config_.dimensions);
     CHECK(sinks_.size() == n_shards);
 
     // get shard indices for each chunk
     std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
         const auto index =
-          common::shard_index_for_chunk(i, array_config_.dimensions);
+          common::shard_index_for_chunk(i, writer_config_.dimensions);
         chunk_in_shards.at(index).push_back(i);
     }
 
@@ -117,7 +132,7 @@ zarr::ZarrV3Writer::flush_impl_()
                     }
 
                     const auto internal_idx = common::shard_internal_index(
-                      chunk_idx, array_config_.dimensions);
+                      chunk_idx, writer_config_.dimensions);
                     chunk_table.at(2 * internal_idx) = *file_offset;
                     chunk_table.at(2 * internal_idx + 1) = chunk.size();
 
@@ -166,7 +181,7 @@ zarr::ZarrV3Writer::flush_impl_()
 bool
 zarr::ZarrV3Writer::should_rollover_() const
 {
-    const auto& dims = array_config_.dimensions;
+    const auto& dims = writer_config_.dimensions;
     size_t frames_before_flush =
       dims.back().chunk_size_px * dims.back().shard_size_chunks;
     for (auto i = 2; i < dims.size() - 1; ++i) {

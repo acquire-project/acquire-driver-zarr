@@ -1,6 +1,6 @@
 #include "zarr.v2.hh"
-#include "writers/zarrv2.file.writer.hh"
-#include "writers/zarrv2.s3.writer.hh"
+#include "writers/zarrv2.writer.hh"
+#include "writers/sink.creator.hh"
 
 #include "json.hpp"
 
@@ -50,17 +50,20 @@ zarr::ZarrV2::allocate_writers_()
         .compression_params = blosc_compression_params_,
     };
 
-    if (is_s3_()) {
-        S3Config s3_config = {
-            .access_key_id = access_key_id_,
-            .secret_access_key = secret_access_key_,
-        };
-        writers_.push_back(
-          std::make_shared<ZarrV2S3Writer>(config, s3_config, thread_pool_));
-    } else {
-        writers_.push_back(
-          std::make_shared<ZarrV2FileWriter>(config, thread_pool_));
-    }
+    writers_.push_back(
+      std::make_shared<ZarrV2Writer>(config, thread_pool_, connection_pool_));
+    //    if (is_s3_()) {
+    //        S3Config s3_config = {
+    //            .access_key_id = access_key_id_,
+    //            .secret_access_key = secret_access_key_,
+    //        };
+    //        writers_.push_back(
+    //          std::make_shared<ZarrV2S3Writer>(config, s3_config,
+    //          thread_pool_));
+    //    } else {
+    //        writers_.push_back(
+    //          std::make_shared<ZarrV2FileWriter>(config, thread_pool_));
+    //    }
 
     if (enable_multiscale_) {
         WriterConfig downsampled_config;
@@ -69,18 +72,19 @@ zarr::ZarrV2::allocate_writers_()
         int level = 1;
         while (do_downsample) {
             do_downsample = downsample(config, downsampled_config);
-
-            if (is_s3_()) {
-                S3Config s3_config = {
-                    .access_key_id = access_key_id_,
-                    .secret_access_key = secret_access_key_,
-                };
-                writers_.push_back(std::make_shared<ZarrV2S3Writer>(
-                  downsampled_config, s3_config, thread_pool_));
-            } else {
-                writers_.push_back(std::make_shared<ZarrV2FileWriter>(
-                  downsampled_config, thread_pool_));
-            }
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
+              downsampled_config, thread_pool_, connection_pool_));
+            //            if (is_s3_()) {
+            //                S3Config s3_config = {
+            //                    .access_key_id = access_key_id_,
+            //                    .secret_access_key = secret_access_key_,
+            //                };
+            //                writers_.push_back(std::make_shared<ZarrV2S3Writer>(
+            //                  downsampled_config, s3_config, thread_pool_));
+            //            } else {
+            //                writers_.push_back(std::make_shared<ZarrV2FileWriter>(
+            //                  downsampled_config, thread_pool_));
+            //            }
             scaled_frames_.emplace(level++, std::nullopt);
 
             config = std::move(downsampled_config);
@@ -89,20 +93,12 @@ zarr::ZarrV2::allocate_writers_()
     }
 }
 
-std::vector<std::string>
-zarr::ZarrV2::make_metadata_sink_paths_()
+void
+zarr::ZarrV2::make_metadata_sinks_()
 {
-    std::vector<std::string> metadata_sink_paths = {
-        ".metadata", // base metadata
-        "0/.zattrs", // external metadata
-        ".zattrs",   // group metadata
-    };
-
-    for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back(std::to_string(i) + "/.zarray");
-    }
-
-    return metadata_sink_paths;
+    SinkCreator creator{ thread_pool_, connection_pool_ };
+    CHECK(creator.create_v2_metadata_sinks(
+      dataset_root_, writers_.size(), metadata_sinks_));
 }
 
 void
@@ -115,7 +111,7 @@ zarr::ZarrV2::write_base_metadata_() const
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     CHECK(!metadata_sinks_.empty());
-    Sink* sink = metadata_sinks_.at(0);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(0);
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
@@ -137,7 +133,7 @@ zarr::ZarrV2::write_external_metadata_() const
                                      .dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     CHECK(metadata_sinks_.size() > 1);
-    Sink* sink = metadata_sinks_.at(1);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(1);
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
@@ -243,7 +239,7 @@ zarr::ZarrV2::write_group_metadata_() const
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     CHECK(metadata_sinks_.size() > 2);
-    Sink* sink = metadata_sinks_.at(2);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(2);
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
@@ -293,7 +289,7 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     CHECK(metadata_sinks_.size() > 3 + level);
-    Sink* sink = metadata_sinks_.at(3 + level);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(3 + level);
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }

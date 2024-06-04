@@ -12,7 +12,7 @@ namespace common = zarr::common;
 namespace {
 bool
 make_directories(std::queue<fs::path>& dir_paths,
-                 std::shared_ptr<common::ThreadPool>& thread_pool)
+                 std::shared_ptr<ThreadPool>& thread_pool)
 {
     if (dir_paths.empty()) {
         return true;
@@ -77,7 +77,7 @@ make_directories(std::queue<fs::path>& dir_paths,
 bool
 create_shard_files(const std::string& data_root,
                    std::vector<zarr::Dimension>& dimensions,
-                   std::shared_ptr<common::ThreadPool>& thread_pool,
+                   std::shared_ptr<ThreadPool>& thread_pool,
                    std::vector<std::unique_ptr<struct file>>& files)
 {
     std::queue<fs::path> paths;
@@ -180,7 +180,7 @@ create_shard_files(const std::string& data_root,
 
 zarr::ZarrV3FileWriter::ZarrV3FileWriter(
   const WriterConfig& config,
-  std::shared_ptr<common::ThreadPool> thread_pool)
+  std::shared_ptr<ThreadPool> thread_pool)
   : FileWriter(config, thread_pool)
   , shard_file_offsets_(common::number_of_shards(config.dimensions), 0)
   , shard_tables_{ common::number_of_shards(config.dimensions) }
@@ -328,7 +328,7 @@ extern "C"
         struct VideoFrame* frame = nullptr;
 
         try {
-            auto thread_pool = std::make_shared<common::ThreadPool>(
+            auto thread_pool = std::make_shared<ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
@@ -466,7 +466,7 @@ extern "C"
         struct VideoFrame* frame = nullptr;
 
         try {
-            auto thread_pool = std::make_shared<common::ThreadPool>(
+            auto thread_pool = std::make_shared<ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
@@ -575,7 +575,7 @@ extern "C"
         int retval = 0;
 
         try {
-            auto thread_pool = std::make_shared<common::ThreadPool>(
+            auto thread_pool = std::make_shared<ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 

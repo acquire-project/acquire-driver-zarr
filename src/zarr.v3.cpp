@@ -1,6 +1,6 @@
 #include "zarr.v3.hh"
-#include "writers/zarrv3.file.writer.hh"
-#include "writers/zarrv3.s3.writer.hh"
+#include "writers/zarrv3.writer.hh"
+#include "writers/sink.creator.hh"
 
 #include "json.hpp"
 
@@ -42,17 +42,21 @@ zarr::ZarrV3::allocate_writers_()
         .data_root = dataset_root_ + "/data/root/0",
         .compression_params = blosc_compression_params_,
     };
-    if (is_s3_()) {
-        S3Config s3_config = {
-            .access_key_id = access_key_id_,
-            .secret_access_key = secret_access_key_,
-        };
-        writers_.push_back(
-          std::make_shared<ZarrV3S3Writer>(config, s3_config, thread_pool_));
-    } else {
-        writers_.push_back(
-          std::make_shared<ZarrV3FileWriter>(config, thread_pool_));
-    }
+
+    writers_.push_back(
+      std::make_shared<ZarrV3Writer>(config, thread_pool_, connection_pool_));
+    //    if (is_s3_()) {
+    //        S3Config s3_config = {
+    //            .access_key_id = access_key_id_,
+    //            .secret_access_key = secret_access_key_,
+    //        };
+    //        writers_.push_back(
+    //          std::make_shared<ZarrV3S3Writer>(config, s3_config,
+    //          thread_pool_));
+    //    } else {
+    //        writers_.push_back(
+    //          std::make_shared<ZarrV3FileWriter>(config, thread_pool_));
+    //    }
 
     if (enable_multiscale_) {
         WriterConfig downsampled_config;
@@ -61,8 +65,8 @@ zarr::ZarrV3::allocate_writers_()
         int level = 1;
         while (do_downsample) {
             do_downsample = downsample(config, downsampled_config);
-            writers_.push_back(
-              std::make_shared<ZarrV3Writer>(downsampled_config, thread_pool_));
+            writers_.push_back(std::make_shared<ZarrV3Writer>(
+              downsampled_config, thread_pool_, connection_pool_));
             scaled_frames_.emplace(level++, std::nullopt);
 
             config = std::move(downsampled_config);
@@ -79,20 +83,13 @@ zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
     meta->multiscale_is_supported = 0;
 }
 
-std::vector<std::string>
-zarr::ZarrV3::make_metadata_sink_paths_()
+void
+zarr::ZarrV3::make_metadata_sinks_()
 {
-    std::vector<std::string> metadata_sink_paths;
-    metadata_sink_paths.emplace_back("zarr.json");
-    metadata_sink_paths.emplace_back("meta/root.group.json");
-    for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back("meta/root/" + std::to_string(i) +
-                                      ".array.json");
-    }
-
-    return metadata_sink_paths;
+    SinkCreator creator{ thread_pool_, connection_pool_ };
+    CHECK(creator.create_v3_metadata_sinks(
+      dataset_root_, writers_.size(), metadata_sinks_));
 }
-
 /// @brief Write the metadata for the dataset.
 void
 zarr::ZarrV3::write_base_metadata_() const
@@ -110,7 +107,7 @@ zarr::ZarrV3::write_base_metadata_() const
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     CHECK(!metadata_sinks_.empty());
-    Sink* sink = metadata_sinks_.at(0);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(0);
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
@@ -145,7 +142,7 @@ zarr::ZarrV3::write_group_metadata_() const
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     CHECK(metadata_sinks_.size() > 1);
-    Sink* sink = metadata_sinks_.at(1);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(1);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -227,7 +224,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     CHECK(metadata_sinks_.size() > 2 + level);
-    Sink* sink = metadata_sinks_.at(2 + level);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(2 + level);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 

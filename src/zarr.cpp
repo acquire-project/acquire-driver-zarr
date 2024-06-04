@@ -170,7 +170,7 @@ scale_image(const VideoFrame* src)
 
     const auto* src_img = (T*)src->data;
     auto* dst_img = (T*)dst->data;
-    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
+    memset(dst_img, 0, bytes_of_image(&dst->shape));
 
     size_t dst_idx = 0;
     for (auto row = 0; row < height; row += downscale) {
@@ -202,8 +202,8 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
     CHECK(src);
     CHECK(dst->bytes_of_frame == src->bytes_of_frame);
 
-    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
-    const auto num_pixels = bytes_of_image / sizeof(T);
+    const auto bytes_of_frame = bytes_of_image(&dst->shape);
+    const auto num_pixels = bytes_of_frame / sizeof(T);
     for (auto i = 0; i < num_pixels; ++i) {
         dst->data[i] = (T)(0.5f * ((float)dst->data[i] + (float)src->data[i]));
     }
@@ -456,6 +456,16 @@ zarr::Zarr::start()
 {
     error_ = true;
 
+    // set up thread pool
+    {
+        std::function<void(const std::string&)> set_error =
+          [this](const std::string& err) { this->set_error(err); };
+
+        thread_pool_ = std::make_shared<ThreadPool>(
+          std::thread::hardware_concurrency(), std::move(set_error));
+    }
+
+    // if this is an S3 acquisition, set up the API and connection pool
     if (aws_options_) {
         Aws::InitAPI(*aws_options_);
 
@@ -474,48 +484,42 @@ zarr::Zarr::start()
                                              std::move(set_error));
     }
 
-    {
-        std::function<void(const std::string&)> set_error =
-          [this](const std::string& err) { this->set_error(err); };
-
-        thread_pool_ = std::make_shared<ThreadPool>(
-          std::thread::hardware_concurrency(), std::move(set_error));
-    }
-
     allocate_writers_();
+    make_metadata_sinks_();
+    //    std::vector<std::string> metadata_sink_paths =
+    //    make_metadata_sink_paths_();
 
-    std::vector<std::string> metadata_sink_paths = make_metadata_sink_paths_();
-    SinkCreator creator(thread_pool_, connection_pool_);
-
-//    if (is_s3_uri(dataset_root_)) {
-//        std::vector<std::string> uri_parts = common::split_uri(dataset_root_);
-//        CHECK(uri_parts.size() > 2); // s3://bucket/key
-//        std::string endpoint = uri_parts.at(0) + "//" + uri_parts.at(1);
-//        std::string bucket_name = uri_parts.at(2);
-//        S3SinkCreator creator{ thread_pool_,
-//                               endpoint,
-//                               bucket_name,
-//                               access_key_id_,
-//                               secret_access_key_ };
-//        CHECK(
-//          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
-//    } else {
-//        if (fs::exists(dataset_root_)) {
-//            std::error_code ec;
-//            EXPECT(fs::remove_all(dataset_root_, ec),
-//                   R"(Failed to remove folder for "%s": %s)",
-//                   dataset_root_.c_str(),
-//                   ec.message().c_str());
-//        }
-//        fs::create_directories(dataset_root_);
-//
-//        FileCreator creator{ thread_pool_ };
-//        for (auto& path : metadata_sink_paths) {
-//            path = dataset_root_ + "/" + path;
-//        }
-//        CHECK(
-//          creator.create_metadata_sinks(metadata_sink_paths, metadata_sinks_));
-//    }
+    //    if (is_s3_uri(dataset_root_)) {
+    //        std::vector<std::string> uri_parts =
+    //        common::split_uri(dataset_root_); CHECK(uri_parts.size() > 2); //
+    //        s3://bucket/key std::string endpoint = uri_parts.at(0) + "//" +
+    //        uri_parts.at(1); std::string bucket_name = uri_parts.at(2);
+    //        S3SinkCreator creator{ thread_pool_,
+    //                               endpoint,
+    //                               bucket_name,
+    //                               access_key_id_,
+    //                               secret_access_key_ };
+    //        CHECK(
+    //          creator.create_metadata_sinks(metadata_sink_paths,
+    //          metadata_sinks_));
+    //    } else {
+    //        if (fs::exists(dataset_root_)) {
+    //            std::error_code ec;
+    //            EXPECT(fs::remove_all(dataset_root_, ec),
+    //                   R"(Failed to remove folder for "%s": %s)",
+    //                   dataset_root_.c_str(),
+    //                   ec.message().c_str());
+    //        }
+    //        fs::create_directories(dataset_root_);
+    //
+    //        FileCreator creator{ thread_pool_ };
+    //        for (auto& path : metadata_sink_paths) {
+    //            path = dataset_root_ + "/" + path;
+    //        }
+    //        CHECK(
+    //          creator.create_metadata_sinks(metadata_sink_paths,
+    //          metadata_sinks_));
+    //    }
 
     write_fixed_metadata_();
 

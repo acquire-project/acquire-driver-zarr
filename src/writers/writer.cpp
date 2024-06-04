@@ -214,9 +214,9 @@ zarr::Writer::write(const VideoFrame* frame)
     // split the incoming frame into tiles and write them to the chunk buffers
     const auto& dimensions = writer_config_.dimensions;
 
-    const auto bytes_written = write_frame_to_chunks_(
-      frame->data, frame->bytes_of_frame - sizeof(*frame));
-    const auto bytes_of_frame = frame->bytes_of_frame - sizeof(*frame);
+    const auto bytes_written =
+      write_frame_to_chunks_(frame->data, bytes_of_image(&frame->shape));
+    const auto bytes_of_frame = bytes_of_image(&frame->shape);
     CHECK(bytes_written == bytes_of_frame);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
@@ -788,6 +788,11 @@ extern "C"
                 .dims = {
                     .width = 64,
                     .height = 48,
+                },
+                .strides = {
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
                 },
                 .type = SampleType_u16,
             };
