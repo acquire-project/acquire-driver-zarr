@@ -129,7 +129,7 @@ common::shard_index_for_chunk(size_t chunk_index,
 
 size_t
 common::shard_internal_index(size_t chunk_idx,
-                     const std::vector<zarr::Dimension>& dimensions)
+                             const std::vector<zarr::Dimension>& dimensions)
 {
     // make chunk strides
     std::vector<size_t> chunk_strides(1, 1);
@@ -435,74 +435,73 @@ extern "C"
 
         return retval;
     }
-}
 
-acquire_export int
-unit_test__shard_internal_index()
-{
-    int retval = 0;
+    acquire_export int unit_test__shard_internal_index()
+    {
+        int retval = 0;
 
-    std::vector<zarr::Dimension> dims;
-    dims.emplace_back("x",
-                      DimensionType_Space,
-                      1080,
-                      270, // 4 chunks
-                      3);  // 2 ragged shards
-    dims.emplace_back("y",
-                      DimensionType_Space,
-                      960,
-                      320, // 3 chunks
-                      2);  // 2 ragged shards
-    dims.emplace_back("t",
-                      DimensionType_Time,
-                      0,
-                      32, // 32 timepoints / chunk
-                      1); // 1 shard
+        std::vector<zarr::Dimension> dims;
+        dims.emplace_back("x",
+                          DimensionType_Space,
+                          1080,
+                          270, // 4 chunks
+                          3);  // 2 ragged shards
+        dims.emplace_back("y",
+                          DimensionType_Space,
+                          960,
+                          320, // 3 chunks
+                          2);  // 2 ragged shards
+        dims.emplace_back("t",
+                          DimensionType_Time,
+                          0,
+                          32, // 32 timepoints / chunk
+                          1); // 1 shard
 
-    try {
-        CHECK(common::shard_index_for_chunk(0, dims) == 0);
-        CHECK(common::shard_internal_index(0, dims) == 0);
+        try {
+            CHECK(common::shard_index_for_chunk(0, dims) == 0);
+            CHECK(common::shard_internal_index(0, dims) == 0);
 
-        CHECK(common::shard_index_for_chunk(1, dims) == 0);
-        CHECK(common::shard_internal_index(1, dims) == 1);
+            CHECK(common::shard_index_for_chunk(1, dims) == 0);
+            CHECK(common::shard_internal_index(1, dims) == 1);
 
-        CHECK(common::shard_index_for_chunk(2, dims) == 0);
-        CHECK(common::shard_internal_index(2, dims) == 2);
+            CHECK(common::shard_index_for_chunk(2, dims) == 0);
+            CHECK(common::shard_internal_index(2, dims) == 2);
 
-        CHECK(common::shard_index_for_chunk(3, dims) == 1);
-        CHECK(common::shard_internal_index(3, dims) == 0);
+            CHECK(common::shard_index_for_chunk(3, dims) == 1);
+            CHECK(common::shard_internal_index(3, dims) == 0);
 
-        CHECK(common::shard_index_for_chunk(4, dims) == 0);
-        CHECK(common::shard_internal_index(4, dims) == 3);
+            CHECK(common::shard_index_for_chunk(4, dims) == 0);
+            CHECK(common::shard_internal_index(4, dims) == 3);
 
-        CHECK(common::shard_index_for_chunk(5, dims) == 0);
-        CHECK(common::shard_internal_index(5, dims) == 4);
+            CHECK(common::shard_index_for_chunk(5, dims) == 0);
+            CHECK(common::shard_internal_index(5, dims) == 4);
 
-        CHECK(common::shard_index_for_chunk(6, dims) == 0);
-        CHECK(common::shard_internal_index(6, dims) == 5);
+            CHECK(common::shard_index_for_chunk(6, dims) == 0);
+            CHECK(common::shard_internal_index(6, dims) == 5);
 
-        CHECK(common::shard_index_for_chunk(7, dims) == 1);
-        CHECK(common::shard_internal_index(7, dims) == 3);
+            CHECK(common::shard_index_for_chunk(7, dims) == 1);
+            CHECK(common::shard_internal_index(7, dims) == 3);
 
-        CHECK(common::shard_index_for_chunk(8, dims) == 2);
-        CHECK(common::shard_internal_index(8, dims) == 0);
+            CHECK(common::shard_index_for_chunk(8, dims) == 2);
+            CHECK(common::shard_internal_index(8, dims) == 0);
 
-        CHECK(common::shard_index_for_chunk(9, dims) == 2);
-        CHECK(common::shard_internal_index(9, dims) == 1);
+            CHECK(common::shard_index_for_chunk(9, dims) == 2);
+            CHECK(common::shard_internal_index(9, dims) == 1);
 
-        CHECK(common::shard_index_for_chunk(10, dims) == 2);
-        CHECK(common::shard_internal_index(10, dims) == 2);
+            CHECK(common::shard_index_for_chunk(10, dims) == 2);
+            CHECK(common::shard_internal_index(10, dims) == 2);
 
-        CHECK(common::shard_index_for_chunk(11, dims) == 3);
-        CHECK(common::shard_internal_index(11, dims) == 0);
-        retval = 1;
-    } catch (const std::exception& exc) {
-        LOGE("Exception: %s\n", exc.what());
-    } catch (...) {
-        LOGE("Exception: (unknown)");
+            CHECK(common::shard_index_for_chunk(11, dims) == 3);
+            CHECK(common::shard_internal_index(11, dims) == 0);
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        return retval;
     }
-
-    return retval;
 }
 
 #endif

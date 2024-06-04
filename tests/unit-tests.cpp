@@ -96,11 +96,11 @@ main()
         CASE(unit_test__zarrv2_writer__write_even),
         CASE(unit_test__zarrv2_writer__write_ragged_append_dim),
         CASE(unit_test__zarrv2_writer__write_ragged_internal_dim),
-//        CASE(unit_test__shard_index_for_chunk),
-//        CASE(unit_test__shard_internal_index),
-//        CASE(unit_test__zarrv3_writer__write_even),
-//        CASE(unit_test__zarrv3_writer__write_ragged_append_dim),
-//        CASE(unit_test__zarrv3_writer__write_ragged_internal_dim),
+        CASE(unit_test__shard_index_for_chunk),
+        CASE(unit_test__shard_internal_index),
+        CASE(unit_test__zarrv3_writer__write_even),
+        CASE(unit_test__zarrv3_writer__write_ragged_append_dim),
+        CASE(unit_test__zarrv3_writer__write_ragged_internal_dim),
 #undef CASE
     };
 

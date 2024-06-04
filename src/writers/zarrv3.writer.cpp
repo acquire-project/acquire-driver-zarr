@@ -191,3 +191,401 @@ zarr::ZarrV3Writer::should_rollover_() const
     CHECK(frames_before_flush > 0);
     return frames_written_ % frames_before_flush == 0;
 }
+
+#ifndef NO_UNIT_TESTS
+#ifdef _WIN32
+#define acquire_export __declspec(dllexport)
+#else
+#define acquire_export
+#endif
+
+namespace common = zarr::common;
+
+extern "C"
+{
+    acquire_export int unit_test__zarrv3_writer__write_even()
+    {
+        int retval = 0;
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
+        struct VideoFrame* frame = nullptr;
+
+        try {
+            auto thread_pool = std::make_shared<zarr::ThreadPool>(
+              std::thread::hardware_concurrency(),
+              [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
+
+            std::vector<zarr::Dimension> dims;
+            dims.emplace_back("x",
+                              DimensionType_Space,
+                              64,
+                              16, // 64 / 16 = 4 chunks
+                              2); // 4 / 2 = 2 shards
+            dims.emplace_back("y",
+                              DimensionType_Space,
+                              48,
+                              16, // 48 / 16 = 3 chunks
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("z",
+                              DimensionType_Space,
+                              6,
+                              2,  // 6 / 2 = 3 chunks
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("c",
+                              DimensionType_Channel,
+                              8,
+                              4,  // 8 / 4 = 2 chunks
+                              2); // 4 / 2 = 2 shards
+            dims.emplace_back("t",
+                              DimensionType_Time,
+                              0,
+                              5,  // 5 timepoints / chunk
+                              2); // 2 chunks / shard
+
+            ImageShape shape {
+                .dims = {
+                  .width = 64,
+                  .height = 48,
+                },
+                .strides = {
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48,
+                },
+                .type = SampleType_u16,
+            };
+
+            zarr::WriterConfig writer_config = {
+                .image_shape = shape,
+                .dimensions = dims,
+                .data_root = base_dir.string(),
+                .compression_params = std::nullopt,
+            };
+
+            zarr::ZarrV3Writer writer(writer_config, thread_pool, nullptr);
+
+            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
+            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
+            frame->shape = shape;
+            memset(frame->data, 0, 64 * 48 * 2);
+
+            for (auto i = 0; i < 6 * 8 * 5 * 2; ++i) {
+                frame->frame_id = i;
+                CHECK(writer.write(frame));
+            }
+            writer.finalize();
+
+            const auto chunk_size = 16 *               // x
+                                    16 *               // y
+                                    2 *                // z
+                                    4 *                // c
+                                    5 *                // t
+                                    2;                 // bytes per pixel
+            const auto index_size = 8 *                // 8 chunks
+                                    sizeof(uint64_t) * // indices are 64 bits
+                                    2;                 // 2 indices per chunk
+            const auto expected_file_size = 2 *        // x
+                                              1 *      // y
+                                              1 *      // z
+                                              2 *      // c
+                                              2 *      // t
+                                              chunk_size +
+                                            index_size;
+
+            CHECK(fs::is_directory(base_dir));
+            for (auto t = 0; t < 1; ++t) {
+                const auto t_dir = base_dir / ("c" + std::to_string(t));
+                CHECK(fs::is_directory(t_dir));
+
+                for (auto c = 0; c < 1; ++c) {
+                    const auto c_dir = t_dir / std::to_string(c);
+                    CHECK(fs::is_directory(c_dir));
+
+                    for (auto z = 0; z < 3; ++z) {
+                        const auto z_dir = c_dir / std::to_string(z);
+                        CHECK(fs::is_directory(z_dir));
+
+                        for (auto y = 0; y < 3; ++y) {
+                            const auto y_dir = z_dir / std::to_string(y);
+                            CHECK(fs::is_directory(y_dir));
+
+                            for (auto x = 0; x < 2; ++x) {
+                                const auto x_file = y_dir / std::to_string(x);
+                                CHECK(fs::is_regular_file(x_file));
+                                const auto file_size = fs::file_size(x_file);
+                                CHECK(file_size == expected_file_size);
+                            }
+
+                            CHECK(!fs::is_regular_file(y_dir / "2"));
+                        }
+
+                        CHECK(!fs::is_directory(z_dir / "3"));
+                    }
+
+                    CHECK(!fs::is_directory(c_dir / "3"));
+                }
+
+                CHECK(!fs::is_directory(t_dir / "1"));
+            }
+
+            CHECK(!fs::is_directory(base_dir / "c1"));
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        // cleanup
+        if (fs::exists(base_dir)) {
+            fs::remove_all(base_dir);
+        }
+        if (frame) {
+            free(frame);
+        }
+        return retval;
+    }
+
+    acquire_export int unit_test__zarrv3_writer__write_ragged_append_dim()
+    {
+        int retval = 0;
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
+        struct VideoFrame* frame = nullptr;
+
+        try {
+            auto thread_pool = std::make_shared<zarr::ThreadPool>(
+              std::thread::hardware_concurrency(),
+              [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
+
+            std::vector<zarr::Dimension> dims;
+            dims.emplace_back("x",
+                              DimensionType_Space,
+                              64,
+                              16, // 64 / 16 = 4 chunks
+                              2); // 4 / 2 = 2 shards
+            dims.emplace_back("y",
+                              DimensionType_Space,
+                              48,
+                              16, // 48 / 16 = 3 chunks
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("z",
+                              DimensionType_Space,
+                              5,
+                              2,  // 3 chunks, ragged
+                              1); // 3 / 1 = 3 shards
+
+            ImageShape shape {
+                .dims = {
+                  .width = 64,
+                  .height = 48,
+                },
+                .strides = {
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48,
+                },
+                .type = SampleType_u8,
+            };
+
+            zarr::WriterConfig writer_config = {
+                .image_shape = shape,
+                .dimensions = dims,
+                .data_root = base_dir.string(),
+                .compression_params = std::nullopt,
+            };
+
+            zarr::ZarrV3Writer writer(writer_config, thread_pool, nullptr);
+
+            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
+            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
+            frame->shape = shape;
+            memset(frame->data, 0, 64 * 48);
+
+            for (auto i = 0; i < 5; ++i) {
+                frame->frame_id = i;
+                CHECK(writer.write(frame));
+            }
+            writer.finalize();
+
+            const auto chunk_size = 16 *               // x
+                                    16 *               // y
+                                    2;                 // z
+            const auto index_size = 2 *                // 2 chunks
+                                    sizeof(uint64_t) * // indices are 64 bits
+                                    2;                 // 2 indices per chunk
+            const auto expected_file_size = 2 *        // x
+                                              1 *      // y
+                                              1 *      // z
+                                              chunk_size +
+                                            index_size;
+
+            CHECK(fs::is_directory(base_dir));
+            for (auto z = 0; z < 3; ++z) {
+                const auto z_dir = base_dir / ("c" + std::to_string(z));
+                CHECK(fs::is_directory(z_dir));
+
+                for (auto y = 0; y < 3; ++y) {
+                    const auto y_dir = z_dir / std::to_string(y);
+                    CHECK(fs::is_directory(y_dir));
+
+                    for (auto x = 0; x < 2; ++x) {
+                        const auto x_file = y_dir / std::to_string(x);
+                        CHECK(fs::is_regular_file(x_file));
+                        const auto file_size = fs::file_size(x_file);
+                        CHECK(file_size == expected_file_size);
+                    }
+
+                    CHECK(!fs::is_regular_file(y_dir / "2"));
+                }
+
+                CHECK(!fs::is_directory(z_dir / "3"));
+            }
+
+            CHECK(!fs::is_directory(base_dir / "c3"));
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        // cleanup
+        if (fs::exists(base_dir)) {
+            fs::remove_all(base_dir);
+        }
+        if (frame) {
+            free(frame);
+        }
+        return retval;
+    }
+
+    acquire_export int unit_test__zarrv3_writer__write_ragged_internal_dim()
+    {
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
+        struct VideoFrame* frame = nullptr;
+        int retval = 0;
+
+        try {
+            auto thread_pool = std::make_shared<zarr::ThreadPool>(
+              std::thread::hardware_concurrency(),
+              [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
+
+            ImageShape shape {
+                .dims = {
+                  .width = 64,
+                  .height = 48,
+                },
+                .strides = {
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48,
+                },
+                .type = SampleType_u8,
+            };
+
+            std::vector<zarr::Dimension> dims;
+            dims.emplace_back("x",
+                              DimensionType_Space,
+                              64,
+                              16, // 64 / 16 = 4 chunks
+                              2); // 4 / 2 = 2 shards
+            dims.emplace_back("y",
+                              DimensionType_Space,
+                              48,
+                              16, // 48 / 16 = 3 chunks
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("z",
+                              DimensionType_Space,
+                              5,
+                              2,  // 3 chunks, ragged
+                              1); // 3 / 1 = 3 shards
+            dims.emplace_back("t",
+                              DimensionType_Time,
+                              0,
+                              5,  // 5 timepoints / chunk
+                              2); // 2 chunks / shard
+
+            zarr::WriterConfig writer_config = {
+                .image_shape = shape,
+                .dimensions = dims,
+                .data_root = base_dir.string(),
+                .compression_params = std::nullopt,
+            };
+
+            zarr::ZarrV3Writer writer(writer_config, thread_pool, nullptr);
+
+            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
+            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
+            frame->shape = shape;
+            memset(frame->data, 0, 64 * 48);
+
+            for (auto i = 0; i < 5 * 10; ++i) { // 10 time points (2 chunks)
+                frame->frame_id = i;
+                CHECK(writer.write(frame));
+            }
+            writer.finalize();
+
+            const auto chunk_size = 16 *               // x
+                                    16 *               // y
+                                    2 *                // z
+                                    5;                 // t
+            const auto index_size = 4 *                // 4 chunks
+                                    sizeof(uint64_t) * // indices are 64 bits
+                                    2;                 // 2 indices per chunk
+            const auto expected_file_size = 2 *        // x
+                                              1 *      // y
+                                              1 *      // z
+                                              2 *      // t
+                                              chunk_size +
+                                            index_size;
+
+            CHECK(fs::is_directory(base_dir));
+            for (auto t = 0; t < 1; ++t) {
+                const auto t_dir = base_dir / ("c" + std::to_string(t));
+                CHECK(fs::is_directory(t_dir));
+
+                for (auto z = 0; z < 3; ++z) {
+                    const auto z_dir = t_dir / std::to_string(z);
+                    CHECK(fs::is_directory(z_dir));
+
+                    for (auto y = 0; y < 3; ++y) {
+                        const auto y_dir = z_dir / std::to_string(y);
+                        CHECK(fs::is_directory(y_dir));
+
+                        for (auto x = 0; x < 2; ++x) {
+                            const auto x_file = y_dir / std::to_string(x);
+                            CHECK(fs::is_regular_file(x_file));
+                            const auto file_size = fs::file_size(x_file);
+                            CHECK(file_size == expected_file_size);
+                        }
+
+                        CHECK(!fs::is_regular_file(y_dir / "2"));
+                    }
+
+                    CHECK(!fs::is_directory(z_dir / "3"));
+                }
+
+                CHECK(!fs::is_directory(t_dir / "3"));
+            }
+
+            CHECK(!fs::is_directory(base_dir / "c1"));
+
+            retval = 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        // cleanup
+        if (fs::exists(base_dir)) {
+            fs::remove_all(base_dir);
+        }
+        if (frame) {
+            free(frame);
+        }
+        return retval;
+    }
+}
+#endif
