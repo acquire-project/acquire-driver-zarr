@@ -52,6 +52,8 @@ struct SinkCreator
     [[nodiscard]] bool make_files_(std::queue<std::string>& file_paths,
                                    std::vector<std::shared_ptr<Sink>>& sinks);
 
+    [[nodiscard]] bool make_s3_bucket_(const std::string& bucket_name);
+
     [[nodiscard]] bool make_s3_objects_(
       const std::string& bucket_name,
       std::queue<std::string>& object_keys,
