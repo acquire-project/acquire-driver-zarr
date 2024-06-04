@@ -1,9 +1,17 @@
-/// @file zarr-s3.cpp
-/// @brief Example of using Zarr storage with S3 backend.
+/// @file write-zarr-v3-to-s3.cpp
+/// @brief Test using Zarr V3 storage with S3 backend.
+
+#if __has_include("credentials.hpp")
 
 #include "device/hal/device.manager.h"
 #include "acquire.h"
 #include "logger.h"
+
+#include <aws/core/Aws.h>
+#include <aws/core/auth/AWSCredentialsProviderChain.h>
+#include <aws/s3/S3Client.h>
+#include <aws/s3/model/HeadObjectRequest.h>
+#include <aws/s3/model/GetObjectRequest.h>
 
 #include <stdexcept>
 #include <vector>
@@ -109,11 +117,11 @@ configure(AcquireRuntime* runtime)
 
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Storage,
-                                SIZED("ZarrV3"),
+                                SIZED("ZarrV3Blosc1ZstdByteShuffle"),
                                 &props.video[0].storage.identifier));
 
     // this bucket must already exist
-    std::string uri = ZARR_S3_ENDPOINT "/" ZARR_S3_BUCKET_NAME;
+    std::string uri = ZARR_S3_ENDPOINT "/" ZARR_S3_BUCKET_NAME "-v3";
     storage_properties_init(&props.video[0].storage.settings,
                             0,
                             uri.c_str(),
@@ -159,6 +167,53 @@ acquire(AcquireRuntime* runtime)
     acquire_stop(runtime);
 }
 
+void
+validate(AcquireRuntime* runtime)
+{
+    Aws::SDKOptions options;
+    Aws::InitAPI(options);
+
+    Aws::Client::ClientConfiguration config;
+    config.endpointOverride = ZARR_S3_ENDPOINT;
+    const Aws::Auth::AWSCredentials credentials(ZARR_S3_ACCESS_KEY_ID,
+                                                ZARR_S3_SECRET_ACCESS_KEY);
+    auto client =
+      std::make_shared<Aws::S3::S3Client>(credentials, nullptr, config);
+
+    try {
+        CHECK(client);
+
+        std::vector<std::string> paths;
+        paths.push_back("zarr.json");
+        paths.push_back("meta/root.group.json");
+        paths.push_back("meta/root/0.array.json");
+
+        for (auto i = 0; i < 20; ++i) {
+            paths.push_back("data/root/0/c" + std::to_string(i) + "/0/0");
+        }
+
+        for (const auto& path : paths) {
+            Aws::S3::Model::HeadObjectRequest request;
+            request.SetBucket(ZARR_S3_BUCKET_NAME "-v3");
+            request.SetKey(path.c_str());
+            auto outcome = client->HeadObject(request);
+            CHECK(outcome.IsSuccess());
+        }
+    } catch (const std::exception& e) {
+        ERR("Exception: %s", e.what());
+
+        Aws::ShutdownAPI(options);
+        throw;
+    } catch (...) {
+        ERR("Unknown exception");
+
+        Aws::ShutdownAPI(options);
+        throw;
+    }
+
+    Aws::ShutdownAPI(options);
+}
+
 int
 main()
 {
@@ -168,6 +223,7 @@ main()
     try {
         configure(runtime);
         acquire(runtime);
+        validate(runtime);
         retval = 0;
     } catch (const std::exception& e) {
         ERR("Exception: %s", e.what());
@@ -178,3 +234,10 @@ main()
     acquire_shutdown(runtime);
     return retval;
 }
+#else
+int
+main()
+{
+    return 0;
+}
+#endif

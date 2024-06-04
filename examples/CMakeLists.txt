@@ -9,7 +9,6 @@ if (${WITH_EXAMPLES})
     #
     set(examples
             no-striping
-            zarr-s3
     )
 
     foreach (name ${examples})

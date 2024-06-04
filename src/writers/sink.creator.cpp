@@ -25,16 +25,44 @@ zarr::SinkCreator::create_chunk_sinks(
   const std::vector<Dimension>& dimensions,
   std::vector<std::shared_ptr<Sink>>& chunk_sinks)
 {
-    std::string base_dir = base_uri;
-    if (base_uri.starts_with("file://")) {
-        base_dir = base_uri.substr(7);
-    }
-
     std::queue<std::string> paths;
-    paths.emplace(base_dir);
 
-    if (!make_dirs_(paths)) {
-        return false;
+    bool is_s3 = common::is_s3_uri(base_uri);
+    std::string bucket_name;
+
+    // create the bucket if it doesn't already exist
+    if (is_s3) {
+        auto tokens = common::split_uri(base_uri);
+        CHECK(tokens.size() > 2);
+        bucket_name = tokens.at(2);
+
+        if (!make_s3_bucket_(bucket_name)) {
+            return false;
+        }
+
+        std::string base_dir;
+        for (auto i = 3; i < tokens.size() - 1; ++i) {
+            base_dir += tokens.at(i) + "/";
+        }
+        if (tokens.size() > 3) {
+            base_dir += tokens.at(tokens.size() - 1);
+        }
+
+        if (!make_s3_bucket_(bucket_name)) {
+            return false;
+        }
+
+        paths.push(base_dir);
+    } else {
+        std::string base_dir = base_uri;
+        if (base_uri.starts_with("file://")) {
+            base_dir = base_uri.substr(7);
+        }
+        paths.emplace(base_dir);
+
+        if (!make_dirs_(paths)) {
+            return false;
+        }
     }
 
     // create directories
@@ -48,11 +76,12 @@ zarr::SinkCreator::create_chunk_sinks(
             paths.pop();
 
             for (auto k = 0; k < n_chunks; ++k) {
-                paths.push(path + "/" + std::to_string(k));
+                const auto kstr = std::to_string(k);
+                paths.push(path + (path.empty() ? kstr : "/" + kstr));
             }
         }
 
-        if (!make_dirs_(paths)) {
+        if (!is_s3 && !make_dirs_(paths)) {
             return false;
         }
     }
@@ -72,7 +101,8 @@ zarr::SinkCreator::create_chunk_sinks(
         }
     }
 
-    return make_files_(paths, chunk_sinks);
+    return is_s3 ? make_s3_objects_(bucket_name, paths, chunk_sinks)
+                 : make_files_(paths, chunk_sinks);
 }
 
 bool
@@ -81,16 +111,45 @@ zarr::SinkCreator::create_shard_sinks(
   const std::vector<Dimension>& dimensions,
   std::vector<std::shared_ptr<Sink>>& shard_sinks)
 {
-    std::string base_dir = base_uri;
-    if (base_uri.starts_with("file://")) {
-        base_dir = base_uri.substr(7);
-    }
-
     std::queue<std::string> paths;
-    paths.emplace(base_dir);
 
-    if (!make_dirs_(paths)) {
-        return false;
+    bool is_s3 = common::is_s3_uri(base_uri);
+    std::string bucket_name;
+
+    // create the bucket if it doesn't already exist
+    if (is_s3) {
+        auto tokens = common::split_uri(base_uri);
+        CHECK(tokens.size() > 2);
+        bucket_name = tokens.at(2);
+
+        if (!make_s3_bucket_(bucket_name)) {
+            return false;
+        }
+
+        std::string base_dir;
+        for (auto i = 3; i < tokens.size() - 1; ++i) {
+            base_dir += tokens.at(i) + "/";
+        }
+        if (tokens.size() > 3) {
+            base_dir += tokens.at(tokens.size() - 1);
+        }
+
+        if (!make_s3_bucket_(bucket_name)) {
+            return false;
+        }
+
+        paths.push(base_dir);
+    } else {
+        std::string base_dir = base_uri;
+        if (base_uri.starts_with("file://")) {
+            base_dir = base_uri.substr(7);
+        }
+
+        paths.emplace(base_dir);
+
+        if (!make_dirs_(paths)) {
+            return false;
+        }
     }
 
     // create directories
@@ -105,11 +164,12 @@ zarr::SinkCreator::create_shard_sinks(
             paths.pop();
 
             for (auto k = 0; k < n_shards; ++k) {
-                paths.push(path + "/" + std::to_string(k));
+                const auto kstr = std::to_string(k);
+                paths.push(path + (path.empty() ? kstr : "/" + kstr));
             }
         }
 
-        if (!make_dirs_(paths)) {
+        if (!is_s3 && !make_dirs_(paths)) {
             return false;
         }
     }
@@ -130,7 +190,8 @@ zarr::SinkCreator::create_shard_sinks(
         }
     }
 
-    return make_files_(paths, shard_sinks);
+    return is_s3 ? make_s3_objects_(bucket_name, paths, shard_sinks)
+                 : make_files_(paths, shard_sinks);
 }
 
 bool
@@ -142,8 +203,8 @@ zarr::SinkCreator::create_v2_metadata_sinks(
     std::queue<std::string> dir_paths, file_paths;
 
     file_paths.emplace(".metadata"); // base metadata
-    file_paths.emplace(".zattrs");   // group metadata
     file_paths.emplace("0/.zattrs"); // external metadata
+    file_paths.emplace(".zattrs");   // group metadata
 
     for (auto i = 0; i < n_arrays; ++i) {
         dir_paths.push(std::to_string(i));
@@ -152,14 +213,28 @@ zarr::SinkCreator::create_v2_metadata_sinks(
 
     if (common::is_s3_uri(base_uri)) {
         auto tokens = common::split_uri(base_uri);
+        CHECK(tokens.size() > 2);
+        std::string bucket_name = tokens.at(2);
 
-        std::string bucket_name = tokens.at(1);
-        for (auto i = 2; i < tokens.size(); ++i) {
-            bucket_name += "/" + tokens.at(i);
+        std::string base_dir;
+        for (auto i = 3; i < tokens.size() - 1; ++i) {
+            base_dir += tokens.at(i) + "/";
+        }
+        if (tokens.size() > 3) {
+            base_dir += tokens.at(tokens.size() - 1);
         }
 
         if (!make_s3_bucket_(bucket_name)) {
             return false;
+        }
+
+        if (!base_dir.empty()) {
+            size_t n_paths = file_paths.size();
+            for (auto i = 0; i < n_paths; ++i) {
+                const auto path = base_dir + "/" + file_paths.front();
+                file_paths.pop();
+                file_paths.push(path);
+            }
         }
 
         if (!make_s3_objects_(bucket_name, file_paths, metadata_sinks)) {
@@ -219,14 +294,29 @@ zarr::SinkCreator::create_v3_metadata_sinks(
 
     if (common::is_s3_uri(base_uri)) {
         auto tokens = common::split_uri(base_uri);
+        CHECK(tokens.size() > 2);
+        std::string bucket_name = tokens.at(2);
 
-        std::string bucket_name = tokens.at(1);
-        for (auto i = 2; i < tokens.size(); ++i) {
-            bucket_name += "/" + tokens.at(i);
+        std::string base_dir;
+        for (auto i = 3; i < tokens.size() - 1; ++i) {
+            base_dir += tokens.at(i) + "/";
+        }
+        if (tokens.size() > 3) {
+            base_dir += tokens.at(tokens.size() - 1);
         }
 
         if (!make_s3_bucket_(bucket_name)) {
             return false;
+        }
+
+        // make files
+        if (!base_dir.empty()) {
+            size_t n_paths = file_paths.size();
+            for (auto i = 0; i < n_paths; ++i) {
+                const auto path = base_dir + "/" + file_paths.front();
+                file_paths.pop();
+                file_paths.push(path);
+            }
         }
 
         if (!make_s3_objects_(bucket_name, file_paths, metadata_sinks)) {
