@@ -1,5 +1,6 @@
 #include "file.sink.hh"
 #include "../common/thread.pool.hh"
+#include "../common/utilities.hh"
 
 #include <latch>
 

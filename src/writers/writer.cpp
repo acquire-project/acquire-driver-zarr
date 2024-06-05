@@ -1,11 +1,9 @@
 #include "writer.hh"
 
+#include "sink.hh"
 #include "../zarr.hh"
-#include "file.sink.hh"
-#include "s3.sink.hh"
 
 #include <cmath>
-#include <functional>
 #include <latch>
 #include <stdexcept>
 

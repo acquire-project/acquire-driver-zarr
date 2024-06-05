@@ -2,6 +2,7 @@
 #define H_ACQUIRE_STORAGE_ZARR_SINK_CREATOR_V0
 
 #include "sink.hh"
+#include "../common/dimension.hh"
 #include "../common/thread.pool.hh"
 #include "../common/connection.pool.hh"
 
@@ -58,6 +59,18 @@ struct SinkCreator
       const std::string& bucket_name,
       std::queue<std::string>& object_keys,
       std::vector<std::shared_ptr<Sink>>& sinks);
+
+    [[nodiscard]] bool make_part_sinks_(
+      const std::string& base_uri,
+      const std::vector<Dimension>& dimensions,
+      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      std::vector<std::shared_ptr<Sink>>& part_sinks);
+
+    [[nodiscard]] bool make_metadata_sinks_(
+      const std::string& base_uri,
+      std::queue<std::string>& dir_paths,
+      std::queue<std::string>& file_paths,
+      std::vector<std::shared_ptr<Sink>>& metadata_sinks);
 };
 } // namespace acquire::sink::zarr
 

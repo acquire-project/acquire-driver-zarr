@@ -7,12 +7,14 @@ endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
+        common/dimension.hh
+        common/dimension.cpp
+        common/utilities.hh
+        common/utilities.cpp
         common/thread.pool.hh
         common/thread.pool.cpp
         common/connection.pool.hh
         common/connection.pool.cpp
-        common.hh # TODO (aliddell): rename
-        common.cpp # TODO (aliddell): rename
         writers/sink.hh
         writers/sink.creator.hh
         writers/sink.creator.cpp

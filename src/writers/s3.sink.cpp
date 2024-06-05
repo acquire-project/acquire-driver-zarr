@@ -1,4 +1,5 @@
 #include "s3.sink.hh"
+#include "../common/utilities.hh"
 #include "logger.h"
 
 #include <aws/core/auth/AWSCredentialsProviderChain.h>
@@ -9,23 +10,6 @@
 #include <aws/s3/model/PutObjectRequest.h>
 #include <aws/s3/model/UploadPartRequest.h>
 
-#define LOG(...) aq_logger(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
-#define LOGE(...) aq_logger(1, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
-#define EXPECT(e, ...)                                                         \
-    do {                                                                       \
-        if (!(e)) {                                                            \
-            LOGE(__VA_ARGS__);                                                 \
-            throw std::runtime_error("Expression was false: " #e);             \
-        }                                                                      \
-    } while (0)
-#define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t%s", #e)
-
-// #define TRACE(...) LOG(__VA_ARGS__)
-#define TRACE(...)
-
-#define containerof(ptr, T, V) ((T*)(((char*)(ptr)) - offsetof(T, V)))
-#define countof(e) (sizeof(e) / sizeof(*(e)))
-
 namespace zarr = acquire::sink::zarr;
 
 zarr::S3Sink::S3Sink(const std::string& bucket_name,
@@ -34,7 +18,7 @@ zarr::S3Sink::S3Sink(const std::string& bucket_name,
   : bucket_name_{ bucket_name }
   , object_key_{ object_key }
   , connection_pool_{ connection_pool }
-  , buf_(5 << 20, 0)
+  , buf_(5 << 20, 0) // 5 MiB is the minimum multipart upload size
 {
 }
 
@@ -319,9 +303,6 @@ extern "C"
 #ifdef ZARR_S3_ENDPOINT
         int retval = 0;
 
-        std::function<void(const std::string&)> err =
-          [](const std::string& msg) { LOGE("Error: %s", msg.c_str()); };
-
         const std::string object_key = "test-put-object";
 
         Aws::SDKOptions options;
@@ -332,8 +313,7 @@ extern "C"
               1,
               ZARR_S3_ENDPOINT,
               ZARR_S3_ACCESS_KEY_ID,
-              ZARR_S3_SECRET_ACCESS_KEY,
-              std::move(err));
+              ZARR_S3_SECRET_ACCESS_KEY);
             zarr::S3Sink sink(ZARR_S3_BUCKET_NAME, object_key, connection_pool);
 
             const std::string data = "Hello, Acquire!";
@@ -380,9 +360,6 @@ extern "C"
 #ifdef ZARR_S3_ENDPOINT
         int retval = 0;
 
-        std::function<void(const std::string&)> err =
-          [](const std::string& msg) { LOGE("Error: %s", msg.c_str()); };
-
         const std::string object_key = "test-multipart-object";
 
         Aws::SDKOptions options;
@@ -393,8 +370,7 @@ extern "C"
               1,
               ZARR_S3_ENDPOINT,
               ZARR_S3_ACCESS_KEY_ID,
-              ZARR_S3_SECRET_ACCESS_KEY,
-              std::move(err));
+              ZARR_S3_SECRET_ACCESS_KEY);
             zarr::S3Sink sink(ZARR_S3_BUCKET_NAME, object_key, connection_pool);
 
             const std::string data = "Hello, Acquire!";

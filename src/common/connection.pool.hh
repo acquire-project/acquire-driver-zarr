@@ -27,16 +27,13 @@ struct S3ConnectionPool final
     S3ConnectionPool(size_t n_connections,
                      const std::string& endpoint,
                      const std::string& access_key_id,
-                     const std::string& secret_access_key,
-                     std::function<void(const std::string&)>&& err);
+                     const std::string& secret_access_key);
     ~S3ConnectionPool() noexcept;
 
     std::shared_ptr<S3Connection> get_connection() noexcept;
     void release_connection(std::shared_ptr<S3Connection>&& conn) noexcept;
 
   private:
-    std::function<void(const std::string&)> error_handler_;
-
     std::vector<std::shared_ptr<S3Connection>> connections_;
     mutable std::mutex connections_mutex_;
     std::condition_variable cv_;

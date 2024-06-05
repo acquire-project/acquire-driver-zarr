@@ -45,19 +45,16 @@ zarr::S3Connection::client() const noexcept
     return client_;
 }
 
-zarr::S3ConnectionPool::S3ConnectionPool(
-  size_t n_connections,
-  const std::string& endpoint,
-  const std::string& access_key_id,
-  const std::string& secret_access_key,
-  std::function<void(const std::string&)>&& err)
-  : error_handler_{ std::move(err) }
-  , is_accepting_connections_{ true }
+zarr::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
+                                         const std::string& endpoint,
+                                         const std::string& access_key_id,
+                                         const std::string& secret_access_key)
+  : is_accepting_connections_{ true }
 {
     CHECK(n_connections > 0);
 
     for (auto i = 0; i < n_connections; ++i) {
-        connections_.emplace_back(std::make_shared<S3Connection>(
+        connections_.push_back(std::make_shared<S3Connection>(
           endpoint, access_key_id, secret_access_key));
     }
 }

@@ -473,15 +473,8 @@ zarr::Zarr::start()
         CHECK(tokens.size() > 2); // s3://bucket/key
         std::string endpoint = tokens.at(0) + "//" + tokens.at(1);
 
-        std::function<void(const std::string&)> set_error =
-          [this](const std::string& err) { this->set_error(err); };
-
-        connection_pool_ =
-          std::make_shared<S3ConnectionPool>(8,
-                                             endpoint,
-                                             access_key_id_,
-                                             secret_access_key_,
-                                             std::move(set_error));
+        connection_pool_ = std::make_shared<S3ConnectionPool>(
+          8, endpoint, access_key_id_, secret_access_key_);
     }
 
     allocate_writers_();
@@ -622,17 +615,6 @@ zarr::Zarr::Zarr(BloscCompressionParams&& compression_params)
   : Zarr()
 {
     blosc_compression_params_ = std::move(compression_params);
-}
-
-zarr::Zarr::~Zarr() noexcept
-{
-    //    stop();
-}
-
-bool
-zarr::Zarr::is_s3_() const
-{
-    return is_s3_uri(dataset_root_);
 }
 
 void

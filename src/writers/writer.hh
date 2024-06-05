@@ -8,7 +8,7 @@
 #include "platform.h"
 #include "device/props/components.h"
 
-#include "../common.hh"
+#include "../common/utilities.hh"
 #include "../common/thread.pool.hh"
 #include "../common/connection.pool.hh"
 #include "blosc.compressor.hh"

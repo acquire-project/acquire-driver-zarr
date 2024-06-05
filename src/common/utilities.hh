@@ -1,18 +1,12 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_COMMON_V0
-#define H_ACQUIRE_STORAGE_ZARR_COMMON_V0
+#ifndef H_ACQUIRE_STORAGE_ZARR_UTILITIES_V0
+#define H_ACQUIRE_STORAGE_ZARR_UTILITIES_V0
 
 #include "logger.h"
 #include "device/props/components.h"
-#include "device/props/storage.h"
+#include "dimension.hh"
 
 #include <condition_variable>
 #include <filesystem>
-#include <functional>
-#include <mutex>
-#include <optional>
-#include <queue>
-#include <stdexcept>
-#include <thread>
 #include <vector>
 
 #define LOG(...) aq_logger(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
@@ -34,27 +28,9 @@
 
 namespace fs = std::filesystem;
 
-namespace acquire::sink::zarr {
-struct Dimension
-{
-  public:
-    explicit Dimension(const std::string& name,
-                       DimensionType kind,
-                       uint32_t array_size_px,
-                       uint32_t chunk_size_px,
-                       uint32_t shard_size_chunks);
-    explicit Dimension(const StorageDimension& dim);
-
-    const std::string name;
-    const DimensionType kind;
-    const uint32_t array_size_px;
-    const uint32_t chunk_size_px;
-    const uint32_t shard_size_chunks;
-};
-
 struct Zarr;
 
-namespace common {
+namespace acquire::sink::zarr::common {
 /// @brief Get the number of chunks along a dimension.
 /// @param dimension A dimension.
 /// @return The number of, possibly ragged, chunks along the dimension, given
@@ -136,6 +112,5 @@ split_uri(const std::string& uri);
 bool
 is_s3_uri(const std::string& uri);
 } // namespace acquire::sink::zarr::common
-} // namespace acquire::sink::zarr
 
-#endif // H_ACQUIRE_STORAGE_ZARR_COMMON_V0
+#endif // H_ACQUIRE_STORAGE_ZARR_UTILITIES_V0

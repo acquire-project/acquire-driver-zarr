@@ -7,7 +7,7 @@
 
 #include "device/kit/storage.h"
 
-#include "common.hh"
+#include "common/utilities.hh"
 #include "writers/writer.hh"
 #include "writers/blosc.compressor.hh"
 
@@ -29,7 +29,7 @@ struct Zarr : public Storage
   public:
     Zarr();
     explicit Zarr(BloscCompressionParams&& compression_params);
-    virtual ~Zarr() noexcept;
+    virtual ~Zarr() = default;
 
     /// Storage interface
     void set(const StorageProperties* props);
@@ -78,8 +78,6 @@ struct Zarr : public Storage
     /// Error state
     bool error_;
     std::string error_msg_;
-
-    bool is_s3_() const;
 
     /// Setup
     void set_dimensions_(const StorageProperties* props);
