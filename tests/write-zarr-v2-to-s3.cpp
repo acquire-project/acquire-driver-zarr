@@ -120,7 +120,7 @@ configure(AcquireRuntime* runtime)
                                 SIZED("ZarrBlosc1Lz4ByteShuffle"),
                                 &props.video[0].storage.identifier));
 
-    std::string uri = ZARR_S3_ENDPOINT "/" ZARR_S3_BUCKET_NAME "-v2";
+    std::string uri = ZARR_S3_ENDPOINT "/write-zarr-v2-to-s3";
     storage_properties_init(&props.video[0].storage.settings,
                             0,
                             uri.c_str(),
@@ -195,7 +195,7 @@ validate(AcquireRuntime* runtime)
 
         for (const auto& path : paths) {
             Aws::S3::Model::HeadObjectRequest request;
-            request.SetBucket(ZARR_S3_BUCKET_NAME "-v2");
+            request.SetBucket("write-zarr-v2-to-s3");
             request.SetKey(path.c_str());
             auto outcome = client->HeadObject(request);
             CHECK(outcome.IsSuccess());

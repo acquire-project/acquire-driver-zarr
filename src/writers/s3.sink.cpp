@@ -239,13 +239,40 @@ zarr::S3Sink::finalize_multipart_upload_()
 #endif // _WIN32
 
 #include <aws/core/Aws.h>
+#include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 
-#if __has_include("credentials.hpp")
-#include "credentials.hpp"
+#if __has_include("../credentials.hpp")
+#include "../credentials.hpp"
 #endif
+
+void
+create_bucket(const std::string bucket_name,
+              const std::shared_ptr<Aws::S3::S3Client>& client)
+{
+    // list buckets, check if the bucket already exists
+    Aws::S3::Model::ListBucketsOutcome outcome = client->ListBuckets();
+    EXPECT(outcome.IsSuccess(),
+           "Failed to list buckets: %s",
+           outcome.GetError().GetMessage().c_str());
+
+    for (auto& bucket : outcome.GetResult().GetBuckets()) {
+        if (bucket.GetName() == bucket_name) {
+            return;
+        }
+    }
+
+    // create the bucket
+    Aws::S3::Model::CreateBucketRequest request;
+    request.SetBucket(bucket_name.c_str());
+    auto create_outcome = client->CreateBucket(request);
+    EXPECT(create_outcome.IsSuccess(),
+           "Failed to create bucket '%s': %s",
+           bucket_name.c_str(),
+           create_outcome.GetError().GetMessage().c_str());
+}
 
 void
 validate_object_exists(const std::string& bucket_name,
@@ -303,6 +330,7 @@ extern "C"
 #ifdef ZARR_S3_ENDPOINT
         int retval = 0;
 
+        const std::string bucket_name = "s3-sink-write-put-object";
         const std::string object_key = "test-put-object";
 
         Aws::SDKOptions options;
@@ -314,19 +342,26 @@ extern "C"
               ZARR_S3_ENDPOINT,
               ZARR_S3_ACCESS_KEY_ID,
               ZARR_S3_SECRET_ACCESS_KEY);
-            zarr::S3Sink sink(ZARR_S3_BUCKET_NAME, object_key, connection_pool);
+            zarr::S3Sink sink(bucket_name, object_key, connection_pool);
+
+            auto connection = connection_pool->get_connection();
+            CHECK(connection);
+            auto client = connection->client();
+
+            create_bucket(bucket_name, client);
+            connection_pool->release_connection(std::move(connection));
 
             const std::string data = "Hello, Acquire!";
             CHECK(sink.write(0, (const uint8_t*)data.c_str(), data.size()));
 
             sink.close();
 
-            auto connection = connection_pool->get_connection();
+            connection = connection_pool->get_connection();
             CHECK(connection);
-            auto client = connection->client();
+            client = connection->client();
 
             // check that the object exists
-            validate_object_exists(ZARR_S3_BUCKET_NAME, object_key, client);
+            validate_object_exists(bucket_name, object_key, client);
 
             // validate object contents
             std::vector<uint8_t> expected_data;
@@ -336,10 +371,10 @@ extern "C"
             expected_data.resize(5 << 20, 0);
 
             validate_object_contents(
-              ZARR_S3_BUCKET_NAME, object_key, client, expected_data);
+              bucket_name, object_key, client, expected_data);
 
             // cleanup
-            delete_object(ZARR_S3_BUCKET_NAME, object_key, client);
+            delete_object(bucket_name, object_key, client);
 
             retval = 1;
         } catch (const std::exception& exc) {
@@ -360,6 +395,7 @@ extern "C"
 #ifdef ZARR_S3_ENDPOINT
         int retval = 0;
 
+        const std::string bucket_name = "s3-sink-write-multipart";
         const std::string object_key = "test-multipart-object";
 
         Aws::SDKOptions options;
@@ -371,11 +407,17 @@ extern "C"
               ZARR_S3_ENDPOINT,
               ZARR_S3_ACCESS_KEY_ID,
               ZARR_S3_SECRET_ACCESS_KEY);
-            zarr::S3Sink sink(ZARR_S3_BUCKET_NAME, object_key, connection_pool);
 
+            auto connection = connection_pool->get_connection();
+            CHECK(connection);
+            auto client = connection->client();
+
+            create_bucket(bucket_name, client);
+            connection_pool->release_connection(std::move(connection));
+
+            zarr::S3Sink sink(bucket_name, object_key, connection_pool);
             const std::string data = "Hello, Acquire!";
             for (auto i = 0; i < 5 << 20; ++i) {
-
                 CHECK(sink.write(0, // offset is ignored for S3 writes
                                  (const uint8_t*)data.c_str(),
                                  data.size()));
@@ -383,12 +425,14 @@ extern "C"
 
             sink.close();
 
-            auto connection = connection_pool->get_connection();
+            connection = connection_pool->get_connection();
             CHECK(connection);
-            auto client = connection->client();
+            client = connection->client();
+
+            create_bucket(bucket_name, client);
 
             // check that the object exists
-            validate_object_exists(ZARR_S3_BUCKET_NAME, object_key, client);
+            validate_object_exists(bucket_name, object_key, client);
 
             // validate object contents
 
@@ -400,10 +444,10 @@ extern "C"
             }
 
             validate_object_contents(
-              ZARR_S3_BUCKET_NAME, object_key, client, expected_data);
+              bucket_name, object_key, client, expected_data);
 
             // cleanup
-            delete_object(ZARR_S3_BUCKET_NAME, object_key, client);
+            delete_object(bucket_name, object_key, client);
 
             retval = 1;
         } catch (const std::exception& exc) {

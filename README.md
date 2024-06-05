@@ -297,6 +297,31 @@ the previous level, until the dimensions are less than or equal to a single tile
 Suppose your frame size is 1920 x 1080, with a tile size of 384 x 216.
 Then the sequence of levels will have dimensions 1920 x 1080, 960 x 540, 480 x 270, and 240 x 135.
 
+## Development
+
+### Building
+
+To build the driver, you will need to have initialized all submodules recursively.
+You can do this by running:
+
+```bash
+git submodule update --init --recursive
+```
+
+Then, you can build the driver by running:
+
+```bash
+mkdir build
+cd build
+cmake ..
+cmake --build .
+```
+
+During the build portion, the AWS SDK will be built and installed in your build directory.
+This is necessary for the S3 storage backend, but takes a long time to build.
+
+See [tests/README.md](tests/README.md) for information on running tests.
+
 [zarr]: https://zarr.readthedocs.io/en/stable/spec/v2.html
 
 [Blosc]: https://github.com/Blosc/c-blosc
