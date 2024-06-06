@@ -60,15 +60,17 @@ void AcquireZarrSinkWrapper::configure(const struct AcquireZarrSinkConfig* confi
     }
 
     // todo: get these from config data structure
-    video_frame_.shape.dims.channels = 1;
-    video_frame_.shape.dims.width = 512;
-    video_frame_.shape.dims.height = 512;
-    video_frame_.shape.dims.planes = 1;
+    video_frame_.shape.dims.channels = config_.shape.channels;
+    video_frame_.shape.dims.width = config_.shape.width;
+    video_frame_.shape.dims.height = config_.shape.height;
+    video_frame_.shape.dims.planes = config_.shape.planes;
     video_frame_.shape.strides.channels = 1;
-    video_frame_.shape.strides.width = 1;
-    video_frame_.shape.strides.height = 512;
-    video_frame_.shape.strides.planes = 512;
-    video_frame_.shape.type = SampleType_u8;
+    video_frame_.shape.strides.width = video_frame_.shape.dims.channels ;
+    video_frame_.shape.strides.height = video_frame_.shape.dims.width * video_frame_.shape.strides.width;
+    video_frame_.shape.strides.planes = video_frame_.shape.dims.height * video_frame_.shape.strides.height;;
+    video_frame_.shape.type = SampleType_u8;  
+    video_frame_.bytes_of_frame = sizeof(video_frame_) + video_frame_.shape.dims.planes * video_frame_.shape.strides.planes;
+
 }
 
 void AcquireZarrSinkWrapper::open()
@@ -126,6 +128,11 @@ EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper* zarr_sink, uint8_t* 
 {
     try
     {
+        if(image_size != zarr_sink->video_frame_.shape.dims.width * zarr_sink->video_frame_.shape.dims.height)
+        {
+            throw std::runtime_error("Image size does not match expected size");
+        };
+
         zarr_sink->append(image_data, image_size);
         return 0;
     }

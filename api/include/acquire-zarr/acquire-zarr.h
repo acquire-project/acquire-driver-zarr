@@ -18,7 +18,22 @@ struct AcquireZarrSinkWrapper;
 struct AcquireZarrSinkConfig
 {
     char filename[512];
-   
+
+    struct shape_s
+    {
+        uint32_t channels, width, height, planes;
+    } shape;
+
+    // 8, 12, 14, 16, 32  (non power of 2 values are rounded up to the next power of 2)
+    uint8_t sample_bits;  
+
+    enum SampleType
+    {
+        UNKNOWN,
+        UNSIGNED_INT,
+        SIGNED_INT,
+        FLOAT
+    } word_type;    
 
     // Zarr Version
     enum AcquireZarrVersion
