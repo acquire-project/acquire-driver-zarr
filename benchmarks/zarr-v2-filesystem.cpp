@@ -1,5 +1,6 @@
 #include "device/props/storage.h"
 
+#include <filesystem>
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
@@ -13,6 +14,8 @@
         ss << "Expression failed on line " << __LINE__ << ": " << #e;          \
         throw std::runtime_error(ss.str());                                    \
     }
+
+namespace fs = std::filesystem;
 
 int
 main()
@@ -40,11 +43,13 @@ main()
 
                     for (const auto& chunk_plane : chunk_planes) {
                         const std::string filename =
-                          BENCHMARK + std::to_string(frame_width) + "-" +
-                          std::to_string(chunk_width) + "-" +
-                          std::to_string(frame_height) + "-" +
-                          std::to_string(chunk_height) + "-" +
-                          std::to_string(chunk_plane) + ".zarr";
+                          (fs::temp_directory_path() /
+                           (BENCHMARK + std::to_string(frame_width) + "-" +
+                            std::to_string(chunk_width) + "-" +
+                            std::to_string(frame_height) + "-" +
+                            std::to_string(chunk_height) + "-" +
+                            std::to_string(chunk_plane) + ".zarr"))
+                            .string();
 
                         storage_properties_init(&props,
                                                 0,
