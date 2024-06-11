@@ -6,7 +6,7 @@
 #endif
 
 #include "blosc.h"
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 namespace acquire::sink::zarr {
 enum class BloscCodecId : uint8_t

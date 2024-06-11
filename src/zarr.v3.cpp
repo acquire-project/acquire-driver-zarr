@@ -1,7 +1,7 @@
 #include "zarr.v3.hh"
 #include "writers/zarrv3.writer.hh"
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include <cmath>
 

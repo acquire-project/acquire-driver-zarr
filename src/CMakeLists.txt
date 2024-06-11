@@ -1,10 +1,12 @@
-add_subdirectory(3rdParty)
-
 if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
 set(tgt acquire-driver-zarr)
+
+find_package(c-blosc REQUIRED)
+find_package(nlohmann_json REQUIRED)
+
 add_library(${tgt} MODULE
         common.hh
         common.cpp
@@ -33,8 +35,8 @@ target_link_libraries(${tgt} PRIVATE
         acquire-core-platform
         acquire-device-kit
         acquire-device-properties
-        cblosc
-        json
+        c-blosc::c-blosc
+        nlohmann_json::nlohmann_json
 )
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"

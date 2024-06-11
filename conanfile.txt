@@ -1,0 +1,7 @@
+[requires]
+nlohmann_json/3.11.2
+c-blosc/1.21.4
+
+[generators]
+CMakeDeps
+CMakeToolchain
