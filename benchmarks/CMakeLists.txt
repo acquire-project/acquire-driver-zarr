@@ -62,7 +62,7 @@ if (${WITH_BENCHMARKS})
     foreach (driver
             acquire-driver-common
             acquire-driver-zarr
-            ${AWSSDK_LINK_LIBRARIES}
+#            ${AWSSDK_LINK_LIBRARIES}
     )
         add_custom_target(${project}-copy-${driver}-for-benchmarks
                 COMMAND ${CMAKE_COMMAND} -E copy
@@ -77,7 +77,7 @@ if (${WITH_BENCHMARKS})
         endforeach ()
     endforeach ()
 
-    if (MSVC)
-        AWSSDK_CPY_DYN_LIBS(SERVICE_COMPONENTS "" ${CMAKE_CURRENT_BINARY_DIR})
-    endif ()
+#    if (MSVC)
+#        AWSSDK_CPY_DYN_LIBS(SERVICE_COMPONENTS "" ${CMAKE_CURRENT_BINARY_DIR})
+#    endif ()
 endif ()

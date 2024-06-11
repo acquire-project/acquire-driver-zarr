@@ -14,7 +14,7 @@ BUILD_PATH="/tmp/aws-sdk-cpp-build-${BUILD_TYPE}" # Get the directory where the 
 # Build the SDK
 mkdir -p "${BUILD_PATH}"
 pushd "${BUILD_PATH}" || exit 1
-cmake -B . -S "${AWS_PATH}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF
+cmake -B . -S "${AWS_PATH}" -DCMAKE_BUILD_TYPE="${BUILD_TYPE}" -DCMAKE_INSTALL_PREFIX="${INSTALL_DIR}" -DBUILD_ONLY="s3" -DENABLE_TESTING=OFF -DBUILD_SHARED_LIBS=OFF -DFORCE_SHARED_CRT=ON
 cmake --build . --config "${BUILD_TYPE}"
 cmake --install . --config "${BUILD_TYPE}"
 popd || exit 1 # ${BUILD_PATH}
