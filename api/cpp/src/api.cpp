@@ -16,13 +16,17 @@ struct AcquireZarrSinkWrapper
     void configure(const struct AcquireZarrSinkConfig* config);
     void open();
     void append(uint8_t* image_data, size_t image_size);
+
   protected:
     AcquireZarrSinkConfig config_;
 
     // use shared_ptr for polymorphism of zarr version.
     std::shared_ptr<struct Zarr> zarr_sink_ = nullptr;
 
+  // video frame needs to be the last member of the struct
+  public: 
     struct VideoFrame video_frame_;
+
 
 }; 
 
