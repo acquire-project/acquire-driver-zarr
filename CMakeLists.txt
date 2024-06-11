@@ -13,14 +13,9 @@ include(cmake/simd.cmake)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
 
-set(ACQUIRE_BUILD_API OFF CACHE BOOL "Build the stand-alone API")
-
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(examples)
-
-if(ACQUIRE_BUILD_API)
-    add_subdirectory(api)
-endif()
+add_subdirectory(api)
 
 include(CPack)
