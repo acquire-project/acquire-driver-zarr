@@ -4,9 +4,6 @@ endif ()
 
 set(tgt acquire-driver-zarr)
 
-find_package(c-blosc REQUIRED)
-find_package(nlohmann_json REQUIRED)
-
 add_library(${tgt} MODULE
         common.hh
         common.cpp

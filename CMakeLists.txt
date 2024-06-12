@@ -3,6 +3,9 @@ project(acquire-driver-zarr)
 cmake_policy(SET CMP0079 NEW) # allows use with targets in other directories
 enable_testing()
 
+find_package(c-blosc REQUIRED)
+find_package(nlohmann_json REQUIRED)
+
 include(cmake/aq_require.cmake)
 include(cmake/git-versioning.cmake)
 include(cmake/ide.cmake)
