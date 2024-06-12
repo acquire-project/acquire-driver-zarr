@@ -1,10 +1,6 @@
 #ifndef H_ACQUIRE_STORAGE_ZARR_V0
 #define H_ACQUIRE_STORAGE_ZARR_V0
 
-#ifndef __cplusplus
-#error "This header requires C++20"
-#endif
-
 #include "device/kit/storage.h"
 
 #include "common.hh"
