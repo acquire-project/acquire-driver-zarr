@@ -1,11 +1,11 @@
-project(acquire-zarr-cpp-api)
+project(acquire-zarr-c-api)
 
-set(tgt acquire-zarr-cpp)
-set(ACQUIRE_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/acquire-zarr/acquire-zarr.hh)
+set(tgt acquire-zarr-c)
+set(ACQUIRE_C_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/acquire-zarr/acquire-zarr.h)
 
 add_library(${tgt} SHARED
-        ${ACQUIRE_API_INCLUDE_FILE}
-        src/api.cpp
+        ${ACQUIRE_C_API_INCLUDE_FILE}
+        src/api.c
 )
 
 
@@ -29,7 +29,7 @@ target_link_libraries(${tgt} PRIVATE
 
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-        PUBLIC_HEADER ${ACQUIRE_API_INCLUDE_FILE}
+        PUBLIC_HEADER ${ACQUIRE_C_API_INCLUDE_FILE}
 )
 
 install(TARGETS ${tgt} 

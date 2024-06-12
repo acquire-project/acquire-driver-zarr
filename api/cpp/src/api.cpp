@@ -1,5 +1,5 @@
 #include <iostream>
-#include "acquire-zarr/acquire-zarr.h"
+#include "acquire-zarr/acquire-zarr.hh"
 #include "zarr.v2.hh"
 #include "zarr.v3.hh"
 
@@ -7,11 +7,11 @@
 // C++ implementation of the ZarrSink, which is just a wrapper around the Zarr storage class heirarchy.
 using namespace acquire::sink::zarr;
 
-struct AcquireZarrSinkWrapper 
+class AcquireZarrWriter::Impl
 {
   public:
-    AcquireZarrSinkWrapper() = default;
-    ~AcquireZarrSinkWrapper() = default;
+    Impl() = default;
+    ~Impl() = default;
 
     void configure(const struct AcquireZarrSinkConfig* config);
     void open();
@@ -26,12 +26,10 @@ struct AcquireZarrSinkWrapper
   // video frame needs to be the last member of the struct
   public: 
     struct VideoFrame video_frame_;
-
-
 }; 
 
 
-void AcquireZarrSinkWrapper::configure(const struct AcquireZarrSinkConfig* config)
+void AcquireZarrWriter::Impl::configure(const struct AcquireZarrSinkConfig* config)
 {
     config_ = *config;
 
@@ -77,73 +75,16 @@ void AcquireZarrSinkWrapper::configure(const struct AcquireZarrSinkConfig* confi
 
 }
 
-void AcquireZarrSinkWrapper::open()
+void AcquireZarrWriter::Impl::open()
 {
     zarr_sink_->start();
 }
 
-void AcquireZarrSinkWrapper::append(uint8_t* image_data, size_t image_size)
+void AcquireZarrWriter::Impl::append(uint8_t* image_data, size_t image_size)
 {
 
     // todo: check image size against expected size
     memcpy(video_frame_.data, image_data, image_size);
     const VideoFrame* const_frame = &video_frame_;
     zarr_sink_->append(const_frame, image_size);
-}
-
-EXTERNC struct AcquireZarrSinkWrapper* zarr_sink_open(const struct AcquireZarrSinkConfig* config)
-{
-    try
-    {
-        struct AcquireZarrSinkWrapper* newptr = new struct AcquireZarrSinkWrapper();
-
-        newptr->configure(config);
-        newptr->open();
-        return newptr;
-
-    }
-    catch (...)
-    {
-        LOG("Error opening Zarr sink");
-        return NULL;
-    }
-
-    
-}
-
-EXTERNC void zarr_sink_close(struct AcquireZarrSinkWrapper* zarr_sink)
-{
-    try
-    {
-        
-        if (zarr_sink != NULL)
-        {
-            delete zarr_sink;
-            zarr_sink = nullptr;
-        }
-    }
-    catch(const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-    }
-}
-
-EXTERNC int zarr_sink_append(struct AcquireZarrSinkWrapper* zarr_sink, uint8_t* image_data, size_t image_size)
-{
-    try
-    {
-        if(image_size != zarr_sink->video_frame_.shape.dims.width * zarr_sink->video_frame_.shape.dims.height)
-        {
-            throw std::runtime_error("Image size does not match expected size");
-        };
-
-        zarr_sink->append(image_data, image_size);
-        return 0;
-    }
-    catch(const std::exception& e)
-    {
-        std::cerr << e.what() << '\n';
-        return -1;
-    }
-    
 }
