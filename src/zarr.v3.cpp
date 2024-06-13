@@ -1,5 +1,6 @@
 #include "zarr.v3.hh"
 #include "writers/zarrv3.writer.hh"
+#include "writers/sink.creator.hh"
 
 #include "json.hpp"
 
@@ -69,22 +70,13 @@ zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
     meta->multiscale_is_supported = 0;
 }
 
-std::vector<std::string>
-zarr::ZarrV3::make_metadata_sink_paths_()
+void
+zarr::ZarrV3::make_metadata_sinks_()
 {
-    std::vector<std::string> metadata_sink_paths;
-    metadata_sink_paths.push_back((dataset_root_ / "zarr.json").string());
-    metadata_sink_paths.push_back(
-      (dataset_root_ / "meta" / "root.group.json").string());
-    for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back((dataset_root_ / "meta" / "root" /
-                                       (std::to_string(i) + ".array.json"))
-                                        .string());
-    }
-
-    return metadata_sink_paths;
+    SinkCreator creator(thread_pool_);
+    CHECK(creator.create_v3_metadata_sinks(
+      dataset_root_, writers_.size(), metadata_sinks_));
 }
-
 /// @brief Write the metadata for the dataset.
 void
 zarr::ZarrV3::write_base_metadata_() const
@@ -101,7 +93,9 @@ zarr::ZarrV3::write_base_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(0);
+    CHECK(!metadata_sinks_.empty());
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(0);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -134,7 +128,8 @@ zarr::ZarrV3::write_group_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(1);
+    CHECK(metadata_sinks_.size() > 1);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(1);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -215,7 +210,8 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(2 + level);
+    CHECK(metadata_sinks_.size() > 2 + level);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(2 + level);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 

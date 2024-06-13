@@ -1,5 +1,6 @@
 #include "zarr.v2.hh"
 #include "writers/zarrv2.writer.hh"
+#include "writers/sink.creator.hh"
 
 #include "json.hpp"
 
@@ -48,6 +49,7 @@ zarr::ZarrV2::allocate_writers_()
         .data_root = (dataset_root_ / "0").string(),
         .compression_params = blosc_compression_params_,
     };
+
     writers_.push_back(std::make_shared<ZarrV2Writer>(config, thread_pool_));
 
     if (enable_multiscale_) {
@@ -67,21 +69,12 @@ zarr::ZarrV2::allocate_writers_()
     }
 }
 
-std::vector<std::string>
-zarr::ZarrV2::make_metadata_sink_paths_()
+void
+zarr::ZarrV2::make_metadata_sinks_()
 {
-    std::vector<std::string> metadata_sink_paths = {
-        (dataset_root_ / ".metadata").string(),     // base metadata
-        (dataset_root_ / "0" / ".zattrs").string(), // external metadata
-        (dataset_root_ / ".zattrs").string(),       // group metadata
-    };
-
-    for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back(
-          (dataset_root_ / std::to_string(i) / ".zarray").string());
-    }
-
-    return metadata_sink_paths;
+    SinkCreator creator(thread_pool_);
+    CHECK(creator.create_v2_metadata_sinks(
+      dataset_root_, writers_.size(), metadata_sinks_));
 }
 
 void
@@ -93,7 +86,9 @@ zarr::ZarrV2::write_base_metadata_() const
     const json metadata = { { "zarr_format", 2 } };
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(0);
+    CHECK(!metadata_sinks_.empty());
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(0);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -103,7 +98,6 @@ zarr::ZarrV2::write_external_metadata_() const
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
-    std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
     std::string metadata_str = external_metadata_json_.empty()
                                  ? "{}"
                                  : json::parse(external_metadata_json_,
@@ -113,7 +107,9 @@ zarr::ZarrV2::write_external_metadata_() const
                                                )
                                      .dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(1);
+    CHECK(metadata_sinks_.size() > 1);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(1);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -217,7 +213,9 @@ zarr::ZarrV2::write_group_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(2);
+    CHECK(metadata_sinks_.size() > 2);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(2);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -265,7 +263,9 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(3 + level);
+    CHECK(metadata_sinks_.size() > 3 + level);
+    const std::shared_ptr<Sink>& sink = metadata_sinks_.at(3 + level);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 

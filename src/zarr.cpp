@@ -450,10 +450,7 @@ zarr::Zarr::start()
 
     allocate_writers_();
 
-    if (!dataset_root_.string().starts_with("s3://")) {
-        make_metadata_sinks_<FileCreator>();
-    }
-
+    make_metadata_sinks_();
     write_fixed_metadata_();
 
     state = DeviceState_Running;
@@ -472,10 +469,8 @@ zarr::Zarr::stop() noexcept
         try {
             // must precede close of chunk file
             write_mutable_metadata_();
-            for (Sink* sink_ : metadata_sinks_) {
-                if (auto* sink = dynamic_cast<FileSink*>(sink_)) {
-                    sink_close<FileSink>(sink);
-                }
+            for (auto& sink : metadata_sinks_) {
+                sink->close();
             }
             metadata_sinks_.clear();
 
