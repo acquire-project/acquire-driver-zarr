@@ -10,6 +10,16 @@ namespace common = zarr::common;
 using json = nlohmann::json;
 
 namespace {
+/// @brief Align a size to a given alignment.
+/// @param n Size to align.
+/// @param align Alignment.
+/// @return Aligned size.
+size_t
+align_up(size_t n, size_t align)
+{
+    return (n + align - 1) & ~(align - 1);
+}
+
 /// \brief Get the filename from a StorageProperties as fs::path.
 /// \param props StorageProperties for the Zarr Storage device.
 /// \return fs::path representation of the Zarr data directory.
@@ -702,7 +712,7 @@ void
 test_average_frame_inner(const SampleType& stype)
 {
     auto* src = (VideoFrame*)malloc(sizeof(VideoFrame) + 9 * sizeof(T));
-    src->bytes_of_frame = sizeof(*src) + 9 * sizeof(T);
+    src->bytes_of_frame = align_up(sizeof(*src) + 9 * sizeof(T), 8);
     src->shape = {
         .dims = {
           .channels = 1,
