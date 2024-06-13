@@ -9,6 +9,8 @@ add_library(${tgt} MODULE
         common.hh
         common.cpp
         writers/sink.hh
+        writers/sink.creator.hh
+        writers/sink.creator.cpp
         writers/file.sink.hh
         writers/file.sink.cpp
         writers/writer.hh
