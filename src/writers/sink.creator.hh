@@ -8,7 +8,7 @@
 #include <memory>
 
 namespace acquire::sink::zarr {
-struct SinkCreator
+struct SinkCreator final
 {
   public:
     SinkCreator() = delete;
