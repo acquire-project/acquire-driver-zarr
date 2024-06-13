@@ -1,4 +1,5 @@
 #include "zarrv2.writer.hh"
+#include "sink.creator.hh"
 #include "../zarr.hh"
 
 #include <cmath>
@@ -23,8 +24,8 @@ zarr::ZarrV2Writer::flush_impl_()
       (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
 
     {
-        FileCreator file_creator(thread_pool_);
-        if (!file_creator.create_chunk_sinks(
+        SinkCreator creator(thread_pool_);
+        if (!creator.create_chunk_sinks(
               data_root, config_.dimensions, sinks_)) {
             return false;
         }
@@ -82,6 +83,18 @@ zarr::ZarrV2Writer::should_rollover_() const
 #define acquire_export
 #endif
 
+namespace {
+/// @brief Align a size to a given alignment.
+/// @param n Size to align.
+/// @param align Alignment.
+/// @return Aligned size.
+size_t
+align_up(size_t n, size_t align)
+{
+    return (n + align - 1) & ~(align - 1);
+}
+} // namespace
+
 namespace common = zarr::common;
 
 extern "C"
@@ -110,6 +123,12 @@ extern "C"
                   .width = 64,
                   .height = 48,
                 },
+                .strides = {
+                  .channels = 1,
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
+                },
                 .type = SampleType_u16,
             };
 
@@ -123,7 +142,7 @@ extern "C"
             zarr::ZarrV2Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
-            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
+            frame->bytes_of_frame = align_up(sizeof(VideoFrame) + 64 * 48 * 2, 8);
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48 * 2);
 
@@ -211,6 +230,12 @@ extern "C"
                   .width = 64,
                   .height = 48,
                 },
+                .strides = {
+                  .channels = 1,
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
+                },
                 .type = SampleType_u8,
             };
 
@@ -230,7 +255,7 @@ extern "C"
             zarr::ZarrV2Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
-            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
+            frame->bytes_of_frame = align_up(sizeof(VideoFrame) + 64 * 48, 8);
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48);
 
@@ -301,6 +326,12 @@ extern "C"
                   .width = 64,
                   .height = 48,
                 },
+                .strides = {
+                  .channels = 1,
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
+                },
                 .type = SampleType_u8,
             };
 
@@ -322,7 +353,7 @@ extern "C"
             zarr::ZarrV2Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
-            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
+            frame->bytes_of_frame = align_up(sizeof(VideoFrame) + 64 * 48, 8);
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48);
 

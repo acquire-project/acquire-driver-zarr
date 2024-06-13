@@ -163,8 +163,7 @@ scale_image(const VideoFrame* src)
       dst->shape.strides.height * dst->shape.dims.height;
 
     dst->bytes_of_frame =
-      dst->shape.dims.planes * dst->shape.strides.planes * sizeof(T) +
-      sizeof(*dst);
+      align_up(bytes_of_image(&dst->shape) + sizeof(*dst), 8);
 
     const auto* src_img = (T*)src->data;
     auto* dst_img = (T*)dst->data;
@@ -200,8 +199,8 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
     CHECK(src);
     CHECK(dst->bytes_of_frame == src->bytes_of_frame);
 
-    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
-    const auto num_pixels = bytes_of_image / sizeof(T);
+    const auto nbytes_image = bytes_of_image(&dst->shape);
+    const auto num_pixels = nbytes_image / sizeof(T);
     for (auto i = 0; i < num_pixels; ++i) {
         dst->data[i] = (T)(0.5f * ((float)dst->data[i] + (float)src->data[i]));
     }
@@ -494,8 +493,8 @@ zarr::Zarr::stop() noexcept
 
             // should be empty, but just in case
             for (auto& [_, frame] : scaled_frames_) {
-                if (frame.has_value() && frame.value()) {
-                    free(frame.value());
+                if (frame && *frame) {
+                    free(*frame);
                 }
             }
             scaled_frames_.clear();

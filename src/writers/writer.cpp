@@ -104,7 +104,7 @@ chunk_internal_offset(size_t frame_id,
 } // end ::{anonymous} namespace
 
 bool
-zarr::downsample(const ArrayConfig& config, ArrayConfig& downsampled_config)
+zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 {
     // downsample dimensions
     downsampled_config.dimensions.clear();
@@ -176,7 +176,7 @@ zarr::downsample(const ArrayConfig& config, ArrayConfig& downsampled_config)
 }
 
 /// Writer
-zarr::Writer::Writer(const ArrayConfig& config,
+zarr::Writer::Writer(const WriterConfig& config,
                      std::shared_ptr<common::ThreadPool> thread_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
@@ -199,9 +199,9 @@ zarr::Writer::write(const VideoFrame* frame)
     // split the incoming frame into tiles and write them to the chunk buffers
     const auto& dimensions = config_.dimensions;
 
-    const auto bytes_written = write_frame_to_chunks_(
-      frame->data, frame->bytes_of_frame - sizeof(*frame));
-    const auto bytes_of_frame = frame->bytes_of_frame - sizeof(*frame);
+    const auto bytes_written =
+      write_frame_to_chunks_(frame->data, bytes_of_image(&frame->shape));
+    const auto bytes_of_frame = bytes_of_image(&frame->shape);
     CHECK(bytes_written == bytes_of_frame);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
@@ -222,7 +222,7 @@ zarr::Writer::finalize()
     is_finalizing_ = false;
 }
 
-const zarr::ArrayConfig&
+const zarr::WriterConfig&
 zarr::Writer::config() const noexcept
 {
     return config_;
@@ -461,12 +461,24 @@ zarr::Writer::rollover_()
 #define acquire_export
 #endif
 
+namespace {
+/// @brief Align a size to a given alignment.
+/// @param n Size to align.
+/// @param align Alignment.
+/// @return Aligned size.
+size_t
+align_up(size_t n, size_t align)
+{
+    return (n + align - 1) & ~(align - 1);
+}
+} // namespace
+
 namespace common = zarr::common;
 
 class TestWriter : public zarr::Writer
 {
   public:
-    TestWriter(const zarr::ArrayConfig& array_spec,
+    TestWriter(const zarr::WriterConfig& array_spec,
                std::shared_ptr<common::ThreadPool> thread_pool)
       : zarr::Writer(array_spec, thread_pool)
     {
@@ -776,20 +788,25 @@ extern "C"
                     .width = 64,
                     .height = 48,
                 },
+                .strides = {
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
+                },
                 .type = SampleType_u16,
             };
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            TestWriter writer(array_spec, thread_pool);
+            TestWriter writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
-            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
+            frame->bytes_of_frame = align_up(sizeof(VideoFrame) + 64 * 48 * 2, 8);
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48 * 2);
 
@@ -820,7 +837,7 @@ extern "C"
         try {
             const fs::path base_dir = "acquire";
 
-            zarr::ArrayConfig config {
+            zarr::WriterConfig config {
                 .image_shape = {
                     .dims = {
                       .channels = 1,
@@ -855,7 +872,7 @@ extern "C"
                                            5,
                                            1); // 5 timepoints / chunk, 1 shard
 
-            zarr::ArrayConfig downsampled_config;
+            zarr::WriterConfig downsampled_config;
             CHECK(zarr::downsample(config, downsampled_config));
 
             // check dimensions
