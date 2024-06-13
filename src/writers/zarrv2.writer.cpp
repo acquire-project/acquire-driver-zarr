@@ -8,7 +8,7 @@
 namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV2Writer::ZarrV2Writer(
-  const ArrayConfig& config,
+  const WriterConfig& config,
   std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(config, thread_pool)
 {
@@ -113,14 +113,14 @@ extern "C"
                 .type = SampleType_u16,
             };
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(array_spec, thread_pool);
+            zarr::ZarrV2Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
             frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
@@ -220,14 +220,14 @@ extern "C"
             dims.emplace_back(
               "z", DimensionType_Space, 5, 2, 0); // 3 chunks, ragged
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(array_spec, thread_pool);
+            zarr::ZarrV2Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
@@ -312,14 +312,14 @@ extern "C"
             dims.emplace_back(
               "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(array_spec, thread_pool);
+            zarr::ZarrV2Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;

@@ -99,7 +99,7 @@ shard_internal_index(size_t chunk_idx,
 } // namespace
 
 zarr::ZarrV3Writer::ZarrV3Writer(
-  const ArrayConfig& array_spec,
+  const WriterConfig& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(array_spec, thread_pool)
   , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
@@ -539,14 +539,14 @@ extern "C"
                 .type = SampleType_u16,
             };
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(array_spec, thread_pool);
+            zarr::ZarrV3Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
             frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
@@ -667,14 +667,14 @@ extern "C"
                 .type = SampleType_u8,
             };
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(array_spec, thread_pool);
+            zarr::ZarrV3Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
@@ -781,14 +781,14 @@ extern "C"
                               5,  // 5 timepoints / chunk
                               2); // 2 chunks / shard
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(array_spec, thread_pool);
+            zarr::ZarrV3Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
