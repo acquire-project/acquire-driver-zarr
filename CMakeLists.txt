@@ -15,8 +15,14 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(ACQUIRE_BUILD_API OFF CACHE BOOL "Build the stand-alone API")
+
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(examples)
+
+if(ACQUIRE_BUILD_API)
+    add_subdirectory(api)
+endif()
 
 include(CPack)
