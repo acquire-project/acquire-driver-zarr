@@ -218,7 +218,7 @@ zarr::Writer::finalize()
 {
     is_finalizing_ = true;
     flush_();
-    close_files_();
+    close_sinks_();
     is_finalizing_ = false;
 }
 
@@ -435,12 +435,10 @@ zarr::Writer::flush_()
 }
 
 void
-zarr::Writer::close_files_()
+zarr::Writer::close_sinks_()
 {
-    for (Sink* sink_ : sinks_) {
-        if (auto* sink = dynamic_cast<FileSink*>(sink_)) {
-            sink_close<FileSink>(sink_);
-        }
+    for (auto& sink : sinks_) {
+        sink->close();
     }
     sinks_.clear();
 }
@@ -450,7 +448,7 @@ zarr::Writer::rollover_()
 {
     TRACE("Rolling over");
 
-    close_files_();
+    close_sinks_();
     ++append_chunk_index_;
 }
 

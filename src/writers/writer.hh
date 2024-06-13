@@ -58,7 +58,7 @@ struct Writer
 
     /// Filesystem
     std::string data_root_;
-    std::vector<Sink*> sinks_;
+    std::vector<std::shared_ptr<Sink>> sinks_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;
@@ -78,7 +78,7 @@ struct Writer
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
     virtual bool should_rollover_() const = 0;
-    void close_files_();
+    void close_sinks_();
     void rollover_();
 };
 } // namespace acquire::sink::zarr
