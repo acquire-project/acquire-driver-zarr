@@ -42,7 +42,7 @@ struct Zarr : public Storage
     std::optional<BloscCompressionParams> blosc_compression_params_;
 
     /// changes on set
-    fs::path dataset_root_;
+    std::string dataset_root_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     bool enable_multiscale_;

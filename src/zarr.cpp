@@ -355,7 +355,7 @@ zarr::Zarr::set(const StorageProperties* props)
     validate_props(props);
     // TODO (aliddell): we will eventually support S3 URIs,
     //  dataset_root_ should be a string
-    dataset_root_ = as_path(*props);
+    dataset_root_ = as_path(*props).string();
 
     if (props->external_metadata_json.str) {
         external_metadata_json_ = props->external_metadata_json.str;
@@ -380,8 +380,6 @@ zarr::Zarr::get(StorageProperties* props) const
 {
     CHECK(props);
     storage_properties_destroy(props);
-
-    const std::string dataset_root = dataset_root_.string();
 
     std::string uri;
     if (!dataset_root_.empty()) {
