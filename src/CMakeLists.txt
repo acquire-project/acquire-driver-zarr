@@ -37,6 +37,7 @@ target_link_libraries(${tgt} PRIVATE
         acquire-device-properties
         cblosc
         json
+        miniocpp::miniocpp
 )
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"

@@ -3,12 +3,14 @@ project(acquire-driver-zarr)
 cmake_policy(SET CMP0079 NEW) # allows use with targets in other directories
 enable_testing()
 
+include(vcpkg/scripts/buildsystems/vcpkg.cmake)
 include(cmake/aq_require.cmake)
 include(cmake/git-versioning.cmake)
 include(cmake/ide.cmake)
 include(cmake/install-prefix.cmake)
 include(cmake/wsl.cmake)
 include(cmake/simd.cmake)
+include(cmake/minio.cmake)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 20)
