@@ -20,6 +20,13 @@ jobs:
       fail-fast: false
       matrix:
         platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        include:
+          - platform: "windows-latest"
+            vcpkg_triplet: "x64-windows-static"
+          - platform: "ubuntu-latest"
+            vcpkg_triplet: "x64-linux"
+          - platform: "macos-latest"
+            vcpkg_triplet: "arm64-osx"
     permissions:
       actions: write
 
@@ -44,12 +51,14 @@ jobs:
         shell: bash
 
       - name: Install vcpkg
-        if: ${{ matrix.platform == 'ubuntu-latest' }}
         run: |
-           git clone https://github.com/microsoft/vcpkg.git
+          git clone https://github.com/microsoft/vcpkg.git
+          export VCPKG_DEFAULT_TRIPLET=x64-windows-static
           cd vcpkg && ./bootstrap-vcpkg.sh
           echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
           echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
+          ./vcpkg integrate install
+        shell: bash
 
       - name: Configure CMake
         run: |

@@ -1,6 +1,12 @@
 {
   "dependencies": [
-    "nlohmann-json",
-    "blosc"
+    {
+        "name": "blosc",
+        "version>=": "1.21.5"
+    },
+    {
+        "name": "nlohmann-json",
+        "version>=": "3.11.3"
+    }
   ]
 }
