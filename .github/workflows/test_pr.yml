@@ -22,11 +22,11 @@ jobs:
         platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
         include:
           - platform: "windows-latest"
-            vcpkg_triplet: "x64-windows-static"
+            cmake_preset: "windows"
           - platform: "ubuntu-latest"
-            vcpkg_triplet: "x64-linux"
+            cmake_preset: "linux"
           - platform: "macos-latest"
-            vcpkg_triplet: "arm64-osx"
+            cmake_preset: "macos"
     permissions:
       actions: write
 
@@ -53,7 +53,6 @@ jobs:
       - name: Install vcpkg
         run: |
           git clone https://github.com/microsoft/vcpkg.git
-          export VCPKG_DEFAULT_TRIPLET=x64-windows-static
           cd vcpkg && ./bootstrap-vcpkg.sh
           echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
           echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
@@ -62,7 +61,7 @@ jobs:
 
       - name: Configure CMake
         run: |
-          cmake --preset=default
+          cmake --preset=${{matrix.cmake_preset}}
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}}
 
       - name: Build

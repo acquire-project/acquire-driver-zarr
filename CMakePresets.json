@@ -7,6 +7,27 @@
       "cacheVariables": {
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
       }
+    },
+    {
+      "name": "windows",
+      "inherits": "default",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static"
+      }
+    },
+    {
+      "name": "linux",
+      "inherits": "default",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
+      }
+    },
+    {
+      "name": "macos",
+      "inherits": "default",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-osx"
+      }
     }
   ]
 }
