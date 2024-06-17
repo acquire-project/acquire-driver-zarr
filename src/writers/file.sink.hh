@@ -14,7 +14,11 @@ namespace acquire::sink::zarr {
 struct FileSink : public Sink
 {
   public:
+    FileSink() = delete;
     explicit FileSink(const std::string& uri);
+    FileSink(const FileSink&) = delete;
+
+    FileSink operator=(const FileSink&) = delete;
 
     [[nodiscard]] bool write(size_t offset,
                              const uint8_t* buf,
