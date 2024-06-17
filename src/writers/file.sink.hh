@@ -20,9 +20,7 @@ struct FileSink : public Sink
 
     FileSink operator=(const FileSink&) = delete;
 
-    [[nodiscard]] bool write(size_t offset,
-                             const uint8_t* buf,
-                             size_t bytes_of_buf) override;
+    bool write(size_t offset, const uint8_t* buf, size_t bytes_of_buf) override;
 
   private:
     std::unique_ptr<struct file, decltype(&close_file)> file_;

@@ -18,9 +18,9 @@ struct Sink
     /// @param buf The buffer to write to the sink.
     /// @param bytes_of_buf The number of bytes to write from @p buf.
     /// @return True if the write was successful, false otherwise.
-    virtual bool write(size_t offset,
-                       const uint8_t* buf,
-                       size_t bytes_of_buf) = 0;
+    [[nodiscard]] virtual bool write(size_t offset,
+                                     const uint8_t* buf,
+                                     size_t bytes_of_buf) = 0;
 };
 } // namespace acquire::sink::zarr
 #endif // H_ACQUIRE_STORAGE_ZARR_WRITERS_SINK_V0
