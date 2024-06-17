@@ -437,9 +437,6 @@ zarr::Writer::flush_()
 void
 zarr::Writer::close_sinks_()
 {
-    for (auto& sink : sinks_) {
-        sink->close();
-    }
     sinks_.clear();
 }
 

@@ -325,10 +325,7 @@ extern "C"
             CHECK(creator.create_chunk_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 5 * 2);
-            for (const auto& f : files) {
-                CHECK(f);
-                f->close();
-            }
+            files.clear(); // closes files
 
             CHECK(fs::is_directory(base_dir));
             for (auto y = 0; y < 2; ++y) {
@@ -375,10 +372,7 @@ extern "C"
             CHECK(creator.create_shard_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 2);
-            for (auto& f : files) {
-                CHECK(f);
-                f->close();
-            }
+            files.clear(); // closes files
 
             CHECK(fs::is_directory(base_dir));
             for (auto y = 0; y < 2; ++y) {

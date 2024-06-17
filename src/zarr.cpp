@@ -467,9 +467,6 @@ zarr::Zarr::stop() noexcept
         try {
             // must precede close of chunk file
             write_mutable_metadata_();
-            for (auto& sink : metadata_sinks_) {
-                sink->close();
-            }
             metadata_sinks_.clear();
 
             for (auto& writer : writers_) {

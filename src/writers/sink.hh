@@ -21,10 +21,6 @@ struct Sink
     virtual bool write(size_t offset,
                        const uint8_t* buf,
                        size_t bytes_of_buf) = 0;
-    /// @brief Close the sink.
-    /// @note This function is idempotent. It is safe to call it multiple times.
-    /// Once this function is called, the sink should not be used again.
-    virtual void close() = 0;
 };
 } // namespace acquire::sink::zarr
 #endif // H_ACQUIRE_STORAGE_ZARR_WRITERS_SINK_V0
