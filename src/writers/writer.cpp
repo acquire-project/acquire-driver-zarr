@@ -456,18 +456,6 @@ zarr::Writer::rollover_()
 #define acquire_export
 #endif
 
-namespace {
-/// @brief Align a size to a given alignment.
-/// @param n Size to align.
-/// @param align Alignment.
-/// @return Aligned size.
-size_t
-align_up(size_t n, size_t align)
-{
-    return (n + align - 1) & ~(align - 1);
-}
-} // namespace
-
 namespace common = zarr::common;
 
 class TestWriter : public zarr::Writer
@@ -801,7 +789,8 @@ extern "C"
             TestWriter writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
-            frame->bytes_of_frame = align_up(sizeof(VideoFrame) + 64 * 48 * 2, 8);
+            frame->bytes_of_frame =
+              common::align_up(sizeof(VideoFrame) + 64 * 48 * 2, 8);
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48 * 2);
 
