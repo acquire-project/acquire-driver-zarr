@@ -2,7 +2,7 @@
 #define H_ACQUIRE_STORAGE_ZARR_WRITERS_SINK_CREATOR_V0
 
 #include "sink.hh"
-#include "../common.hh"
+#include "common.hh"
 
 #include <optional>
 #include <memory>

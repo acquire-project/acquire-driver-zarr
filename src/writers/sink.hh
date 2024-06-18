@@ -6,7 +6,7 @@
 #include <queue>
 #include <string>
 
-#include "../common.hh"
+#include "common.hh"
 
 namespace acquire::sink::zarr {
 struct Sink
