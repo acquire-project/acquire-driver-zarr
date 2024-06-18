@@ -14,36 +14,13 @@ This driver uses the following libraries:
 
 We prefer using [vcpkg](https://vcpkg.io/en/) for dependency management, as it integrates well with CMake. Below are instructions for installing vcpkg locally and configuring it to fetch and compile the necessary dependencies (the steps are taken from [this vcpkg guide](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-bash)).
 
-**1. Clone the repository**
-
-The repository contains scripts to acquire the vcpkg executable and a registry of curated open-source libraries maintained by the vcpkg community. To do this, run:
-```
-git clone https://github.com/microsoft/vcpkg.git
-```
-**2. Clone the repository**
-
-Run the bootstrap script
-```
-cd vcpkg && ./bootstrap-vcpkg.sh
-```
-
-**3. Configure environment variables**
-
-Add the following export commands to your shell's profile script (e.g., `~/.bashrc` or `~/.zshrc`).
-```
-export VCPKG_ROOT=/path/to/vcpkg
-export PATH=$VCPKG_ROOT:$PATH
-```
-
-**4. Configure CMake**
-
-This repository's root directory contains a `CMakePresets.json` file with a single "default" preset for CMake, which sets the `CMAKE_TOOLCHAIN_FILE` variable. This file simplifies the process of specifying the toolchain when running CMake. Before building your project, execute the following command:
-
-```
-cmake --preset=default
-```
-
-If you've built the driver before, consider deleting your build directory first. If you encounter any problems, refer to the [source vcpkg guide](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-bash) or open an issue for help.
+- `git clone https://github.com/microsoft/vcpkg.git`
+- `cd vcpkg && ./bootstrap-vcpkg.sh `
+- Add export commands to your shell's profile script (e.g., `~/.bashrc` or `~/.zshrc`)
+  - `export VCPKG_ROOT=/path/to/vcpkg`
+  - `export PATH=$VCPKG_ROOT:$PATH`
+- Select the default CMake preset before building (consider deleting your build directory first)
+  - `cmake --preset=default`
 
 ## Devices
 
