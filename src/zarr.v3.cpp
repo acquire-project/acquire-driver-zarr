@@ -2,7 +2,7 @@
 #include "writers/zarrv3.writer.hh"
 #include "writers/sink.creator.hh"
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include <cmath>
 

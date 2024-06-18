@@ -1,7 +1,7 @@
 #include "zarr.hh"
 
 #include "writers/zarrv2.writer.hh"
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include <tuple> // std::ignore
 

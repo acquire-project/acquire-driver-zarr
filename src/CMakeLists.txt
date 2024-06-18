@@ -1,5 +1,3 @@
-add_subdirectory(3rdParty)
-
 if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
@@ -29,14 +27,19 @@ add_library(${tgt} MODULE
         zarr.v3.cpp
         zarr.driver.c
 )
+
+target_include_directories(${tgt} PRIVATE
+  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+)
+
 target_enable_simd(${tgt})
 target_link_libraries(${tgt} PRIVATE
         acquire-core-logger
         acquire-core-platform
         acquire-device-kit
         acquire-device-properties
-        cblosc
-        json
+        blosc_static
+        nlohmann_json::nlohmann_json
 )
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"

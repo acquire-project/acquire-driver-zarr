@@ -2,7 +2,7 @@
 #include "writers/zarrv2.writer.hh"
 #include "writers/sink.creator.hh"
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 namespace zarr = acquire::sink::zarr;
 
