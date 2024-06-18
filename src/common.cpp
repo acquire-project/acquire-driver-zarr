@@ -224,20 +224,9 @@ common::sample_type_to_string(SampleType t) noexcept
     }
 }
 
-void
-common::write_string(const std::string& path, const std::string& str)
+size_t
+common::align_up(size_t n, size_t align)
 {
-    if (auto p = fs::path(path); !fs::exists(p.parent_path()))
-        fs::create_directories(p.parent_path());
-
-    struct file f = { 0 };
-    auto is_ok = file_create(&f, path.c_str(), path.size());
-    is_ok &= file_write(&f,                                  // file
-                        0,                                   // offset
-                        (uint8_t*)str.c_str(),               // cur
-                        (uint8_t*)(str.c_str() + str.size()) // end
-    );
-    EXPECT(is_ok, "Write to \"%s\" failed.", path.c_str());
-    TRACE("Wrote %d bytes to \"%s\".", str.size(), path.c_str());
-    file_close(&f);
+    EXPECT(align > 0, "Alignment must be greater than zero.");
+    return align * ((n + align - 1) / align);
 }

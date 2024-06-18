@@ -134,7 +134,7 @@ bytes_per_chunk(const std::vector<Dimension>& dimensions,
 /// @brief Get the Zarr dtype for a given SampleType.
 /// @param t An enumerated sample type.
 /// @throw std::runtime_error if @par t is not a valid SampleType.
-/// @return A representation of the SampleType @par t expected by a Zarr reader.
+/// @return A representation of the SampleType @par t expected` by a Zarr reader.
 const char*
 sample_type_to_dtype(SampleType t);
 
@@ -144,11 +144,12 @@ sample_type_to_dtype(SampleType t);
 const char*
 sample_type_to_string(SampleType t) noexcept;
 
-/// @brief Write a string to a file.
-/// @param path The path of the file to write.
-/// @param str The string to write.
-void
-write_string(const std::string& path, const std::string& value);
+/// @brief Align a size to a given alignment.
+/// @param n Size to align.
+/// @param align Alignment.
+/// @return Aligned size.
+size_t
+align_up(size_t n, size_t align);
 } // namespace acquire::sink::zarr::common
 } // namespace acquire::sink::zarr
 

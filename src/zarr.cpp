@@ -1,7 +1,7 @@
 #include "zarr.hh"
 
 #include "writers/zarrv2.writer.hh"
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include <tuple> // std::ignore
 
@@ -10,16 +10,6 @@ namespace common = zarr::common;
 using json = nlohmann::json;
 
 namespace {
-/// @brief Align a size to a given alignment.
-/// @param n Size to align.
-/// @param align Alignment.
-/// @return Aligned size.
-size_t
-align_up(size_t n, size_t align)
-{
-    return (n + align - 1) & ~(align - 1);
-}
-
 /// \brief Get the filename from a StorageProperties as fs::path.
 /// \param props StorageProperties for the Zarr Storage device.
 /// \return fs::path representation of the Zarr data directory.
@@ -163,7 +153,7 @@ scale_image(const VideoFrame* src)
       dst->shape.strides.height * dst->shape.dims.height;
 
     dst->bytes_of_frame =
-      align_up(bytes_of_image(&dst->shape) + sizeof(*dst), 8);
+      common::align_up(bytes_of_image(&dst->shape) + sizeof(*dst), 8);
 
     const auto* src_img = (T*)src->data;
     auto* dst_img = (T*)dst->data;
@@ -467,9 +457,6 @@ zarr::Zarr::stop() noexcept
         try {
             // must precede close of chunk file
             write_mutable_metadata_();
-            for (auto& sink : metadata_sinks_) {
-                sink->close();
-            }
             metadata_sinks_.clear();
 
             for (auto& writer : writers_) {
@@ -704,7 +691,7 @@ void
 test_average_frame_inner(const SampleType& stype)
 {
     auto* src = (VideoFrame*)malloc(sizeof(VideoFrame) + 9 * sizeof(T));
-    src->bytes_of_frame = align_up(sizeof(*src) + 9 * sizeof(T), 8);
+    src->bytes_of_frame = common::align_up(sizeof(*src) + 9 * sizeof(T), 8);
     src->shape = {
         .dims = {
           .channels = 1,

@@ -1,18 +1,23 @@
 #include "file.sink.hh"
+#include "platform.h"
 
 #include <latch>
 
 namespace zarr = acquire::sink::zarr;
 
-zarr::FileSink::FileSink(const std::string& uri)
-  : file_{ new struct file }
+void
+close_file(struct file* file)
 {
-    CHECK(file_create(file_, uri.c_str(), uri.size() + 1));
+    if (file) {
+        file_close(file);
+    }
 }
 
-zarr::FileSink::~FileSink()
+zarr::FileSink::FileSink(const std::string& uri)
+  : file_(new struct file, &close_file)
 {
-    close_file_();
+    CHECK(file_);
+    CHECK(file_create(file_.get(), uri.c_str(), uri.size() + 1));
 }
 
 bool
@@ -22,28 +27,5 @@ zarr::FileSink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
         return false;
     }
 
-    return file_write(file_, offset, buf, buf + bytes_of_buf);
-}
-
-void
-zarr::FileSink::close()
-{
-    close_file_();
-}
-
-void
-zarr::FileSink::close_file_() noexcept
-{
-    if (file_) {
-        try {
-            file_close(file_);
-        } catch (const std::exception& exc) {
-            LOGE("Failed to close file: %s", exc.what());
-        } catch (...) {
-            LOGE("Failed to close file: (unknown)");
-        }
-    }
-
-    delete file_;
-    file_ = nullptr;
+    return file_write(file_.get(), offset, buf, buf + bytes_of_buf);
 }
