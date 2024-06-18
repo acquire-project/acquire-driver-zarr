@@ -81,7 +81,7 @@ zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
         return true;
     }
 
-    std::atomic<bool> all_successful = true;
+    std::atomic<char> all_successful = 1;
 
     const auto n_dirs = dir_paths.size();
     std::latch latch(n_dirs);
@@ -124,7 +124,7 @@ zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
               }
 
               latch.count_down();
-              all_successful = all_successful && success;
+              all_successful.fetch_and((char)success);
 
               return success;
           });
@@ -134,7 +134,7 @@ zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
 
     latch.wait();
 
-    return all_successful;
+    return (bool)all_successful;
 }
 
 bool
@@ -145,7 +145,7 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
         return true;
     }
 
-    std::atomic<bool> all_successful = true;
+    std::atomic<char> all_successful = 1;
 
     const auto n_files = file_paths.size();
     sinks.resize(n_files);
@@ -185,7 +185,7 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
               }
 
               latch.count_down();
-              all_successful = all_successful && success;
+              all_successful.fetch_and((char)success);
 
               return success;
           });
@@ -193,7 +193,7 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
 
     latch.wait();
 
-    return all_successful;
+    return (bool)all_successful;
 }
 
 bool
