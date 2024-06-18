@@ -14,6 +14,13 @@ jobs:
     strategy:
       matrix:
         platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        include:
+          - platform: "windows-latest"
+            vcpkg_triplet: "x64-windows-static"
+          - platform: "ubuntu-latest"
+            vcpkg_triplet: "x64-linux"
+          - platform: "macos-latest"
+            vcpkg_triplet: "arm64-osx"
     runs-on: ${{ matrix.platform }}
 
     permissions:
@@ -29,8 +36,18 @@ jobs:
         with:
           submodules: true
 
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg && ./bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
+          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
+          ./vcpkg integrate install
+        shell: bash
+
       - name: Build
         run: |
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=Release
           cmake --build ${{github.workspace}}/build --config Release
 
