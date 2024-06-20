@@ -1,5 +1,5 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_COMMON_V0
-#define H_ACQUIRE_STORAGE_ZARR_COMMON_V0
+#ifndef H_ACQUIRE_STORAGE_ZARR_COMMON_UTILITIES_V0
+#define H_ACQUIRE_STORAGE_ZARR_COMMON_UTILITIES_V0
 
 #include "logger.h"
 #include "device/props/components.h"
@@ -71,6 +71,21 @@ number_of_shards(const std::vector<Dimension>& dimensions);
 /// @return The number of chunks in a shard.
 size_t
 chunks_per_shard(const std::vector<Dimension>& dimensions);
+/// @brief Get the shard index for a given chunk index, given array dimensions.
+/// @param chunk_index The index of the chunk.
+/// @param dimensions The dimensions of the array.
+/// @return The index of the shard containing the chunk.
+size_t
+shard_index_for_chunk(size_t chunk_index,
+                      const std::vector<Dimension>& dimensions);
+
+/// @brief Get the internal index of a chunk within a shard.
+/// @param chunk_index The index of the chunk.
+/// @param dimensions The dimensions of the array.
+/// @return The index of the chunk within the shard.
+size_t
+shard_internal_index(size_t chunk_index,
+                     const std::vector<Dimension>& dimensions);
 
 /// @brief Get the size, in bytes, of a single chunk.
 /// @param dimensions The dimensions of the array.
@@ -99,7 +114,18 @@ sample_type_to_string(SampleType t) noexcept;
 /// @return Aligned size.
 size_t
 align_up(size_t n, size_t align);
+/// @brief Split a URI by the '/' delimiter.
+/// @param uri String to split.
+/// @return Vector of strings.
+std::vector<std::string>
+split_uri(const std::string& uri);
+
+/// @brief Check if a URI is an S3 URI.
+/// @param uri String to check.
+/// @return True if the URI is an S3 URI, false otherwise.
+bool
+is_s3_uri(const std::string& uri);
 } // namespace acquire::sink::zarr::common
 } // namespace acquire::sink::zarr
 
-#endif // H_ACQUIRE_STORAGE_ZARR_COMMON_V0
+#endif // H_ACQUIRE_STORAGE_ZARR_COMMON_UTILITIES_V0
