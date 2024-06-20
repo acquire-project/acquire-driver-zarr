@@ -1,4 +1,4 @@
-#include "s3.connection.pool.hh"
+#include "s3.connection.hh"
 #include "logger.h"
 
 #define LOG(...) aq_logger(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
@@ -28,6 +28,7 @@ zarr::S3Connection::S3Connection(const std::string& endpoint,
     minio::creds::StaticProvider provider(access_key_id, secret_access_key);
 
     client_ = std::make_unique<minio::s3::Client>(url, &provider);
+    CHECK(client_);
 }
 
 zarr::S3Connection::~S3Connection() noexcept
@@ -35,11 +36,37 @@ zarr::S3Connection::~S3Connection() noexcept
     client_.reset();
 }
 
-//std::unique_ptr<minio::s3::Client>
-//zarr::S3Connection::client() const noexcept
-//{
-//    return client_;
-//}
+bool
+zarr::S3Connection::make_bucket(const std::string& bucket_name) noexcept
+{
+    // first check if the bucket exists, do nothing if it does
+    try {
+        minio::s3::ListBucketsResponse response = client_->ListBuckets();
+        CHECK(response);
+
+        for (const auto& bucket : response.buckets) {
+            if (bucket.name == bucket_name) {
+                return true;
+            }
+        }
+    } catch (const std::exception& e) {
+        LOGE("Failed to list buckets: %s", e.what());
+        return false;
+    }
+
+    TRACE("Creating bucket %s", bucket_name.c_str());
+    minio::s3::MakeBucketArgs args;
+    args.bucket = bucket_name;
+
+    try {
+        minio::s3::MakeBucketResponse response = client_->MakeBucket(args);
+
+        return (bool)response;
+    } catch (const std::exception& e) {
+        LOGE("Failed to create bucket %s: %s", bucket_name.c_str(), e.what());
+        return false;
+    }
+}
 
 zarr::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
                                          const std::string& endpoint,
