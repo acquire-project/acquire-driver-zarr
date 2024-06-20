@@ -17,7 +17,7 @@ bool
 zarr::SinkCreator::create_chunk_sinks(
   const std::string& base_uri,
   const std::vector<Dimension>& dimensions,
-  std::vector<std::shared_ptr<Sink>>& chunk_sinks)
+  std::vector<std::unique_ptr<Sink>>& chunk_sinks)
 {
     return make_part_sinks_(
       base_uri, dimensions, common::chunks_along_dimension, chunk_sinks);
@@ -27,7 +27,7 @@ bool
 zarr::SinkCreator::create_shard_sinks(
   const std::string& base_uri,
   const std::vector<Dimension>& dimensions,
-  std::vector<std::shared_ptr<Sink>>& shard_sinks)
+  std::vector<std::unique_ptr<Sink>>& shard_sinks)
 {
     return make_part_sinks_(
       base_uri, dimensions, common::shards_along_dimension, shard_sinks);
@@ -37,7 +37,7 @@ bool
 zarr::SinkCreator::create_v2_metadata_sinks(
   const std::string& base_uri,
   size_t n_arrays,
-  std::vector<std::shared_ptr<Sink>>& metadata_sinks)
+  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
     std::queue<std::string> dir_paths, file_paths;
 
@@ -58,7 +58,7 @@ bool
 zarr::SinkCreator::create_v3_metadata_sinks(
   const std::string& base_uri,
   size_t n_arrays,
-  std::vector<std::shared_ptr<Sink>>& metadata_sinks)
+  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
     std::queue<std::string> dir_paths, file_paths;
 
@@ -140,7 +140,7 @@ zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
 
 bool
 zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
-                               std::vector<std::shared_ptr<Sink>>& sinks)
+                               std::vector<std::unique_ptr<Sink>>& sinks)
 {
     if (file_paths.empty()) {
         return true;
@@ -157,7 +157,7 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
         const auto filename = file_paths.front();
         file_paths.pop();
 
-        std::shared_ptr<Sink>* psink = sinks.data() + i;
+        std::unique_ptr<Sink>* psink = sinks.data() + i;
 
         thread_pool_->push_to_job_queue(
           [filename, psink, &latch, &all_successful](std::string& err) -> bool {
@@ -165,7 +165,7 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
 
               try {
                   if (all_successful) {
-                      *psink = std::make_shared<FileSink>(filename);
+                      *psink = std::make_unique<FileSink>(filename);
                   }
                   success = true;
               } catch (const std::exception& exc) {
@@ -202,7 +202,7 @@ zarr::SinkCreator::make_part_sinks_(
   const std::string& base_uri,
   const std::vector<Dimension>& dimensions,
   const std::function<size_t(const Dimension&)>& parts_along_dimension,
-  std::vector<std::shared_ptr<Sink>>& part_sinks)
+  std::vector<std::unique_ptr<Sink>>& part_sinks)
 {
     std::queue<std::string> paths;
 
@@ -262,7 +262,7 @@ zarr::SinkCreator::make_metadata_sinks_(
   const std::string& base_uri,
   std::queue<std::string>& dir_paths,
   std::queue<std::string>& file_paths,
-  std::vector<std::shared_ptr<Sink>>& metadata_sinks)
+  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
     std::string base_dir = base_uri;
     if (base_uri.starts_with("file://")) {
@@ -322,7 +322,7 @@ extern "C"
             dims.emplace_back(
               "z", DimensionType_Space, 0, 3, 0); // 3 timepoints per chunk
 
-            std::vector<std::shared_ptr<zarr::Sink>> files;
+            std::vector<std::unique_ptr<zarr::Sink>> files;
             CHECK(creator.create_chunk_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 5 * 2);
@@ -369,7 +369,7 @@ extern "C"
             dims.emplace_back(
               "z", DimensionType_Space, 8, 2, 2); // 4 chunks, 2 shards
 
-            std::vector<std::shared_ptr<zarr::Sink>> files;
+            std::vector<std::unique_ptr<zarr::Sink>> files;
             CHECK(creator.create_shard_sinks(base_dir.string(), dims, files));
 
             CHECK(files.size() == 2);

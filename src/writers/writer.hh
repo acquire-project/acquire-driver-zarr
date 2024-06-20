@@ -59,7 +59,7 @@ struct Writer
 
     /// Filesystem
     std::string data_root_;
-    std::vector<std::shared_ptr<Sink>> sinks_;
+    std::vector<std::unique_ptr<Sink>> sinks_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;

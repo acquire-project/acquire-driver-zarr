@@ -39,7 +39,7 @@ zarr::ZarrV2Writer::flush_impl_()
         for (auto i = 0; i < sinks_.size(); ++i) {
             auto& chunk = chunk_buffers_.at(i);
             thread_pool_->push_to_job_queue(
-              std::move([sink = sinks_.at(i),
+              std::move([&sink = sinks_.at(i),
                          data = chunk.data(),
                          size = chunk.size(),
                          &latch](std::string& err) -> bool {
