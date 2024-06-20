@@ -57,7 +57,7 @@ struct Zarr : public Storage
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
 
     // changes on flush
-    std::vector<std::shared_ptr<Sink>> metadata_sinks_;
+    std::vector<std::unique_ptr<Sink>> metadata_sinks_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;

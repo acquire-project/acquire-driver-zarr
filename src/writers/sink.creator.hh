@@ -22,7 +22,7 @@ struct SinkCreator final
     [[nodiscard]] bool create_chunk_sinks(
       const std::string& base_uri,
       const std::vector<Dimension>& dimensions,
-      std::vector<std::shared_ptr<Sink>>& chunk_sinks);
+      std::vector<std::unique_ptr<Sink>>& chunk_sinks);
 
     /// @brief Create a collection of sinks for a Zarr V3 array.
     /// @param[in] base_uri The base URI for the sinks.
@@ -31,7 +31,7 @@ struct SinkCreator final
     [[nodiscard]] bool create_shard_sinks(
       const std::string& base_uri,
       const std::vector<Dimension>& dimensions,
-      std::vector<std::shared_ptr<Sink>>& shard_sinks);
+      std::vector<std::unique_ptr<Sink>>& shard_sinks);
 
     /// @brief Create a collection of metadata sinks for a Zarr V2 dataset.
     /// @param[in] base_uri The base URI for the dataset.
@@ -40,7 +40,7 @@ struct SinkCreator final
     [[nodiscard]] bool create_v2_metadata_sinks(
       const std::string& base_uri,
       size_t n_arrays,
-      std::vector<std::shared_ptr<Sink>>& metadata_sinks);
+      std::vector<std::unique_ptr<Sink>>& metadata_sinks);
 
     /// @brief Create a collection of metadata sinks for a Zarr V3 dataset.
     /// @param[in] base_uri The base URI for the dataset.
@@ -49,7 +49,7 @@ struct SinkCreator final
     [[nodiscard]] bool create_v3_metadata_sinks(
       const std::string& base_uri,
       size_t n_arrays,
-      std::vector<std::shared_ptr<Sink>>& metadata_sinks);
+      std::vector<std::unique_ptr<Sink>>& metadata_sinks);
 
   private:
     std::shared_ptr<common::ThreadPool> thread_pool_;
@@ -65,7 +65,7 @@ struct SinkCreator final
     /// @param[out] files The files created.
     /// @return True iff all files were created successfully.
     [[nodiscard]] bool make_files_(std::queue<std::string>& file_paths,
-                                   std::vector<std::shared_ptr<Sink>>& sinks);
+                                   std::vector<std::unique_ptr<Sink>>& sinks);
 
     /// @brief Create a collection of data sinks, either chunk or shard.
     /// @param[in] base_uri The base URI for the sinks.
@@ -77,7 +77,7 @@ struct SinkCreator final
       const std::string& base_uri,
       const std::vector<Dimension>& dimensions,
       const std::function<size_t(const Dimension&)>& parts_along_dimension,
-      std::vector<std::shared_ptr<Sink>>& part_sinks);
+      std::vector<std::unique_ptr<Sink>>& part_sinks);
 
     /// @brief Create a collection of metadata sinks.
     /// @param[in] base_uri The base URI for the sinks.
@@ -88,7 +88,7 @@ struct SinkCreator final
       const std::string& base_uri,
       std::queue<std::string>& dir_paths,
       std::queue<std::string>& file_paths,
-      std::vector<std::shared_ptr<Sink>>& metadata_sinks);
+      std::vector<std::unique_ptr<Sink>>& metadata_sinks);
 };
 } // namespace acquire::sink::zarr
 

@@ -150,7 +150,7 @@ zarr::ZarrV3Writer::flush_impl_()
         auto& chunk_table = shard_tables_.at(i);
         size_t* file_offset = &shard_file_offsets_.at(i);
 
-        thread_pool_->push_to_job_queue([sink = sinks_.at(i),
+        thread_pool_->push_to_job_queue([&sink = sinks_.at(i),
                                          &chunks,
                                          &chunk_table,
                                          file_offset,
