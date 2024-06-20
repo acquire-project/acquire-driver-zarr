@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-namespace acquire::sink::zarr {
+namespace acquire::sink::zarr::common {
 struct S3Connection final
 {
     S3Connection(const S3Connection&) = delete;
@@ -47,5 +47,5 @@ struct S3ConnectionPool final
     std::unique_ptr<S3Connection> pop_from_connection_pool_() noexcept;
     [[nodiscard]] bool should_stop_() const noexcept;
 };
-} // namespace acquire::sink::zarr
+} // namespace acquire::sink::zarr::common
 #endif // H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
