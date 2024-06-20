@@ -2,8 +2,9 @@
 #define H_ACQUIRE_STORAGE_ZARR_WRITERS_SINK_CREATOR_V0
 
 #include "sink.hh"
-#include "common/thread.pool.hh"
 #include "common/dimension.hh"
+#include "common/thread.pool.hh"
+#include "common/s3.connection.hh"
 
 #include <optional>
 #include <memory>
@@ -13,7 +14,8 @@ struct SinkCreator final
 {
   public:
     SinkCreator() = delete;
-    explicit SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool);
+    SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool_,
+                std::shared_ptr<common::S3ConnectionPool> connection_pool);
     ~SinkCreator() noexcept = default;
 
     /// @brief Create a collection of sinks for a Zarr V2 array.
@@ -54,6 +56,7 @@ struct SinkCreator final
 
   private:
     std::shared_ptr<common::ThreadPool> thread_pool_;
+    std::shared_ptr<common::S3ConnectionPool> connection_pool_; // could be null
 
     /// @brief Parallel create a collection of directories.
     /// @param[in] dir_paths The directories to create.
@@ -90,6 +93,20 @@ struct SinkCreator final
       std::queue<std::string>& dir_paths,
       std::queue<std::string>& file_paths,
       std::vector<std::unique_ptr<Sink>>& metadata_sinks);
+
+    /// @brief Create an S3 bucket.
+    /// @param[in] bucket_name The name of the bucket to create.
+    /// @return True iff the bucket was created successfully.
+    [[nodiscard]] bool make_s3_bucket_(const std::string& bucket_name);
+
+    /// @brief Create a collection of S3 objects.
+    /// @param[in] bucket_name The name of the bucket.
+    /// @param[in,out] object_keys The keys of the objects to create.
+    /// @param[out] sinks The sinks created.
+    [[nodiscard]] bool make_s3_objects_(
+      const std::string& bucket_name,
+      std::queue<std::string>& object_keys,
+      std::vector<std::unique_ptr<Sink>>& sinks);
 };
 } // namespace acquire::sink::zarr
 

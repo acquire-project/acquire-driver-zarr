@@ -17,6 +17,8 @@ add_library(${tgt} MODULE
         writers/sink.creator.cpp
         writers/file.sink.hh
         writers/file.sink.cpp
+        writers/s3.sink.hh
+        writers/s3.sink.cpp
         writers/writer.hh
         writers/writer.cpp
         writers/zarrv2.writer.hh

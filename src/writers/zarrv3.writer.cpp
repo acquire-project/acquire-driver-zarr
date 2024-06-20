@@ -33,7 +33,7 @@ zarr::ZarrV3Writer::flush_impl_()
         .string();
 
     {
-        SinkCreator creator(thread_pool_);
+        SinkCreator creator(thread_pool_, connection_pool_);
         if (sinks_.empty() && !creator.create_shard_sinks(
                                 data_root, config_.dimensions, sinks_)) {
             return false;

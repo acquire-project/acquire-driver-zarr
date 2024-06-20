@@ -72,7 +72,7 @@ zarr::ZarrV2::allocate_writers_()
 void
 zarr::ZarrV2::make_metadata_sinks_()
 {
-    SinkCreator creator(thread_pool_);
+    SinkCreator creator(thread_pool_, connection_pool_);
     CHECK(creator.create_v2_metadata_sinks(
       dataset_root_, writers_.size(), metadata_sinks_));
 }

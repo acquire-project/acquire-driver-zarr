@@ -24,7 +24,7 @@ zarr::ZarrV2Writer::flush_impl_()
       (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
 
     {
-        SinkCreator creator(thread_pool_);
+        SinkCreator creator(thread_pool_, connection_pool_);
         if (!creator.create_chunk_sinks(
               data_root, config_.dimensions, sinks_)) {
             return false;
