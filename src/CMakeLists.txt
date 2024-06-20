@@ -4,8 +4,12 @@ endif ()
 
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
-        common.hh
-        common.cpp
+        common/dimension.hh
+        common/dimension.cpp
+        common/thread.pool.hh
+        common/thread.pool.cpp
+        common/utilities.hh
+        common/utilities.cpp
         writers/sink.hh
         writers/sink.creator.hh
         writers/sink.creator.cpp

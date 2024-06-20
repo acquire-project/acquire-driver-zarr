@@ -1,5 +1,6 @@
 #include "sink.creator.hh"
 #include "file.sink.hh"
+#include "common/utilities.hh"
 
 #include <latch>
 #include <queue>
