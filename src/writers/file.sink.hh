@@ -3,6 +3,7 @@
 
 #include "sink.hh"
 
+#include <string>
 #include <memory>
 
 struct file;
