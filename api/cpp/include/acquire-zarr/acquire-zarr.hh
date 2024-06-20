@@ -55,7 +55,10 @@ class AcquireZarrWriter
   private:
     
     class Impl;
-    std::unique_ptr<Impl> impl_;
+
+    // couldn't use unique_ptr because of incomplete type
+    // std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Impl> impl_;
 
 }; 
 
