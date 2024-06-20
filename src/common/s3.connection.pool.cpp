@@ -1,8 +1,6 @@
 #include "s3.connection.pool.hh"
 #include "logger.h"
 
-// #include <aws/core/auth/AWSCredentialsProviderChain.h>
-
 #define LOG(...) aq_logger(0, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define LOGE(...) aq_logger(1, __FILE__, __LINE__, __FUNCTION__, __VA_ARGS__)
 #define EXPECT(e, ...)                                                         \
@@ -26,24 +24,22 @@ zarr::S3Connection::S3Connection(const std::string& endpoint,
                                  const std::string& access_key_id,
                                  const std::string& secret_access_key)
 {
-    //    Aws::Client::ClientConfiguration config;
-    //    config.endpointOverride = endpoint;
-    //    const Aws::Auth::AWSCredentials credentials(access_key_id,
-    //                                                secret_access_key);
-    //    client_ = std::make_shared<Aws::S3::S3Client>(credentials, nullptr,
-    //    config); CHECK(client_);
+    minio::s3::BaseUrl url(endpoint);
+    minio::creds::StaticProvider provider(access_key_id, secret_access_key);
+
+    client_ = std::make_unique<minio::s3::Client>(url, &provider);
 }
 
 zarr::S3Connection::~S3Connection() noexcept
 {
-    //    client_.reset();
+    client_.reset();
 }
 
-// std::shared_ptr<Aws::S3::S3Client>
-// zarr::S3Connection::client() const noexcept
+//std::unique_ptr<minio::s3::Client>
+//zarr::S3Connection::client() const noexcept
 //{
-//     return client_;
-// }
+//    return client_;
+//}
 
 zarr::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
                                          const std::string& endpoint,
@@ -54,7 +50,7 @@ zarr::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
     CHECK(n_connections > 0);
 
     for (auto i = 0; i < n_connections; ++i) {
-        connections_.push_back(std::make_shared<S3Connection>(
+        connections_.push_back(std::make_unique<S3Connection>(
           endpoint, access_key_id, secret_access_key));
     }
 }
@@ -65,7 +61,7 @@ zarr::S3ConnectionPool::~S3ConnectionPool() noexcept
     cv_.notify_all();
 }
 
-std::shared_ptr<zarr::S3Connection>
+std::unique_ptr<zarr::S3Connection>
 zarr::S3ConnectionPool::get_connection() noexcept
 {
     std::unique_lock lock(connections_mutex_);
@@ -81,21 +77,21 @@ zarr::S3ConnectionPool::get_connection() noexcept
 
 void
 zarr::S3ConnectionPool::release_connection(
-  std::shared_ptr<zarr::S3Connection>&& conn) noexcept
+  std::unique_ptr<zarr::S3Connection>&& conn) noexcept
 {
     std::scoped_lock lock(connections_mutex_);
     connections_.push_back(std::move(conn));
     cv_.notify_one();
 }
 
-std::shared_ptr<zarr::S3Connection>
+std::unique_ptr<zarr::S3Connection>
 zarr::S3ConnectionPool::pop_from_connection_pool_() noexcept
 {
     if (connections_.empty()) {
         return nullptr;
     }
 
-    auto conn = connections_.back();
+    auto conn = std::move(connections_.back());
     connections_.pop_back();
     return conn;
 }

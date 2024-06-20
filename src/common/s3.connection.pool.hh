@@ -1,7 +1,7 @@
 #ifndef H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
 #define H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
 
-// #include <aws/s3/S3Client.h>
+#include <miniocpp/client.h>
 
 #include <condition_variable>
 #include <memory>
@@ -19,10 +19,10 @@ struct S3Connection final
 
     ~S3Connection() noexcept;
 
-    //    std::shared_ptr<Aws::S3::S3Client> client() const noexcept;
+//    std::unique_ptr<minio::s3::Client> client() const noexcept;
 
   private:
-    //    std::shared_ptr<Aws::S3::S3Client> client_;
+    std::unique_ptr<minio::s3::Client> client_;
 };
 
 struct S3ConnectionPool final
@@ -34,17 +34,17 @@ struct S3ConnectionPool final
                      const std::string& secret_access_key);
     ~S3ConnectionPool() noexcept;
 
-    std::shared_ptr<S3Connection> get_connection() noexcept;
-    void release_connection(std::shared_ptr<S3Connection>&& conn) noexcept;
+    std::unique_ptr<S3Connection> get_connection() noexcept;
+    void release_connection(std::unique_ptr<S3Connection>&& conn) noexcept;
 
   private:
-    std::vector<std::shared_ptr<S3Connection>> connections_;
+    std::vector<std::unique_ptr<S3Connection>> connections_;
     mutable std::mutex connections_mutex_;
     std::condition_variable cv_;
 
     std::atomic<bool> is_accepting_connections_;
 
-    std::shared_ptr<S3Connection> pop_from_connection_pool_() noexcept;
+    std::unique_ptr<S3Connection> pop_from_connection_pool_() noexcept;
     [[nodiscard]] bool should_stop_() const noexcept;
 };
 } // namespace acquire::sink::zarr
