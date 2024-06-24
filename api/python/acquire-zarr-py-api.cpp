@@ -1,14 +1,28 @@
 #include <pybind11/pybind11.h>
+#include <pybind11/numpy.h>
+
 #include "acquire-zarr/acquire-zarr.hh"
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
-
-int add(int i, int j) {
-    return i + j;
-}
-
 namespace py = pybind11;
+
+
+class PyAcquireZarrWriter : private AcquireZarrWriter
+{
+public:
+    using AcquireZarrWriter::AcquireZarrWriter;
+    PyAcquireZarrWriter() = default;
+    ~PyAcquireZarrWriter() = default;
+
+    void append(py::array_t<uint8_t, py::array::c_style | py::array::forcecast> image_data)
+    {
+        auto buf = image_data.request();
+        uint8_t *ptr = (uint8_t*)buf.ptr;
+        AcquireZarrWriter::append(ptr, buf.size);
+
+    }
+};
 
 PYBIND11_MODULE(acquire_zarr, m) {
     m.doc() = R"pbdoc(
@@ -23,19 +37,10 @@ PYBIND11_MODULE(acquire_zarr, m) {
            add
            subtract
     )pbdoc";
-    py::class_<AcquireZarrWriter>(m, "AcquireZarrWriter")
-        .def("append", &AcquireZarrWriter::append);
-    // m.def("add", &add, R"pbdoc(
-    //     Add two numbers
 
-    //     Some other explanation about the add function.
-    // )pbdoc");
+    py::class_<PyAcquireZarrWriter>(m, "AcquireZarrWriter")
+        .def("append", &PyAcquireZarrWriter::append);
 
-    // m.def("subtract", [](int i, int j) { return i - j; }, R"pbdoc(
-    //     Subtract two numbers
-
-    //     Some other explanation about the subtract function.
-    // )pbdoc");
 
 #ifdef VERSION_INFO
     m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
