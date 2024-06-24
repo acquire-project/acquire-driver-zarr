@@ -17,6 +17,7 @@ class AcquireZarrWriter::Impl
     void open();
     void append(uint8_t* image_data, size_t image_size);
 
+    friend AcquireZarrWriter;
   protected:
     AcquireZarrSinkConfig config_;
 
@@ -87,4 +88,21 @@ void AcquireZarrWriter::Impl::append(uint8_t* image_data, size_t image_size)
     memcpy(video_frame_.data, image_data, image_size);
     const VideoFrame* const_frame = &video_frame_;
     zarr_sink_->append(const_frame, image_size);
+}
+
+
+void AcquireZarrWriter::configure(const struct AcquireZarrSinkConfig* config)
+{
+    impl_ = std::make_shared<Impl>();
+    impl_->configure(config);
+}
+
+void AcquireZarrWriter::open()
+{
+    impl_->open();
+}
+
+void AcquireZarrWriter::append(uint8_t* image_data, size_t image_size)
+{
+    impl_->append(image_data, image_size);
 }
