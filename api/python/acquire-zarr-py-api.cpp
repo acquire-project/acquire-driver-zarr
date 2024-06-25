@@ -2,11 +2,11 @@
 #include <pybind11/numpy.h>
 
 #include "acquire-zarr/acquire-zarr.hh"
+#include <iostream>
 
 #define STRINGIFY(x) #x
 #define MACRO_STRINGIFY(x) STRINGIFY(x)
 namespace py = pybind11;
-
 
 class PyAcquireZarrWriter : private AcquireZarrWriter
 {
@@ -14,8 +14,8 @@ public:
     using AcquireZarrWriter::AcquireZarrWriter;
     PyAcquireZarrWriter() = default;
     ~PyAcquireZarrWriter() = default;
-
-    void append(py::array_t<uint8_t, py::array::c_style | py::array::forcecast> image_data)
+    
+    void append(py::array image_data)
     {
         auto buf = image_data.request();
         uint8_t *ptr = (uint8_t*)buf.ptr;
@@ -39,6 +39,7 @@ PYBIND11_MODULE(acquire_zarr, m) {
     )pbdoc";
 
     py::class_<PyAcquireZarrWriter>(m, "AcquireZarrWriter")
+        .def(py::init<>())
         .def("append", &PyAcquireZarrWriter::append);
 
 
