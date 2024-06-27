@@ -19,7 +19,7 @@ public:
     {
         auto buf = image_data.request();
         uint8_t *ptr = (uint8_t*)buf.ptr;
-        AcquireZarrWriter::append(ptr, buf.size);
+        AcquireZarrWriter::append(ptr, buf.itemsize * buf.size);
 
     }
 };
