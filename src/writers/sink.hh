@@ -2,6 +2,7 @@
 #define H_ACQUIRE_STORAGE_ZARR_WRITERS_SINK_V0
 
 #include <cstdint> // uint8_t
+#include <cstddef> // size_t
 
 namespace acquire::sink::zarr {
 struct Sink
