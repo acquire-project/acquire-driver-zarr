@@ -5,16 +5,8 @@
 
 namespace zarr = acquire::sink::zarr;
 
-void
-close_file(struct file* file)
-{
-    if (file) {
-        file_close(file);
-    }
-}
-
 zarr::FileSink::FileSink(const std::string& uri)
-  : file_(new struct file, &close_file)
+  : file_(new struct file, &file_close)
 {
     CHECK(file_);
     CHECK(file_create(file_.get(), uri.c_str(), uri.size() + 1));
