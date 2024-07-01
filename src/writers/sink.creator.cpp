@@ -18,191 +18,7 @@ zarr::SinkCreator::SinkCreator(
 }
 
 bool
-zarr::SinkCreator::create_chunk_sinks(
-  const std::string& base_uri,
-  const std::vector<Dimension>& dimensions,
-  std::vector<std::unique_ptr<Sink>>& chunk_sinks)
-{
-    return make_part_sinks_(
-      base_uri, dimensions, common::chunks_along_dimension, chunk_sinks);
-}
-
-bool
-zarr::SinkCreator::create_shard_sinks(
-  const std::string& base_uri,
-  const std::vector<Dimension>& dimensions,
-  std::vector<std::unique_ptr<Sink>>& shard_sinks)
-{
-    return make_part_sinks_(
-      base_uri, dimensions, common::shards_along_dimension, shard_sinks);
-}
-
-bool
-zarr::SinkCreator::create_v2_metadata_sinks(
-  const std::string& base_uri,
-  size_t n_arrays,
-  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
-{
-    std::queue<std::string> dir_paths, file_paths;
-
-    file_paths.emplace(".metadata"); // base metadata
-    file_paths.emplace("0/.zattrs"); // external metadata
-    file_paths.emplace(".zattrs");   // group metadata
-
-    for (auto i = 0; i < n_arrays; ++i) {
-        dir_paths.push(std::to_string(i));
-        file_paths.push(std::to_string(i) + "/.zarray"); // array metadata
-    }
-
-    return make_metadata_sinks_(
-      base_uri, dir_paths, file_paths, metadata_sinks);
-}
-
-bool
-zarr::SinkCreator::create_v3_metadata_sinks(
-  const std::string& base_uri,
-  size_t n_arrays,
-  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
-{
-    std::queue<std::string> dir_paths, file_paths;
-
-    dir_paths.emplace("meta");
-    dir_paths.emplace("meta/root");
-
-    file_paths.emplace("zarr.json");
-    file_paths.emplace("meta/root.group.json");
-    for (auto i = 0; i < n_arrays; ++i) {
-        file_paths.push("meta/root/" + std::to_string(i) + ".array.json");
-    }
-
-    return make_metadata_sinks_(
-      base_uri, dir_paths, file_paths, metadata_sinks);
-}
-
-bool
-zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
-{
-    if (dir_paths.empty()) {
-        return true;
-    }
-
-    std::atomic<char> all_successful = 1;
-
-    const auto n_dirs = dir_paths.size();
-    std::latch latch(n_dirs);
-
-    for (auto i = 0; i < n_dirs; ++i) {
-        const auto dirname = dir_paths.front();
-        dir_paths.pop();
-
-        thread_pool_->push_to_job_queue(
-          [dirname, &latch, &all_successful](std::string& err) -> bool {
-              bool success = false;
-
-              try {
-                  if (fs::exists(dirname)) {
-                      EXPECT(fs::is_directory(dirname),
-                             "'%s' exists but is not a directory",
-                             dirname.c_str());
-                  } else if (all_successful) {
-                      std::error_code ec;
-                      EXPECT(fs::create_directories(dirname, ec),
-                             "%s",
-                             ec.message().c_str());
-                  }
-                  success = true;
-              } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create directory '%s': %s.",
-                           dirname.c_str(),
-                           exc.what());
-                  err = buf;
-              } catch (...) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create directory '%s': (unknown).",
-                           dirname.c_str());
-                  err = buf;
-              }
-
-              latch.count_down();
-              all_successful.fetch_and((char)success);
-
-              return success;
-          });
-
-        dir_paths.push(dirname);
-    }
-
-    latch.wait();
-
-    return (bool)all_successful;
-}
-
-bool
-zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
-                               std::vector<std::unique_ptr<Sink>>& sinks)
-{
-    if (file_paths.empty()) {
-        return true;
-    }
-
-    std::atomic<char> all_successful = 1;
-
-    const auto n_files = file_paths.size();
-    sinks.resize(n_files);
-    std::fill(sinks.begin(), sinks.end(), nullptr);
-    std::latch latch(n_files);
-
-    for (auto i = 0; i < n_files; ++i) {
-        const auto filename = file_paths.front();
-        file_paths.pop();
-
-        std::unique_ptr<Sink>* psink = sinks.data() + i;
-
-        thread_pool_->push_to_job_queue(
-          [filename, psink, &latch, &all_successful](std::string& err) -> bool {
-              bool success = false;
-
-              try {
-                  if (all_successful) {
-                      *psink = std::make_unique<FileSink>(filename);
-                  }
-                  success = true;
-              } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create file '%s': %s.",
-                           filename.c_str(),
-                           exc.what());
-                  err = buf;
-              } catch (...) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create file '%s': (unknown).",
-                           filename.c_str());
-                  err = buf;
-              }
-
-              latch.count_down();
-              all_successful.fetch_and((char)success);
-
-              return success;
-          });
-    }
-
-    latch.wait();
-
-    return (bool)all_successful;
-}
-
-bool
-zarr::SinkCreator::make_part_sinks_(
+zarr::SinkCreator::make_data_sinks(
   const std::string& base_uri,
   const std::vector<Dimension>& dimensions,
   const std::function<size_t(const Dimension&)>& parts_along_dimension,
@@ -287,6 +103,162 @@ zarr::SinkCreator::make_part_sinks_(
 }
 
 bool
+zarr::SinkCreator::create_v2_metadata_sinks(
+  const std::string& base_uri,
+  size_t n_arrays,
+  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
+{
+    if (base_uri.empty()) {
+        LOGE("Base URI is empty.");
+        return false;
+    }
+
+    std::queue<std::string> dir_paths, file_paths;
+
+    file_paths.emplace(".metadata"); // base metadata
+    file_paths.emplace("0/.zattrs"); // external metadata
+    file_paths.emplace(".zattrs");   // group metadata
+
+    for (auto i = 0; i < n_arrays; ++i) {
+        const auto idx_string = std::to_string(i);
+        dir_paths.push(idx_string);
+        file_paths.push(idx_string + "/.zarray"); // array metadata
+    }
+
+    return make_metadata_sinks_(
+      base_uri, dir_paths, file_paths, metadata_sinks);
+}
+
+bool
+zarr::SinkCreator::create_v3_metadata_sinks(
+  const std::string& base_uri,
+  size_t n_arrays,
+  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
+{
+    if (base_uri.empty()) {
+        LOGE("Base URI is empty.");
+        return false;
+    }
+
+    std::queue<std::string> dir_paths, file_paths;
+
+    dir_paths.emplace("meta");
+    dir_paths.emplace("meta/root");
+
+    file_paths.emplace("zarr.json");
+    file_paths.emplace("meta/root.group.json");
+    for (auto i = 0; i < n_arrays; ++i) {
+        file_paths.push("meta/root/" + std::to_string(i) + ".array.json");
+    }
+
+    return make_metadata_sinks_(
+      base_uri, dir_paths, file_paths, metadata_sinks);
+}
+
+bool
+zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
+{
+    if (dir_paths.empty()) {
+        return true;
+    }
+
+    std::atomic<char> all_successful = 1;
+
+    const auto n_dirs = dir_paths.size();
+    std::latch latch(n_dirs);
+
+    for (auto i = 0; i < n_dirs; ++i) {
+        const auto dirname = dir_paths.front();
+        dir_paths.pop();
+
+        thread_pool_->push_to_job_queue(
+          [dirname, &latch, &all_successful](std::string& err) -> bool {
+              bool success = false;
+
+              try {
+                  if (fs::exists(dirname)) {
+                      EXPECT(fs::is_directory(dirname),
+                             "'%s' exists but is not a directory",
+                             dirname.c_str());
+                  } else if (all_successful) {
+                      std::error_code ec;
+                      EXPECT(fs::create_directories(dirname, ec),
+                             "%s",
+                             ec.message().c_str());
+                  }
+                  success = true;
+              } catch (const std::exception& exc) {
+                  err = "Failed to create directory '" + dirname +
+                        "': " + exc.what();
+              } catch (...) {
+                  err =
+                    "Failed to create directory '" + dirname + "': (unknown).";
+              }
+
+              latch.count_down();
+              all_successful.fetch_and((char)success);
+
+              return success;
+          });
+
+        dir_paths.push(dirname);
+    }
+
+    latch.wait();
+
+    return (bool)all_successful;
+}
+
+bool
+zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
+                               std::vector<std::unique_ptr<Sink>>& sinks)
+{
+    if (file_paths.empty()) {
+        return true;
+    }
+
+    std::atomic<char> all_successful = 1;
+
+    const auto n_files = file_paths.size();
+    sinks.resize(n_files);
+    std::fill(sinks.begin(), sinks.end(), nullptr);
+    std::latch latch(n_files);
+
+    for (auto i = 0; i < n_files; ++i) {
+        const auto filename = file_paths.front();
+        file_paths.pop();
+
+        std::unique_ptr<Sink>* psink = sinks.data() + i;
+
+        thread_pool_->push_to_job_queue(
+          [filename, psink, &latch, &all_successful](std::string& err) -> bool {
+              bool success = false;
+
+              try {
+                  if (all_successful) {
+                      *psink = std::make_unique<FileSink>(filename);
+                  }
+                  success = true;
+              } catch (const std::exception& exc) {
+                  err =
+                    "Failed to create file '" + filename + "': " + exc.what();
+              } catch (...) {
+                  err = "Failed to create file '" + filename + "': (unknown).";
+              }
+
+              latch.count_down();
+              all_successful.fetch_and((char)success);
+
+              return success;
+          });
+    }
+
+    latch.wait();
+
+    return (bool)all_successful;
+}
+
+bool
 zarr::SinkCreator::make_metadata_sinks_(
   const std::string& base_uri,
   std::queue<std::string>& dir_paths,
@@ -319,6 +291,11 @@ zarr::SinkCreator::make_metadata_sinks_(
             base_dir = base_uri.substr(7);
         }
 
+        // remove trailing slashes
+        if (base_uri.ends_with("/") || base_uri.ends_with("\\")) {
+            base_dir = base_dir.substr(0, base_dir.size() - 1);
+        }
+
         // create the base directories if they don't already exist
         // we create them in serial because
         // 1. there are only a few of them; and
@@ -343,6 +320,7 @@ zarr::SinkCreator::make_metadata_sinks_(
     return is_s3 ? make_s3_objects_(bucket_name, file_paths, metadata_sinks)
                  : make_files_(file_paths, metadata_sinks);
 }
+
 bool
 zarr::SinkCreator::make_s3_bucket_(const std::string& bucket_name)
 {
@@ -463,7 +441,8 @@ extern "C"
               "z", DimensionType_Space, 0, 3, 0); // 3 timepoints per chunk
 
             std::vector<std::unique_ptr<zarr::Sink>> files;
-            CHECK(creator.create_chunk_sinks(base_dir.string(), dims, files));
+            CHECK(creator.make_data_sinks(
+              base_dir.string(), dims, common::chunks_along_dimension, files));
 
             CHECK(files.size() == 5 * 2);
             files.clear(); // closes files
@@ -510,7 +489,8 @@ extern "C"
               "z", DimensionType_Space, 8, 2, 2); // 4 chunks, 2 shards
 
             std::vector<std::unique_ptr<zarr::Sink>> files;
-            CHECK(creator.create_shard_sinks(base_dir.string(), dims, files));
+            CHECK(creator.make_data_sinks(
+              base_dir.string(), dims, common::shards_along_dimension, files));
 
             CHECK(files.size() == 2);
             files.clear(); // closes files

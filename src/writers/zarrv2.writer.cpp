@@ -25,8 +25,10 @@ zarr::ZarrV2Writer::flush_impl_()
 
     {
         SinkCreator creator(thread_pool_, connection_pool_);
-        if (!creator.create_chunk_sinks(
-              data_root, config_.dimensions, sinks_)) {
+        if (!creator.make_data_sinks(data_root,
+                                     config_.dimensions,
+                                     common::chunks_along_dimension,
+                                     sinks_)) {
             return false;
         }
     }
@@ -48,14 +50,9 @@ zarr::ZarrV2Writer::flush_impl_()
                       CHECK(sink->write(0, data, size));
                       success = true;
                   } catch (const std::exception& exc) {
-                      char buf[128];
-                      snprintf(buf,
-                               sizeof(buf),
-                               "Failed to write chunk: %s",
-                               exc.what());
-                      err = buf;
+                      err = "Failed to write chunk: " + std::string(exc.what());
                   } catch (...) {
-                      err = "Unknown error";
+                      err = "Failed to write chunk: (unknown)";
                   }
 
                   latch.count_down();
@@ -129,11 +126,13 @@ extern "C"
 
             zarr::ZarrV2Writer writer(config, thread_pool);
 
-            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
+            const size_t frame_size = 64 * 48 * 2;
+
+            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + frame_size);
             frame->bytes_of_frame =
-              common::align_up(sizeof(VideoFrame) + 64 * 48 * 2, 8);
+              common::align_up(sizeof(VideoFrame) + frame_size, 8);
             frame->shape = shape;
-            memset(frame->data, 0, 64 * 48 * 2);
+            memset(frame->data, 0, frame_size);
 
             for (auto i = 0; i < 6 * 8 * 5 * 2; ++i) { // 2 time points
                 frame->frame_id = i;
