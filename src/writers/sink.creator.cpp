@@ -13,23 +13,63 @@ zarr::SinkCreator::SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool_)
 }
 
 bool
-zarr::SinkCreator::create_chunk_sinks(
+zarr::SinkCreator::make_data_sinks(
   const std::string& base_uri,
   const std::vector<Dimension>& dimensions,
-  std::vector<std::unique_ptr<Sink>>& chunk_sinks)
+  const std::function<size_t(const Dimension&)>& parts_along_dimension,
+  std::vector<std::unique_ptr<Sink>>& part_sinks)
 {
-    return make_part_sinks_(
-      base_uri, dimensions, common::chunks_along_dimension, chunk_sinks);
-}
+    std::queue<std::string> paths;
 
-bool
-zarr::SinkCreator::create_shard_sinks(
-  const std::string& base_uri,
-  const std::vector<Dimension>& dimensions,
-  std::vector<std::unique_ptr<Sink>>& shard_sinks)
-{
-    return make_part_sinks_(
-      base_uri, dimensions, common::shards_along_dimension, shard_sinks);
+    std::string base_dir = base_uri;
+    if (base_uri.starts_with("file://")) {
+        base_dir = base_uri.substr(7);
+    }
+    paths.emplace(base_dir);
+
+    if (!make_dirs_(paths)) {
+        return false;
+    }
+
+    // create directories
+    for (auto i = dimensions.size() - 2; i >= 1; --i) {
+        const auto& dim = dimensions.at(i);
+        const auto n_parts = parts_along_dimension(dim);
+        CHECK(n_parts);
+
+        auto n_paths = paths.size();
+        for (auto j = 0; j < n_paths; ++j) {
+            const auto path = paths.front();
+            paths.pop();
+
+            for (auto k = 0; k < n_parts; ++k) {
+                const auto kstr = std::to_string(k);
+                paths.push(path + (path.empty() ? kstr : "/" + kstr));
+            }
+        }
+
+        if (!make_dirs_(paths)) {
+            return false;
+        }
+    }
+
+    // create files
+    {
+        const auto& dim = dimensions.front();
+        const auto n_parts = parts_along_dimension(dim);
+        CHECK(n_parts);
+
+        auto n_paths = paths.size();
+        for (auto i = 0; i < n_paths; ++i) {
+            const auto path = paths.front();
+            paths.pop();
+            for (auto j = 0; j < n_parts; ++j) {
+                paths.push(path + "/" + std::to_string(j));
+            }
+        }
+    }
+
+    return make_files_(paths, part_sinks);
 }
 
 bool
@@ -197,66 +237,6 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
 }
 
 bool
-zarr::SinkCreator::make_part_sinks_(
-  const std::string& base_uri,
-  const std::vector<Dimension>& dimensions,
-  const std::function<size_t(const Dimension&)>& parts_along_dimension,
-  std::vector<std::unique_ptr<Sink>>& part_sinks)
-{
-    std::queue<std::string> paths;
-
-    std::string base_dir = base_uri;
-    if (base_uri.starts_with("file://")) {
-        base_dir = base_uri.substr(7);
-    }
-    paths.emplace(base_dir);
-
-    if (!make_dirs_(paths)) {
-        return false;
-    }
-
-    // create directories
-    for (auto i = dimensions.size() - 2; i >= 1; --i) {
-        const auto& dim = dimensions.at(i);
-        const auto n_parts = parts_along_dimension(dim);
-        CHECK(n_parts);
-
-        auto n_paths = paths.size();
-        for (auto j = 0; j < n_paths; ++j) {
-            const auto path = paths.front();
-            paths.pop();
-
-            for (auto k = 0; k < n_parts; ++k) {
-                const auto kstr = std::to_string(k);
-                paths.push(path + (path.empty() ? kstr : "/" + kstr));
-            }
-        }
-
-        if (!make_dirs_(paths)) {
-            return false;
-        }
-    }
-
-    // create files
-    {
-        const auto& dim = dimensions.front();
-        const auto n_parts = parts_along_dimension(dim);
-        CHECK(n_parts);
-
-        auto n_paths = paths.size();
-        for (auto i = 0; i < n_paths; ++i) {
-            const auto path = paths.front();
-            paths.pop();
-            for (auto j = 0; j < n_parts; ++j) {
-                paths.push(path + "/" + std::to_string(j));
-            }
-        }
-    }
-
-    return make_files_(paths, part_sinks);
-}
-
-bool
 zarr::SinkCreator::make_metadata_sinks_(
   const std::string& base_uri,
   std::queue<std::string>& dir_paths,
@@ -322,7 +302,8 @@ extern "C"
               "z", DimensionType_Space, 0, 3, 0); // 3 timepoints per chunk
 
             std::vector<std::unique_ptr<zarr::Sink>> files;
-            CHECK(creator.create_chunk_sinks(base_dir.string(), dims, files));
+            CHECK(creator.make_data_sinks(
+              base_dir.string(), dims, common::chunks_along_dimension, files));
 
             CHECK(files.size() == 5 * 2);
             files.clear(); // closes files
@@ -369,7 +350,8 @@ extern "C"
               "z", DimensionType_Space, 8, 2, 2); // 4 chunks, 2 shards
 
             std::vector<std::unique_ptr<zarr::Sink>> files;
-            CHECK(creator.create_shard_sinks(base_dir.string(), dims, files));
+            CHECK(creator.make_data_sinks(
+              base_dir.string(), dims, common::shards_along_dimension, files));
 
             CHECK(files.size() == 2);
             files.clear(); // closes files

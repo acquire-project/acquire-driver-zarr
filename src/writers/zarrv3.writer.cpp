@@ -126,8 +126,11 @@ zarr::ZarrV3Writer::flush_impl_()
 
     {
         SinkCreator creator(thread_pool_);
-        if (sinks_.empty() && !creator.create_shard_sinks(
-                                data_root, config_.dimensions, sinks_)) {
+        if (sinks_.empty() &&
+            !creator.make_data_sinks(data_root,
+                                     config_.dimensions,
+                                     common::shards_along_dimension,
+                                     sinks_)) {
             return false;
         }
     }

@@ -15,23 +15,17 @@ struct SinkCreator final
     explicit SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool);
     ~SinkCreator() noexcept = default;
 
-    /// @brief Create a collection of sinks for a Zarr V2 array.
+    /// @brief Create a collection of data sinks, either chunk or shard.
     /// @param[in] base_uri The base URI for the sinks.
     /// @param[in] dimensions The dimensions of the data.
-    /// @param[out] chunk_sinks The sinks created.
-    [[nodiscard]] bool create_chunk_sinks(
+    /// @param[in] parts_along_dimension Function for computing the number of
+    ///            parts (either chunk or shard) along each dimension.
+    /// @param[out] part_sinks The sinks created.
+    [[nodiscard]] bool make_data_sinks(
       const std::string& base_uri,
       const std::vector<Dimension>& dimensions,
-      std::vector<std::unique_ptr<Sink>>& chunk_sinks);
-
-    /// @brief Create a collection of sinks for a Zarr V3 array.
-    /// @param[in] base_uri The base URI for the sinks.
-    /// @param[in] dimensions The dimensions of the data.
-    /// @param[out] shard_sinks The sinks created.
-    [[nodiscard]] bool create_shard_sinks(
-      const std::string& base_uri,
-      const std::vector<Dimension>& dimensions,
-      std::vector<std::unique_ptr<Sink>>& shard_sinks);
+      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      std::vector<std::unique_ptr<Sink>>& part_sinks);
 
     /// @brief Create a collection of metadata sinks for a Zarr V2 dataset.
     /// @param[in] base_uri The base URI for the dataset.
@@ -66,18 +60,6 @@ struct SinkCreator final
     /// @return True iff all files were created successfully.
     [[nodiscard]] bool make_files_(std::queue<std::string>& file_paths,
                                    std::vector<std::unique_ptr<Sink>>& sinks);
-
-    /// @brief Create a collection of data sinks, either chunk or shard.
-    /// @param[in] base_uri The base URI for the sinks.
-    /// @param[in] dimensions The dimensions of the data.
-    /// @param[in] parts_along_dimension Function for computing the number of
-    ///            parts (either chunk or shard) along each dimension.
-    /// @param[out] part_sinks The sinks created.
-    [[nodiscard]] bool make_part_sinks_(
-      const std::string& base_uri,
-      const std::vector<Dimension>& dimensions,
-      const std::function<size_t(const Dimension&)>& parts_along_dimension,
-      std::vector<std::unique_ptr<Sink>>& part_sinks);
 
     /// @brief Create a collection of metadata sinks.
     /// @param[in] base_uri The base URI for the sinks.

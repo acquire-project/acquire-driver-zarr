@@ -25,8 +25,10 @@ zarr::ZarrV2Writer::flush_impl_()
 
     {
         SinkCreator creator(thread_pool_);
-        if (!creator.create_chunk_sinks(
-              data_root, config_.dimensions, sinks_)) {
+        if (!creator.make_data_sinks(data_root,
+                                     config_.dimensions,
+                                     common::chunks_along_dimension,
+                                     sinks_)) {
             return false;
         }
     }
