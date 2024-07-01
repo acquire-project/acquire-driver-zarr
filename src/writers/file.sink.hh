@@ -2,14 +2,9 @@
 #define H_ACQUIRE_STORAGE_ZARR_WRITERS_FILE_SINK_V0
 
 #include "sink.hh"
+#include "platform.h"
 
 #include <memory>
-
-// struct file and file_close are defined in platform.c.
-struct file;
-
-void
-file_close(struct file* file);
 
 namespace acquire::sink::zarr {
 struct FileSink : public Sink

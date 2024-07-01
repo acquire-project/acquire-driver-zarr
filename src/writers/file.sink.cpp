@@ -1,5 +1,4 @@
 #include "file.sink.hh"
-#include "platform.h"
 
 #include <latch>
 
