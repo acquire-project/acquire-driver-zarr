@@ -78,6 +78,11 @@ zarr::SinkCreator::create_v2_metadata_sinks(
   size_t n_arrays,
   std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
+    if (base_uri.empty()) {
+        LOGE("Base URI is empty.");
+        return false;
+    }
+
     std::queue<std::string> dir_paths, file_paths;
 
     file_paths.emplace(".metadata"); // base metadata
@@ -85,8 +90,9 @@ zarr::SinkCreator::create_v2_metadata_sinks(
     file_paths.emplace(".zattrs");   // group metadata
 
     for (auto i = 0; i < n_arrays; ++i) {
-        dir_paths.push(std::to_string(i));
-        file_paths.push(std::to_string(i) + "/.zarray"); // array metadata
+        const auto idx_string = std::to_string(i);
+        dir_paths.push(idx_string);
+        file_paths.push(idx_string + "/.zarray"); // array metadata
     }
 
     return make_metadata_sinks_(
@@ -99,6 +105,11 @@ zarr::SinkCreator::create_v3_metadata_sinks(
   size_t n_arrays,
   std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
+    if (base_uri.empty()) {
+        LOGE("Base URI is empty.");
+        return false;
+    }
+
     std::queue<std::string> dir_paths, file_paths;
 
     dir_paths.emplace("meta");
@@ -147,20 +158,11 @@ zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
                   }
                   success = true;
               } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create directory '%s': %s.",
-                           dirname.c_str(),
-                           exc.what());
-                  err = buf;
+                  err = "Failed to create directory '" + dirname +
+                        "': " + exc.what();
               } catch (...) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create directory '%s': (unknown).",
-                           dirname.c_str());
-                  err = buf;
+                  err =
+                    "Failed to create directory '" + dirname + "': (unknown).";
               }
 
               latch.count_down();
@@ -208,20 +210,10 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
                   }
                   success = true;
               } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create file '%s': %s.",
-                           filename.c_str(),
-                           exc.what());
-                  err = buf;
+                  err =
+                    "Failed to create file '" + filename + "': " + exc.what();
               } catch (...) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create file '%s': (unknown).",
-                           filename.c_str());
-                  err = buf;
+                  err = "Failed to create file '" + filename + "': (unknown).";
               }
 
               latch.count_down();
@@ -246,6 +238,11 @@ zarr::SinkCreator::make_metadata_sinks_(
     std::string base_dir = base_uri;
     if (base_uri.starts_with("file://")) {
         base_dir = base_uri.substr(7);
+    }
+
+    // remove trailing slashes
+    if (base_uri.ends_with("/") || base_uri.ends_with("\\")) {
+        base_dir = base_dir.substr(0, base_dir.size() - 1);
     }
 
     // create the base directories if they don't already exist

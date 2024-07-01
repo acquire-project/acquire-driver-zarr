@@ -189,12 +189,9 @@ zarr::ZarrV3Writer::flush_impl_()
                                   chunk_table.size() * sizeof(uint64_t));
                 }
             } catch (const std::exception& exc) {
-                char buf[128];
-                snprintf(
-                  buf, sizeof(buf), "Failed to write chunk: %s", exc.what());
-                err = buf;
+                err = "Failed to write chunk: " + std::string(exc.what());
             } catch (...) {
-                err = "Unknown error";
+                err = "Failed to write chunk: (unknown)";
             }
 
             latch.count_down();
@@ -558,11 +555,13 @@ extern "C"
 
             zarr::ZarrV3Writer writer(config, thread_pool);
 
-            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
+            const size_t frame_size = 64 * 48 * 2;
+
+            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + frame_size);
             frame->bytes_of_frame =
-              common::align_up(sizeof(VideoFrame) + 64 * 48 * 2, 8);
+              common::align_up(sizeof(VideoFrame) + frame_size, 8);
             frame->shape = shape;
-            memset(frame->data, 0, 64 * 48 * 2);
+            memset(frame->data, 0, frame_size);
 
             for (auto i = 0; i < 6 * 8 * 5 * 2; ++i) {
                 frame->frame_id = i;
