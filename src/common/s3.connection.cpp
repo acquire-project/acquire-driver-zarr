@@ -21,21 +21,37 @@ common::S3Connection::~S3Connection() noexcept
 }
 
 bool
-common::S3Connection::make_bucket(const std::string& bucket_name) noexcept
+common::S3Connection::bucket_exists(const std::string& bucket_name) noexcept
 {
-    // first check if the bucket exists, do nothing if it does
+    if (bucket_name.empty()) {
+        return false;
+    }
+
     try {
-        minio::s3::ListBucketsResponse response = client_->ListBuckets();
+        minio::s3::BucketExistsArgs args;
+        args.bucket = bucket_name;
+
+        minio::s3::BucketExistsResponse response = client_->BucketExists(args);
         CHECK(response);
 
-        for (const auto& bucket : response.buckets) {
-            if (bucket.name == bucket_name) {
-                return true;
-            }
-        }
+        return response.exist;
     } catch (const std::exception& e) {
         LOGE("Failed to list buckets: %s", e.what());
+    }
+
+    return false;
+}
+
+bool
+common::S3Connection::make_bucket(const std::string& bucket_name) noexcept
+{
+    if (bucket_name.empty()) {
         return false;
+    }
+
+    // first check if the bucket exists, do nothing if it does
+    if (bucket_exists(bucket_name)) {
+        return true;
     }
 
     TRACE("Creating bucket %s", bucket_name.c_str());
@@ -48,8 +64,36 @@ common::S3Connection::make_bucket(const std::string& bucket_name) noexcept
         return (bool)response;
     } catch (const std::exception& e) {
         LOGE("Failed to create bucket %s: %s", bucket_name.c_str(), e.what());
+    }
+
+    return false;
+}
+
+bool
+common::S3Connection::destroy_bucket(const std::string& bucket_name) noexcept
+{
+    if (bucket_name.empty()) {
         return false;
     }
+
+    // first check if the bucket exists, do nothing if it does
+    if (!bucket_exists(bucket_name)) {
+        return true;
+    }
+
+    TRACE("Destroying bucket %s", bucket_name.c_str());
+    minio::s3::RemoveBucketArgs args;
+    args.bucket = bucket_name;
+
+    try {
+        minio::s3::RemoveBucketResponse response = client_->RemoveBucket(args);
+
+        return (bool)response;
+    } catch (const std::exception& e) {
+        LOGE("Failed to destroy bucket %s: %s", bucket_name.c_str(), e.what());
+    }
+
+    return false;
 }
 
 common::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
@@ -112,3 +156,57 @@ common::S3ConnectionPool::should_stop_() const noexcept
 {
     return !is_accepting_connections_;
 }
+
+#ifndef NO_UNIT_TESTS
+#ifdef _WIN32
+#define acquire_export __declspec(dllexport)
+#else
+#define acquire_export
+#endif
+
+#if __has_include("s3.credentials.hpp")
+#include "s3.credentials.hpp"
+static std::string s3_endpoint = ZARR_S3_ENDPOINT;
+static std::string s3_access_key_id = ZARR_S3_ACCESS_KEY_ID;
+static std::string s3_secret_access_key = ZARR_S3_SECRET_ACCESS_KEY;
+#else
+static std::string s3_endpoint, s3_access_key_id, s3_secret_access_key;
+#endif
+
+extern "C"
+{
+    acquire_export int unit_test__make_s3_bucket()
+    {
+        if (s3_endpoint.empty() || s3_access_key_id.empty() ||
+            s3_secret_access_key.empty()) {
+            LOGE("S3 credentials not set.");
+            return 1;
+        }
+
+        int retval = 0;
+
+        try {
+            common::S3Connection conn(
+              s3_endpoint, s3_access_key_id, s3_secret_access_key);
+
+            CHECK(conn.bucket_exists("my-bucket"));
+
+            if (conn.bucket_exists("acquire-test-bucket")) {
+                CHECK(conn.destroy_bucket("acquire-test-bucket"));
+            }
+
+            CHECK(conn.make_bucket("acquire-test-bucket"));
+            CHECK(conn.bucket_exists("acquire-test-bucket"));
+            CHECK(conn.destroy_bucket("acquire-test-bucket"));
+
+            retval = 1;
+        } catch (const std::exception& e) {
+            LOGE("Failed to create S3 connection: %s", e.what());
+        } catch (...) {
+            LOGE("Failed to create S3 connection: unknown error");
+        }
+
+        return retval;
+    }
+}
+#endif

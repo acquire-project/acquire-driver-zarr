@@ -11,3 +11,4 @@ cmake-build*
 *.zip
 _CPack_Packages/
 .PVS-Studio
+s3.credentials.hpp

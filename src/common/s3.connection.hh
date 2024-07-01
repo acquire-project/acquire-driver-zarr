@@ -19,7 +19,9 @@ struct S3Connection final
 
     ~S3Connection() noexcept;
 
+    [[nodiscard]] bool bucket_exists(const std::string& bucket_name) noexcept;
     [[nodiscard]] bool make_bucket(const std::string& bucket_name) noexcept;
+    [[nodiscard]] bool destroy_bucket(const std::string& bucket_name) noexcept;
 
   private:
     std::unique_ptr<minio::s3::Client> client_;

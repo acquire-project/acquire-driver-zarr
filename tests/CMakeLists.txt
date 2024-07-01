@@ -53,6 +53,7 @@ else ()
                 acquire-core-logger
                 acquire-core-platform
                 acquire-video-runtime
+                miniocpp::miniocpp
         )
 
         add_test(NAME test-${tgt} COMMAND ${tgt})
