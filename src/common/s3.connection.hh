@@ -31,6 +31,7 @@ struct S3Connection final
 
   private:
     std::unique_ptr<minio::s3::Client> client_;
+    std::unique_ptr<minio::creds::StaticProvider> provider_;
 };
 
 struct S3ConnectionPool final

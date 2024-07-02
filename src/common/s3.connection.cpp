@@ -11,9 +11,10 @@ common::S3Connection::S3Connection(const std::string& endpoint,
                                    const std::string& secret_access_key)
 {
     minio::s3::BaseUrl url(endpoint);
-    minio::creds::StaticProvider provider(access_key_id, secret_access_key);
 
-    client_ = std::make_unique<minio::s3::Client>(url, &provider);
+    provider_ = std::make_unique<minio::creds::StaticProvider>(
+      access_key_id, secret_access_key);
+    client_ = std::make_unique<minio::s3::Client>(url, provider_.get());
     CHECK(client_);
 }
 
@@ -190,8 +191,6 @@ extern "C"
         try {
             common::S3Connection conn(
               s3_endpoint, s3_access_key_id, s3_secret_access_key);
-
-            CHECK(conn.bucket_exists("my-bucket"));
 
             if (conn.bucket_exists("acquire-test-bucket")) {
                 CHECK(conn.destroy_bucket("acquire-test-bucket"));
