@@ -1,4 +1,5 @@
 #include "zarrv3.writer.hh"
+#include "sink.creator.hh"
 #include "../zarr.hh"
 
 #include <latch>
@@ -99,7 +100,7 @@ shard_internal_index(size_t chunk_idx,
 } // namespace
 
 zarr::ZarrV3Writer::ZarrV3Writer(
-  const ArrayConfig& array_spec,
+  const WriterConfig& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool)
   : Writer(array_spec, thread_pool)
   , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
@@ -124,9 +125,12 @@ zarr::ZarrV3Writer::flush_impl_()
         .string();
 
     {
-        FileCreator file_creator(thread_pool_);
-        if (sinks_.empty() && !file_creator.create_shard_sinks(
-                                data_root, config_.dimensions, sinks_)) {
+        SinkCreator creator(thread_pool_);
+        if (sinks_.empty() &&
+            !creator.make_data_sinks(data_root,
+                                     config_.dimensions,
+                                     common::shards_along_dimension,
+                                     sinks_)) {
             return false;
         }
     }
@@ -149,7 +153,7 @@ zarr::ZarrV3Writer::flush_impl_()
         auto& chunk_table = shard_tables_.at(i);
         size_t* file_offset = &shard_file_offsets_.at(i);
 
-        thread_pool_->push_to_job_queue([sink = sinks_.at(i),
+        thread_pool_->push_to_job_queue([&sink = sinks_.at(i),
                                          &chunks,
                                          &chunk_table,
                                          file_offset,
@@ -185,12 +189,9 @@ zarr::ZarrV3Writer::flush_impl_()
                                   chunk_table.size() * sizeof(uint64_t));
                 }
             } catch (const std::exception& exc) {
-                char buf[128];
-                snprintf(
-                  buf, sizeof(buf), "Failed to write chunk: %s", exc.what());
-                err = buf;
+                err = "Failed to write chunk: " + std::string(exc.what());
             } catch (...) {
-                err = "Unknown error";
+                err = "Failed to write chunk: (unknown)";
             }
 
             latch.count_down();
@@ -536,22 +537,31 @@ extern "C"
                   .width = 64,
                   .height = 48,
                 },
+                .strides = {
+                  .channels = 1,
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
+                },
                 .type = SampleType_u16,
             };
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(array_spec, thread_pool);
+            zarr::ZarrV3Writer writer(config, thread_pool);
 
-            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48 * 2);
-            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48 * 2;
+            const size_t frame_size = 64 * 48 * 2;
+
+            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + frame_size);
+            frame->bytes_of_frame =
+              common::align_up(sizeof(VideoFrame) + frame_size, 8);
             frame->shape = shape;
-            memset(frame->data, 0, 64 * 48 * 2);
+            memset(frame->data, 0, frame_size);
 
             for (auto i = 0; i < 6 * 8 * 5 * 2; ++i) {
                 frame->frame_id = i;
@@ -664,20 +674,27 @@ extern "C"
                   .width = 64,
                   .height = 48,
                 },
+                .strides = {
+                  .channels = 1,
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
+                },
                 .type = SampleType_u8,
             };
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(array_spec, thread_pool);
+            zarr::ZarrV3Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
-            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
+            frame->bytes_of_frame =
+              common::align_up(sizeof(VideoFrame) + 64 * 48, 8);
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48);
 
@@ -756,6 +773,12 @@ extern "C"
                   .width = 64,
                   .height = 48,
                 },
+                .strides = {
+                  .channels = 1,
+                  .width = 1,
+                  .height = 64,
+                  .planes = 64 * 48
+                },
                 .type = SampleType_u8,
             };
 
@@ -781,17 +804,18 @@ extern "C"
                               5,  // 5 timepoints / chunk
                               2); // 2 chunks / shard
 
-            zarr::ArrayConfig array_spec = {
+            zarr::WriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
                 .data_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(array_spec, thread_pool);
+            zarr::ZarrV3Writer writer(config, thread_pool);
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
-            frame->bytes_of_frame = sizeof(VideoFrame) + 64 * 48;
+            frame->bytes_of_frame =
+              common::align_up(sizeof(VideoFrame) + 64 * 48, 8);
             frame->shape = shape;
             memset(frame->data, 0, 64 * 48);
 
