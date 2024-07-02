@@ -5,7 +5,9 @@ set(ACQUIRE_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/acquire-zarr/ac
 
 add_library(${tgt} SHARED
         ${ACQUIRE_API_INCLUDE_FILE}
-        src/api.cpp
+        src/acquire-zarr-writer.cpp
+        src/acquire-zarr-writer-impl.hh
+        src/acquire-zarr-writer-impl.cpp
 )
 
 
