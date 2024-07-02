@@ -1,14 +1,21 @@
+#ifndef ACQUIRE_ZARR_WRITER_IMPL_HH
+#define ACQUIRE_ZARR_WRITER_IMPL_HH
+
+
 #include "acquire-zarr/acquire-zarr.hh"
 #include "zarr.v2.hh"
 //#include "zarr.v3.hh"
 
-using namespace acquire::sink::zarr;
+namespace asz = acquire::sink::zarr;
+
+void set_acquire_string(const std::string& src, String& dst);
+std::string get_from_acquire_string(const String& src);
 
 // C++ implementation of the ZarrSink, which is just a wrapper around the Zarr storage class heirarchy.
 class AcquireZarrWriter::Impl
 {
   public:
-    Impl() = default;
+    Impl();
     ~Impl() = default;
 
     void open();
@@ -18,8 +25,15 @@ class AcquireZarrWriter::Impl
   protected:
 
     // use shared_ptr for polymorphism of zarr version.
-    std::unique_ptr<struct Zarr> zarr_sink_;
+    std::unique_ptr<struct asz::Zarr> zarr_sink_;
 
-  // video frame needs to be the last member of the struct
+    /// @brief Data structure to hold the storage properties for the Zarr sink
+    struct StorageProperties storage_properties_;
+
+    // video frame needs to be the last member of the struct
     struct VideoFrame video_frame_;
+
+
 }; 
+
+#endif // ACQUIRE_ZARR_WRITER_IMPL_HH

@@ -1,7 +1,20 @@
 #include "acquire-zarr-writer-impl.hh"
 #include <iostream>
 
-//using namespace acquire::sink::zarr;
+
+void set_acquire_string(const std::string& src, String& dst)
+{
+    dst.str = new char[src.size() + 1];
+    strncpy(dst.str, src.c_str(), src.size());
+    dst.str[src.size()] = '\0';
+    dst.nbytes = src.size();
+    dst.is_ref = 0;
+}
+
+std::string get_from_acquire_string(const String& src)
+{
+    return std::string(src.str, src.nbytes);
+}
 
 
 /*
@@ -51,8 +64,17 @@ void AcquireZarrWriter::Impl::configure(const struct AcquireZarrSinkConfig* conf
 
 }
 */ 
+
+AcquireZarrWriter::Impl::Impl()
+{
+    //zarr_sink_ = std::make_unique<struct asz::Zarr>();
+    memset(&storage_properties_, 0, sizeof(storage_properties_));
+    memset(&video_frame_, 0, sizeof(video_frame_));
+}
+
 void AcquireZarrWriter::Impl::open()
 {
+    zarr_sink_->set(&storage_properties_);
     zarr_sink_->start();
 }
 

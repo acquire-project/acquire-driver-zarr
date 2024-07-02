@@ -50,8 +50,17 @@ PYBIND11_MODULE(acquire_zarr, m) {
         .def(py::init<>())
         .def("append", &PyAcquireZarrWriter::append)
         //.def("open", &PyAcquireZarrWriter::open);
-        .def_property("shape", &PyAcquireZarrWriter::get_shape, &PyAcquireZarrWriter::set_shape);
-
+        .def_property("shape", &PyAcquireZarrWriter::get_shape, &PyAcquireZarrWriter::set_shape)
+        .def_property("uri", &PyAcquireZarrWriter::get_uri, &PyAcquireZarrWriter::set_uri)
+        .def_property("external_json_metadata", &PyAcquireZarrWriter::get_metadata, &PyAcquireZarrWriter::setExternalMetadata)
+        .def_property("pixel_scale_x", &PyAcquireZarrWriter::get_pixel_scale_x, &PyAcquireZarrWriter::set_pixel_scale_x)
+        .def_property("pixel_scale_y", &PyAcquireZarrWriter::get_pixel_scale_y, &PyAcquireZarrWriter::set_pixel_scale_y)
+        .def_property("first_frame_id", &PyAcquireZarrWriter::get_first_frame_id, &PyAcquireZarrWriter::set_first_frame_id)
+        .def_property("dimensions", &PyAcquireZarrWriter::get_dimensions, &PyAcquireZarrWriter::set_dimensions)
+        .def_property("dimension_sizes", &PyAcquireZarrWriter::get_dimension_sizes, &PyAcquireZarrWriter::set_dimension_sizes)
+        .def_property("dimension_pixels_per_chunk", &PyAcquireZarrWriter::get_chunk_sizes, &PyAcquireZarrWriter::get_chunk_sizes)
+        .def_property("dimension_chunks_per_shard", &PyAcquireZarrWriter::get_shard_sizes, &PyAcquireZarrWriter::get_shard_sizes)
+        .def_property("enable_multiscale", &PyAcquireZarrWriter::get_enable_multiscale, &PyAcquireZarrWriter::set_enable_multiscale);
 #ifdef VERSION_INFO
     m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
 #else
