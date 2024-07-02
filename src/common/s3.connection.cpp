@@ -11,6 +11,7 @@ common::S3Connection::S3Connection(const std::string& endpoint,
                                    const std::string& secret_access_key)
 {
     minio::s3::BaseUrl url(endpoint);
+    url.https = endpoint.starts_with("https");
 
     provider_ = std::make_unique<minio::creds::StaticProvider>(
       access_key_id, secret_access_key);
@@ -167,8 +168,8 @@ common::S3ConnectionPool::should_stop_() const noexcept
 #define acquire_export
 #endif
 
-#if __has_include("s3.credentials.hpp")
-#include "s3.credentials.hpp"
+#if __has_include("s3.credentials.hh")
+#include "s3.credentials.hh"
 static std::string s3_endpoint = ZARR_S3_ENDPOINT;
 static std::string s3_access_key_id = ZARR_S3_ACCESS_KEY_ID;
 static std::string s3_secret_access_key = ZARR_S3_SECRET_ACCESS_KEY;
