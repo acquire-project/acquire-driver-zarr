@@ -96,6 +96,7 @@ common::ThreadPool::thread_worker_()
 
     TRACE("Worker thread exiting.");
 }
+
 #ifndef NO_UNIT_TESTS
 #ifdef _WIN32
 #define acquire_export __declspec(dllexport)

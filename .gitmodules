@@ -1,6 +1,3 @@
 [submodule "acquire-common"]
 	path = acquire-common
 	url = ../acquire-common.git
-[submodule "vcpkg"]
-	path = vcpkg
-	url = https://github.com/microsoft/vcpkg.git

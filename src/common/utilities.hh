@@ -71,6 +71,7 @@ number_of_shards(const std::vector<Dimension>& dimensions);
 /// @return The number of chunks in a shard.
 size_t
 chunks_per_shard(const std::vector<Dimension>& dimensions);
+
 /// @brief Get the shard index for a given chunk index, given array dimensions.
 /// @param chunk_index The index of the chunk.
 /// @param dimensions The dimensions of the array.
@@ -114,6 +115,7 @@ sample_type_to_string(SampleType t) noexcept;
 /// @return Aligned size.
 size_t
 align_up(size_t n, size_t align);
+
 /// @brief Split a URI by the '/' delimiter.
 /// @param uri String to split.
 /// @return Vector of strings.

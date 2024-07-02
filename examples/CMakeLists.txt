@@ -18,7 +18,6 @@ if (${WITH_EXAMPLES})
         set_target_properties(${tgt} PROPERTIES
                 MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
         )
-        target_include_directories(${tgt} PRIVATE $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src)
         target_link_libraries(${tgt}
                 acquire-core-logger
                 acquire-core-platform

@@ -316,46 +316,6 @@ the previous level, until the dimensions are less than or equal to a single tile
 Suppose your frame size is 1920 x 1080, with a tile size of 384 x 216.
 Then the sequence of levels will have dimensions 1920 x 1080, 960 x 540, 480 x 270, and 240 x 135.
 
-## Development
-
-### Building
-
-To build the driver, you will need to have initialized all submodules.
-You can do this by running:
-
-```bash
-git submodule update --init
-```
-
-Then you will need to bootstrap vcpkg by running (on Unix):
-
-```bash
-./vcpkg/bootstrap-vcpkg.sh -disableMetrics
-```
-
-or (on Windows):
-
-```cmd
-.\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-```
-
-Then you will need to install the dependencies by running:
-
-```bash
-./vcpkg/vcpkg install minio-cpp
-```
-
-Then, you can build the driver by running:
-
-```bash
-mkdir build
-cd build
-cmake ..
-cmake --build .
-```
-
-See [tests/README.md](tests/README.md) for information on running tests.
-
 [zarr]: https://zarr.readthedocs.io/en/stable/spec/v2.html
 
 [Blosc]: https://github.com/Blosc/c-blosc
