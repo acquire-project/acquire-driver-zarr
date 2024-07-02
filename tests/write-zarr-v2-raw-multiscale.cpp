@@ -11,7 +11,7 @@
 #include "acquire.h"
 #include "logger.h"
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;

@@ -9,7 +9,6 @@ if (${WITH_EXAMPLES})
     #
     set(examples
             no-striping
-            bucket-exists
     )
 
     foreach (name ${examples})
