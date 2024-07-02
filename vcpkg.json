@@ -7,6 +7,10 @@
     {
         "name": "nlohmann-json",
         "version>=": "3.11.3"
+    },
+    {
+        "name": "minio-cpp",
+        "version>=": "0.2.0"
     }
   ]
 }

@@ -1,6 +1,6 @@
 #include "zarrv2.writer.hh"
 #include "sink.creator.hh"
-#include "../zarr.hh"
+#include "zarr.hh"
 
 #include <cmath>
 #include <latch>
@@ -24,7 +24,7 @@ zarr::ZarrV2Writer::flush_impl_()
       (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
 
     {
-        SinkCreator creator(thread_pool_);
+        SinkCreator creator(thread_pool_, connection_pool_);
         if (!creator.make_data_sinks(data_root,
                                      config_.dimensions,
                                      common::chunks_along_dimension,

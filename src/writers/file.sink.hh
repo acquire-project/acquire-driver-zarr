@@ -4,6 +4,7 @@
 #include "sink.hh"
 #include "platform.h"
 
+#include <string>
 #include <memory>
 
 namespace acquire::sink::zarr {

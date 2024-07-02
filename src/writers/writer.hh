@@ -4,7 +4,9 @@
 #include "platform.h"
 #include "device/props/components.h"
 
-#include "../common.hh"
+#include "common/dimension.hh"
+#include "common/thread.pool.hh"
+#include "common/s3.connection.hh"
 #include "blosc.compressor.hh"
 #include "file.sink.hh"
 
@@ -69,6 +71,8 @@ struct Writer
     uint32_t frames_written_;
     uint32_t append_chunk_index_;
     bool is_finalizing_;
+
+    std::shared_ptr<common::S3ConnectionPool> connection_pool_;
 
     void make_buffers_() noexcept;
     void validate_frame_(const VideoFrame* frame);

@@ -5,6 +5,7 @@ enable_testing()
 
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(blosc CONFIG REQUIRED)
+find_package(miniocpp CONFIG REQUIRED)
 
 include(cmake/aq_require.cmake)
 include(cmake/git-versioning.cmake)

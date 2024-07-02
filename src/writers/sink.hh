@@ -1,12 +1,8 @@
 #ifndef H_ACQUIRE_STORAGE_ZARR_WRITERS_SINK_V0
 #define H_ACQUIRE_STORAGE_ZARR_WRITERS_SINK_V0
 
-#include <concepts>
-#include <cstddef>
-#include <queue>
-#include <string>
-
-#include "../common.hh"
+#include <cstdint> // uint8_t
+#include <cstddef> // size_t
 
 namespace acquire::sink::zarr {
 struct Sink

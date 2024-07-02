@@ -54,6 +54,7 @@ else ()
                 acquire-core-platform
                 acquire-video-runtime
                 nlohmann_json::nlohmann_json
+                miniocpp::miniocpp
         )
 
         add_test(NAME test-${tgt} COMMAND ${tgt})
