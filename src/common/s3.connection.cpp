@@ -1,6 +1,8 @@
 #include "s3.connection.hh"
 #include "utilities.hh"
 
+#include <miniocpp/client.h>
+
 namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 

@@ -1,13 +1,19 @@
 #ifndef H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
 #define H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
 
-#include <miniocpp/client.h>
-
 #include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
+
+namespace minio::s3 {
+class Client;
+} // namespace minio::s3
+
+namespace minio::creds {
+class StaticProvider;
+} // namespace minio::creds
 
 namespace acquire::sink::zarr::common {
 struct S3Connection final
