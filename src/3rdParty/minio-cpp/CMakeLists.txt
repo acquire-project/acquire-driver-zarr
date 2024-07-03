@@ -9,8 +9,8 @@ elseif(APPLE)
     set(lib "${pwd}/lib/osx/miniocpp.a")
     set(libd "${pwd}/lib/osx/miniocpp-debug.a")
 elseif(LINUX)
-    set(lib "${pwd}/lib/linux-amd64/miniocpp.a")
-    set(libd "${pwd}/lib/linux-amd64/miniocpp-debug.a")
+    set(lib "${pwd}/lib/linux-amd64/libminiocpp.a")
+    set(libd "${pwd}/lib/linux-amd64/libminiocpp-debug.a")
 endif()
 
 # Dependencies
