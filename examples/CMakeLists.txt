@@ -22,8 +22,8 @@ if (${WITH_EXAMPLES})
                 acquire-core-logger
                 acquire-core-platform
                 acquire-video-runtime
-                miniocpp::miniocpp
                 nlohmann_json::nlohmann_json
+                miniocpp::miniocpp
         )
     endforeach ()
 
