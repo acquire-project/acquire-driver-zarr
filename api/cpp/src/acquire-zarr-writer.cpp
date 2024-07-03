@@ -39,7 +39,8 @@ void AcquireZarrWriter::set_shape(const std::vector<uint32_t>& shape)
 
 void AcquireZarrWriter::set_uri(const std::string& uri)
 {
-    storage_properties_set_uri(&impl_->storage_properties_, uri.c_str(), uri.size());
+    //storage_properties_set_uri(&impl_->storage_properties_, uri.c_str(), uri.size());
+    set_acquire_string(impl_->storage_properties_.uri, uri);
 }
 
 std::string AcquireZarrWriter::get_uri() const
@@ -100,7 +101,7 @@ void AcquireZarrWriter::set_dimensions(const std::vector<std::string>& dimension
 
     for(auto i = 0; i < dimensions.size(); i++)
     {
-        set_acquire_string(dimensions[i], impl_->storage_properties_.acquisition_dimensions.data[i].name);
+        set_acquire_string(impl_->storage_properties_.acquisition_dimensions.data[i].name, dimensions[i]);
 
         switch(dimensions[i][0])
         {

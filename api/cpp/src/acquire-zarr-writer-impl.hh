@@ -8,7 +8,7 @@
 
 namespace asz = acquire::sink::zarr;
 
-void set_acquire_string(const std::string& src, String& dst);
+void set_acquire_string(String& dst, const std::string& src);
 std::string get_from_acquire_string(const String& src);
 
 // C++ implementation of the ZarrSink, which is just a wrapper around the Zarr storage class heirarchy.
@@ -23,6 +23,9 @@ class AcquireZarrWriter::Impl
 
     friend AcquireZarrWriter;
   protected:
+
+    /// @brief Create the Zarr sink object
+    virtual void create_zarr_sink();
 
     // use shared_ptr for polymorphism of zarr version.
     std::unique_ptr<struct asz::Zarr> zarr_sink_;

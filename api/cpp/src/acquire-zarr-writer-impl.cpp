@@ -2,18 +2,18 @@
 #include <iostream>
 
 
-void set_acquire_string(const std::string& src, String& dst)
+void set_acquire_string(String& dst, const std::string& src)
 {
-    dst.str = new char[src.size() + 1];
+    dst.nbytes = src.size() + 1; // +1 for null terminator
+    dst.str = new char[dst.nbytes];
     strncpy(dst.str, src.c_str(), src.size());
     dst.str[src.size()] = '\0';
-    dst.nbytes = src.size();
     dst.is_ref = 0;
 }
 
 std::string get_from_acquire_string(const String& src)
 {
-    return std::string(src.str, src.nbytes);
+    return std::string(src.str);
 }
 
 
@@ -70,6 +70,8 @@ AcquireZarrWriter::Impl::Impl()
     //zarr_sink_ = std::make_unique<struct asz::Zarr>();
     memset(&storage_properties_, 0, sizeof(storage_properties_));
     memset(&video_frame_, 0, sizeof(video_frame_));
+
+    create_zarr_sink();
 }
 
 void AcquireZarrWriter::Impl::open()
@@ -81,17 +83,13 @@ void AcquireZarrWriter::Impl::open()
 void AcquireZarrWriter::Impl::append(uint8_t* image_data, size_t image_size)
 {
 
-    // deleteme:
-    std::cout << "Appending image of size " << image_size << std::endl;
-    for (int i = 0; i < image_size; i++)
-    {
-        std::cout << (int)image_data[i] << " ";
-    }
-    std::cout << std::endl;
-    return;
-
     // todo: check image size against expected size
     memcpy(video_frame_.data, image_data, image_size);
     const VideoFrame* const_frame = &video_frame_;
     zarr_sink_->append(const_frame, image_size);
+}
+
+void AcquireZarrWriter::Impl::create_zarr_sink()
+{
+    zarr_sink_ = std::make_unique<struct asz::ZarrV2>();
 }
