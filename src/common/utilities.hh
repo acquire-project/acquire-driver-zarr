@@ -1,9 +1,10 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_COMMON_V0
-#define H_ACQUIRE_STORAGE_ZARR_COMMON_V0
+#ifndef H_ACQUIRE_STORAGE_ZARR_COMMON_UTILITIES_V0
+#define H_ACQUIRE_STORAGE_ZARR_COMMON_UTILITIES_V0
 
 #include "logger.h"
 #include "device/props/components.h"
 #include "device/props/storage.h"
+#include "dimension.hh"
 
 #include <condition_variable>
 #include <filesystem>
@@ -34,62 +35,10 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
-struct Dimension
-{
-  public:
-    explicit Dimension(const std::string& name,
-                       DimensionType kind,
-                       uint32_t array_size_px,
-                       uint32_t chunk_size_px,
-                       uint32_t shard_size_chunks);
-    explicit Dimension(const StorageDimension& dim);
-
-    const std::string name;
-    const DimensionType kind;
-    const uint32_t array_size_px;
-    const uint32_t chunk_size_px;
-    const uint32_t shard_size_chunks;
-};
 
 struct Zarr;
 
 namespace common {
-struct ThreadPool final
-{
-  public:
-    using JobT = std::function<bool(std::string&)>;
-
-    // The error handler `err` is called when a job returns false. This
-    // can happen when the job encounters an error, or otherwise fails. The
-    // std::string& argument to the error handler is a diagnostic message from
-    // the failing job and is logged to the error stream by the Zarr driver when
-    // the next call to `append()` is made.
-    ThreadPool(size_t n_threads, std::function<void(const std::string&)> err);
-    ~ThreadPool() noexcept;
-
-    void push_to_job_queue(JobT&& job);
-
-    /**
-     * @brief Block until all jobs on the queue have processed, then spin down
-     * the threads.
-     * @note After calling this function, the job queue no longer accepts jobs.
-     */
-    void await_stop() noexcept;
-
-  private:
-    std::function<void(const std::string&)> error_handler_;
-
-    std::vector<std::thread> threads_;
-    mutable std::mutex jobs_mutex_;
-    std::condition_variable cv_;
-    std::queue<JobT> jobs_;
-
-    std::atomic<bool> is_accepting_jobs_;
-
-    std::optional<common::ThreadPool::JobT> pop_from_job_queue_() noexcept;
-    [[nodiscard]] bool should_stop_() const noexcept;
-    void thread_worker_();
-};
 
 /// @brief Get the number of chunks along a dimension.
 /// @param dimension A dimension.
@@ -123,6 +72,22 @@ number_of_shards(const std::vector<Dimension>& dimensions);
 size_t
 chunks_per_shard(const std::vector<Dimension>& dimensions);
 
+/// @brief Get the shard index for a given chunk index, given array dimensions.
+/// @param chunk_index The index of the chunk.
+/// @param dimensions The dimensions of the array.
+/// @return The index of the shard containing the chunk.
+size_t
+shard_index_for_chunk(size_t chunk_index,
+                      const std::vector<Dimension>& dimensions);
+
+/// @brief Get the internal index of a chunk within a shard.
+/// @param chunk_index The index of the chunk.
+/// @param dimensions The dimensions of the array.
+/// @return The index of the chunk within the shard.
+size_t
+shard_internal_index(size_t chunk_index,
+                     const std::vector<Dimension>& dimensions);
+
 /// @brief Get the size, in bytes, of a single chunk.
 /// @param dimensions The dimensions of the array.
 /// @param dtype The pixel type of the array.
@@ -150,7 +115,19 @@ sample_type_to_string(SampleType t) noexcept;
 /// @return Aligned size.
 size_t
 align_up(size_t n, size_t align);
+
+/// @brief Split a URI by the '/' delimiter.
+/// @param uri String to split.
+/// @return Vector of strings.
+std::vector<std::string>
+split_uri(const std::string& uri);
+
+/// @brief Check if a URI is an S3 URI.
+/// @param uri String to check.
+/// @return True if the URI is an S3 URI, false otherwise.
+bool
+is_s3_uri(const std::string& uri);
 } // namespace acquire::sink::zarr::common
 } // namespace acquire::sink::zarr
 
-#endif // H_ACQUIRE_STORAGE_ZARR_COMMON_V0
+#endif // H_ACQUIRE_STORAGE_ZARR_COMMON_UTILITIES_V0

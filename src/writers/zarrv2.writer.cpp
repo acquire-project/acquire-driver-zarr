@@ -1,6 +1,6 @@
 #include "zarrv2.writer.hh"
 #include "sink.creator.hh"
-#include "../zarr.hh"
+#include "zarr.hh"
 
 #include <cmath>
 #include <latch>
