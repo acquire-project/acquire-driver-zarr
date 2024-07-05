@@ -3,6 +3,9 @@ name: Build
 on:
   push:
     branches: [ "main" ]
+  pull_request: # TODO (aliddell): revert
+    branches:
+      - main
 
 jobs:
   build:
@@ -16,7 +19,7 @@ jobs:
           - platform: "ubuntu-latest"
             vcpkg_triplet: "x64-linux"
           - platform: "macos-latest"
-            vcpkg_triplet: "arm64-osx"
+            vcpkg_triplet: "x64-osx"
 
     runs-on: ${{ matrix.platform }}
 
