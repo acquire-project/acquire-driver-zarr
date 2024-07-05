@@ -141,8 +141,9 @@ scale_image(const VideoFrame* src)
     const auto height = src->shape.dims.height;
     const auto h_pad = height + (height % downscale);
 
-    auto* dst = (VideoFrame*)malloc(sizeof(VideoFrame) +
-                                    w_pad * h_pad * factor * sizeof(T));
+    const size_t bytes_of_frame = common::align_up(
+      sizeof(VideoFrame) + w_pad * h_pad * factor * bytes_of_type, 8);
+    auto* dst = (VideoFrame*)malloc(bytes_of_frame);
     memcpy(dst, src, sizeof(VideoFrame));
 
     dst->shape.dims.width = w_pad / downscale;
@@ -152,8 +153,7 @@ scale_image(const VideoFrame* src)
     dst->shape.strides.planes =
       dst->shape.strides.height * dst->shape.dims.height;
 
-    dst->bytes_of_frame =
-      common::align_up(bytes_of_image(&dst->shape) + sizeof(*dst), 8);
+    dst->bytes_of_frame = bytes_of_frame;
 
     const auto* src_img = (T*)src->data;
     auto* dst_img = (T*)dst->data;
@@ -690,8 +690,12 @@ template<typename T>
 void
 test_average_frame_inner(const SampleType& stype)
 {
-    auto* src = (VideoFrame*)malloc(sizeof(VideoFrame) + 9 * sizeof(T));
-    src->bytes_of_frame = common::align_up(sizeof(*src) + 9 * sizeof(T), 8);
+    const size_t bytes_of_frame =
+      common::align_up(sizeof(VideoFrame) + 9 * sizeof(T), 8);
+    auto* src = (VideoFrame*)malloc(bytes_of_frame);
+    CHECK(src);
+
+    src->bytes_of_frame = bytes_of_frame;
     src->shape = {
         .dims = {
           .channels = 1,
