@@ -41,7 +41,8 @@ struct Writer
   public:
     Writer() = delete;
     Writer(const WriterConfig& config,
-           std::shared_ptr<common::ThreadPool> thread_pool);
+           std::shared_ptr<common::ThreadPool> thread_pool,
+           std::shared_ptr<common::S3ConnectionPool> connection_pool);
 
     virtual ~Writer() noexcept = default;
 

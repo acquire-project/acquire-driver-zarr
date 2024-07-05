@@ -3,13 +3,7 @@
 #include "common/utilities.hh"
 #include "logger.h"
 
-// #include <aws/core/auth/AWSCredentialsProviderChain.h>
-// #include <aws/core/utils/HashingUtils.h>
-// #include <aws/s3/S3Client.h>
-// #include <aws/s3/model/CreateMultipartUploadRequest.h>
-// #include <aws/s3/model/CompleteMultipartUploadRequest.h>
-// #include <aws/s3/model/PutObjectRequest.h>
-// #include <aws/s3/model/UploadPartRequest.h>
+#include <miniocpp/client.h>
 
 namespace zarr = acquire::sink::zarr;
 
@@ -21,6 +15,11 @@ zarr::S3Sink::S3Sink(const std::string& bucket_name,
   , connection_pool_{ connection_pool }
   , buf_(5 << 20, 0) // 5 MiB is the minimum multipart upload size
 {
+}
+
+zarr::S3Sink::~S3Sink()
+{
+    close_();
 }
 
 bool
@@ -72,24 +71,11 @@ zarr::S3Sink::put_object_()
     bool retval = false;
 
     try {
-        //        std::shared_ptr<Aws::S3::S3Client> client =
-        //        connection->client();
-        //
-        //        Aws::S3::Model::PutObjectRequest request;
-        //        request.SetBucket(bucket_name_.c_str());
-        //        request.SetKey(object_key_.c_str());
-        //        request.SetContentType("application/octet-stream");
-        //
-        //        auto upload_stream_ptr =
-        //          Aws::MakeShared<Aws::StringStream>(object_key_.c_str());
-        //        const auto* data = reinterpret_cast<const char*>(buf_.data());
-        //        upload_stream_ptr->write(data, (std::streamsize)buf_.size());
-        //        request.SetBody(upload_stream_ptr);
-        //
-        //        auto outcome = client->PutObject(request);
-        //        CHECK(outcome.IsSuccess());
-        //
-        //        retval = true;
+        std::string etag;
+        CHECK(connection->put_object(
+          bucket_name_, object_key_, buf_.data(), buf_size_, etag));
+
+        retval = true;
         buf_size_ = 0;
     } catch (const std::exception& exc) {
         LOGE("Error: %s", exc.what());
@@ -115,40 +101,29 @@ zarr::S3Sink::flush_part_()
         return false;
     }
 
-    //    std::shared_ptr<Aws::S3::S3Client> client = connection->client();
-    //
-    //    // initiate upload request
-    //    if (upload_id_.empty()) {
-    //        Aws::S3::Model::CreateMultipartUploadRequest create_request;
-    //        create_request.SetBucket(bucket_name_.c_str());
-    //        create_request.SetKey(object_key_.c_str());
-    //        create_request.SetContentType("application/octet-stream");
-    //
-    //        auto create_outcome =
-    //        client->CreateMultipartUpload(create_request); upload_id_ =
-    //        create_outcome.GetResult().GetUploadId();
-    //    }
-    //
-    //    auto part_number = (int)callables_.size() + 1;
-    //
-    //    Aws::S3::Model::UploadPartRequest request;
-    //    request.SetBucket(bucket_name_.c_str());
-    //    request.SetKey(object_key_.c_str());
-    //    request.SetPartNumber(part_number);
-    //    request.SetUploadId(upload_id_.c_str());
-    //
-    //    auto upload_stream_ptr =
-    //      Aws::MakeShared<Aws::StringStream>(object_key_.c_str());
-    //
-    //    const auto* data = reinterpret_cast<const char*>(buf_.data());
-    //    upload_stream_ptr->write(data, (std::streamsize)buf_.size());
-    //    request.SetBody(upload_stream_ptr);
-    //
-    //    auto
-    //    part_md5(Aws::Utils::HashingUtils::CalculateMD5(*upload_stream_ptr));
-    //    request.SetContentMD5(Aws::Utils::HashingUtils::Base64Encode(part_md5));
-    //
-    //    callables_.push_back(client->UploadPartCallable(request));
+    std::string upload_id = upload_id_;
+    if (upload_id.empty()) {
+        CHECK(connection->create_multipart_object(
+          bucket_name_, object_key_, upload_id));
+    }
+
+    minio::s3::Part part;
+    // TODO (aliddell): what if a part fails to upload?
+    part.number = (unsigned int)parts_.size() + 1;
+
+    CHECK(connection->upload_multipart_object_part(bucket_name_,
+                                                   object_key_,
+                                                   upload_id,
+                                                   buf_.data(),
+                                                   buf_size_,
+                                                   part.number,
+                                                   part.etag));
+
+    parts_.push_back(part);
+
+    // set only when the part is successfully uploaded
+    // TODO (aliddell): why?
+    upload_id_ = upload_id;
 
     // cleanup
     connection_pool_->release_connection(std::move(connection));
@@ -169,46 +144,11 @@ zarr::S3Sink::finalize_multipart_upload_()
         return false;
     }
 
-    //    std::shared_ptr<Aws::S3::S3Client> client = connection->client();
-    //
     bool retval = false;
 
     try {
-        //        Aws::S3::Model::CompleteMultipartUploadRequest
-        //        complete_request;
-        //        complete_request.SetBucket(bucket_name_.c_str());
-        //        complete_request.SetKey(object_key_.c_str());
-        //        complete_request.SetUploadId(upload_id_.c_str());
-        //
-        //        std::vector<Aws::S3::Model::CompletedPart> parts;
-        //        for (auto i = 0; i < callables_.size(); ++i) {
-        //            auto& callable = callables_.at(i);
-        //            auto part_outcome = callable.get();
-        //            const auto etag = part_outcome.GetResult().GetETag();
-        //            CHECK(!etag.empty());
-        //
-        //            Aws::S3::Model::CompletedPart part;
-        //            part.SetPartNumber(i + 1);
-        //            part.SetETag(etag);
-        //
-        //            parts.push_back(part);
-        //        }
-        //
-        //        Aws::S3::Model::CompletedMultipartUpload completed_mpu;
-        //        for (const auto& part : parts) {
-        //            completed_mpu.AddParts(part);
-        //        }
-        //        complete_request.WithMultipartUpload(completed_mpu);
-        //
-        //        auto outcome =
-        //        client->CompleteMultipartUpload(complete_request);
-        //        CHECK(outcome.IsSuccess());
-        //
-        //        // cleanup
-        //        upload_id_.clear();
-        //        callables_.clear();
-
-        retval = true;
+        retval = connection->complete_multipart_object(
+          bucket_name_, object_key_, upload_id_, parts_);
     } catch (const std::exception& exc) {
         LOGE("Error: %s", exc.what());
     } catch (...) {
@@ -224,6 +164,7 @@ void
 zarr::S3Sink::close_()
 {
     try {
+        // upload_id_ is populated after successfully uploading a part
         if (upload_id_.empty()) {
             CHECK(put_object_());
         } else {
@@ -236,248 +177,3 @@ zarr::S3Sink::close_()
         LOGE("Error: (unknown)");
     }
 }
-
-#ifndef NO_UNIT_TESTS
-#ifdef _WIN32
-#define acquire_export __declspec(dllexport)
-#else
-#define acquire_export
-#endif // _WIN32
-
-// #include <aws/core/Aws.h>
-// #include <aws/s3/model/CreateBucketRequest.h>
-// #include <aws/s3/model/HeadObjectRequest.h>
-// #include <aws/s3/model/GetObjectRequest.h>
-// #include <aws/s3/model/DeleteObjectRequest.h>
-
-#if __has_include("../credentials.hpp")
-#include "../credentials.hpp"
-#endif
-
-namespace {
-// void
-// create_bucket(const std::string bucket_name,
-//               const std::shared_ptr<Aws::S3::S3Client>& client)
-//{
-//     // list buckets, check if the bucket already exists
-//     Aws::S3::Model::ListBucketsOutcome outcome = client->ListBuckets();
-//     EXPECT(outcome.IsSuccess(),
-//            "Failed to list buckets: %s",
-//            outcome.GetError().GetMessage().c_str());
-//
-//     for (auto& bucket : outcome.GetResult().GetBuckets()) {
-//         if (bucket.GetName() == bucket_name) {
-//             return;
-//         }
-//     }
-//
-//     // create the bucket
-//     Aws::S3::Model::CreateBucketRequest request;
-//     request.SetBucket(bucket_name.c_str());
-//     auto create_outcome = client->CreateBucket(request);
-//     EXPECT(create_outcome.IsSuccess(),
-//            "Failed to create bucket '%s': %s",
-//            bucket_name.c_str(),
-//            create_outcome.GetError().GetMessage().c_str());
-// }
-//
-// void
-// validate_object_exists(const std::string& bucket_name,
-//                        const std::string& object_key,
-//                        const std::shared_ptr<Aws::S3::S3Client>& client)
-//{
-//     Aws::S3::Model::HeadObjectRequest request;
-//     request.SetBucket(bucket_name.c_str());
-//     request.SetKey(object_key.c_str());
-//
-//     auto outcome = client->HeadObject(request);
-//     CHECK(outcome.IsSuccess());
-// }
-//
-// void
-// validate_object_contents(const std::string& bucket_name,
-//                          const std::string& object_key,
-//                          const std::shared_ptr<Aws::S3::S3Client>& client,
-//                          const std::vector<uint8_t>& expected_data)
-//{
-//     Aws::S3::Model::GetObjectRequest request;
-//     request.SetBucket(bucket_name.c_str());
-//     request.SetKey(object_key.c_str());
-//
-//     auto outcome = client->GetObject(request);
-//     CHECK(outcome.IsSuccess());
-//
-//     auto& stream = outcome.GetResultWithOwnership().GetBody();
-//     std::string data;
-//     data.resize(expected_data.size());
-//     stream.read(&data[0], data.size());
-//
-//     for (auto i = 0; i < data.size(); ++i) {
-//         CHECK(data.at(i) == expected_data.at(i));
-//     }
-// }
-//
-// void
-// delete_object(const std::string& bucket_name,
-//               const std::string& object_key,
-//               const std::shared_ptr<Aws::S3::S3Client>& client)
-//{
-//     Aws::S3::Model::DeleteObjectRequest request;
-//     request.SetBucket(bucket_name.c_str());
-//     request.SetKey(object_key.c_str());
-//
-//     auto outcome = client->DeleteObject(request);
-//     CHECK(outcome.IsSuccess());
-// }
-} // namespace
-
-extern "C"
-{
-    acquire_export int unit_test__s3_sink__write_put_object()
-    {
-#ifdef ZARR_S3_ENDPOINT
-        int retval = 0;
-
-        const std::string bucket_name = "s3-sink-write-put-object";
-        const std::string object_key = "test-put-object";
-
-        //        Aws::SDKOptions options;
-        //        Aws::InitAPI(options);
-
-        try {
-            //            auto connection_pool =
-            //            std::make_shared<zarr::S3ConnectionPool>(
-            //              1,
-            //              ZARR_S3_ENDPOINT,
-            //              ZARR_S3_ACCESS_KEY_ID,
-            //              ZARR_S3_SECRET_ACCESS_KEY);
-            //            zarr::S3Sink sink(bucket_name, object_key,
-            //            connection_pool);
-            //
-            //            auto connection = connection_pool->get_connection();
-            //            CHECK(connection);
-            //            auto client = connection->client();
-            //
-            //            create_bucket(bucket_name, client);
-            //            connection_pool->release_connection(std::move(connection));
-            //
-            //            const std::string data = "Hello, Acquire!";
-            //            CHECK(sink.write(0, (const uint8_t*)data.c_str(),
-            //            data.size()));
-            //
-            //            sink.close();
-            //
-            //            connection = connection_pool->get_connection();
-            //            CHECK(connection);
-            //            client = connection->client();
-            //
-            //            // check that the object exists
-            //            validate_object_exists(bucket_name, object_key,
-            //            client);
-            //
-            //            // validate object contents
-            //            std::vector<uint8_t> expected_data;
-            //
-            //            // contains "Hello, Acquire!" followed by ~5MB of
-            //            zeros expected_data.insert(expected_data.end(),
-            //            data.begin(), data.end()); expected_data.resize(5 <<
-            //            20, 0);
-            //
-            //            validate_object_contents(
-            //              bucket_name, object_key, client, expected_data);
-            //
-            //            // cleanup
-            //            delete_object(bucket_name, object_key, client);
-
-            retval = 1;
-        } catch (const std::exception& exc) {
-            LOGE("Caught exception: %s", exc.what());
-        } catch (...) {
-            LOGE("Caught unknown exception");
-        }
-
-        //        Aws::ShutdownAPI(options);
-        return retval;
-#else
-        return 1;
-#endif
-    }
-
-    acquire_export int unit_test__s3_sink__write_multipart()
-    {
-#ifdef ZARR_S3_ENDPOINT
-        int retval = 0;
-
-        const std::string bucket_name = "s3-sink-write-multipart";
-        const std::string object_key = "test-multipart-object";
-
-        //        Aws::SDKOptions options;
-        //        Aws::InitAPI(options);
-
-        try {
-            //            auto connection_pool =
-            //            std::make_shared<zarr::S3ConnectionPool>(
-            //              1,
-            //              ZARR_S3_ENDPOINT,
-            //              ZARR_S3_ACCESS_KEY_ID,
-            //              ZARR_S3_SECRET_ACCESS_KEY);
-            //
-            //            auto connection = connection_pool->get_connection();
-            //            CHECK(connection);
-            //            auto client = connection->client();
-            //
-            //            create_bucket(bucket_name, client);
-            //            connection_pool->release_connection(std::move(connection));
-            //
-            //            zarr::S3Sink sink(bucket_name, object_key,
-            //            connection_pool); const std::string data = "Hello,
-            //            Acquire!"; for (auto i = 0; i < 5 << 20; ++i) {
-            //                CHECK(sink.write(0, // offset is ignored for S3
-            //                writes
-            //                                 (const uint8_t*)data.c_str(),
-            //                                 data.size()));
-            //            }
-            //
-            //            sink.close();
-            //
-            //            connection = connection_pool->get_connection();
-            //            CHECK(connection);
-            //            client = connection->client();
-            //
-            //            create_bucket(bucket_name, client);
-            //
-            //            // check that the object exists
-            //            validate_object_exists(bucket_name, object_key,
-            //            client);
-            //
-            //            // validate object contents
-            //
-            //            // contains "Hello, Acquire!" repeated 5MB times
-            //            std::vector<uint8_t> expected_data;
-            //            for (auto i = 0; i < 5 << 20; ++i) {
-            //                expected_data.insert(
-            //                  expected_data.end(), data.begin(), data.end());
-            //            }
-            //
-            //            validate_object_contents(
-            //              bucket_name, object_key, client, expected_data);
-            //
-            //            // cleanup
-            //            delete_object(bucket_name, object_key, client);
-
-            retval = 1;
-        } catch (const std::exception& exc) {
-            LOGE("Caught exception: %s", exc.what());
-        } catch (...) {
-            LOGE("Caught unknown exception");
-        }
-
-        //        Aws::ShutdownAPI(options);
-        return retval;
-#else
-        return 1;
-#endif
-    }
-}
-
-#endif // NO_UNIT_TESTS

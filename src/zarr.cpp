@@ -62,10 +62,11 @@ validate_props(const StorageProperties* props)
                   props->external_metadata_json.nbytes);
 
     std::string uri{ props->uri.str, props->uri.nbytes - 1 };
-    EXPECT(!uri.starts_with("s3://"), "S3 URIs are not yet supported.");
 
-    // check that the URI value points to a writable directory
-    {
+    if (common::is_s3_uri(uri)) {
+        std::vector<std::string> tokens = common::split_uri(uri);
+        CHECK(tokens.size() > 2); // http://bucket/key
+    } else {
         const fs::path path = as_path(*props);
         fs::path parent_path = path.parent_path().string();
         if (parent_path.empty())
@@ -157,7 +158,7 @@ scale_image(const VideoFrame* src)
 
     const auto* src_img = (T*)src->data;
     auto* dst_img = (T*)dst->data;
-    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
+    memset(dst_img, 0, bytes_of_image(&dst->shape));
 
     size_t dst_idx = 0;
     for (auto row = 0; row < height; row += downscale) {
@@ -343,12 +344,31 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // checks the directory exists and is writable
     validate_props(props);
-    // TODO (aliddell): we will eventually support S3 URIs,
-    //  dataset_root_ should be a string
-    dataset_root_ = as_path(*props).string();
+
+    std::string uri(props->uri.str, props->uri.nbytes - 1);
+
+    if (common::is_s3_uri(uri)) {
+        std::vector<std::string> tokens = common::split_uri(uri);
+        CHECK(tokens.size() > 2); // http://bucket/key
+        dataset_root_ = uri;
+    } else {
+        dataset_root_ = as_path(*props).string();
+    }
+
+    if (props->access_key_id.str) {
+        access_key_id_ = std::string(props->access_key_id.str,
+                                     props->access_key_id.nbytes - 1);
+    }
+
+    if (props->secret_access_key.str) {
+        secret_access_key_ = std::string(props->secret_access_key.str,
+                                         props->secret_access_key.nbytes - 1);
+    }
 
     if (props->external_metadata_json.str) {
-        external_metadata_json_ = props->external_metadata_json.str;
+        external_metadata_json_ =
+          std::string(props->external_metadata_json.str,
+                      props->external_metadata_json.nbytes - 1);
     }
 
     pixel_scale_um_ = props->pixel_scale_um;
@@ -393,6 +413,28 @@ zarr::Zarr::get(StorageProperties* props) const
                                   pixel_scale_um_,
                                   acquisition_dimensions_.size()));
 
+    // set access key and secret
+    {
+        const char* access_key_id =
+          access_key_id_.empty() ? nullptr : access_key_id_.c_str();
+        const size_t bytes_of_access_key_id =
+          access_key_id ? access_key_id_.size() + 1 : 0;
+
+        const char* secret_access_key =
+          secret_access_key_.empty() ? nullptr : secret_access_key_.c_str();
+        const size_t bytes_of_secret_access_key =
+          secret_access_key ? secret_access_key_.size() + 1 : 0;
+
+        if (access_key_id && secret_access_key) {
+            CHECK(storage_properties_set_access_key_and_secret(
+              props,
+              access_key_id,
+              bytes_of_access_key_id,
+              secret_access_key,
+              bytes_of_secret_access_key));
+        }
+    }
+
     for (auto i = 0; i < acquisition_dimensions_.size(); ++i) {
         const auto dim = acquisition_dimensions_.at(i);
         CHECK(storage_properties_set_dimension(props,
@@ -423,18 +465,29 @@ zarr::Zarr::start()
 {
     error_ = true;
 
-    if (fs::exists(dataset_root_)) {
-        std::error_code ec;
-        EXPECT(fs::remove_all(dataset_root_, ec),
-               R"(Failed to remove folder for "%s": %s)",
-               dataset_root_.c_str(),
-               ec.message().c_str());
-    }
-    fs::create_directories(dataset_root_);
-
     thread_pool_ = std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
+
+    if (common::is_s3_uri(dataset_root_)) {
+        std::vector<std::string> tokens = common::split_uri(dataset_root_);
+        CHECK(tokens.size() > 1);
+        const std::string endpoint = tokens[0] + "//" + tokens[1];
+        connection_pool_ = std::make_shared<common::S3ConnectionPool>(
+          8, endpoint, access_key_id_, secret_access_key_);
+    } else {
+        // remove the folder if it exists
+        if (fs::exists(dataset_root_)) {
+            std::error_code ec;
+            EXPECT(fs::remove_all(dataset_root_, ec),
+                   R"(Failed to remove folder for "%s": %s)",
+                   dataset_root_.c_str(),
+                   ec.message().c_str());
+        }
+
+        // create the dataset folder
+        fs::create_directories(dataset_root_);
+    }
 
     allocate_writers_();
 

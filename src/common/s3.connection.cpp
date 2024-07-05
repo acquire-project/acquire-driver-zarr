@@ -44,7 +44,7 @@ common::S3Connection::bucket_exists(const std::string& bucket_name)
 
         return response.exist;
     } catch (const std::exception& e) {
-        LOGE("Failed to list buckets: %s", e.what());
+        LOGE("Failed to check existence of bucket: %s", e.what());
     }
 
     return false;
@@ -118,7 +118,6 @@ common::S3Connection::object_exists(const std::string& bucket_name,
         args.object = object_name;
 
         minio::s3::StatObjectResponse response = client_->StatObject(args);
-        CHECK(response);
 
         return (bool)response;
     } catch (const std::exception& e) {

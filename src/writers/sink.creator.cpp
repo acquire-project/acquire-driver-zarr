@@ -311,8 +311,9 @@ zarr::SinkCreator::make_metadata_sinks_(
 
     // make files
     size_t n_paths = file_paths.size();
+    const std::string prefix = base_dir.empty() ? "" : base_dir + "/";
     for (auto i = 0; i < n_paths; ++i) {
-        const auto path = base_dir + "/" + file_paths.front();
+        const auto path = prefix + file_paths.front();
         file_paths.pop();
         file_paths.push(path);
     }

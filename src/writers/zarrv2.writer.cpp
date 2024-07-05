@@ -10,8 +10,9 @@ namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV2Writer::ZarrV2Writer(
   const WriterConfig& config,
-  std::shared_ptr<common::ThreadPool> thread_pool)
-  : Writer(config, thread_pool)
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  std::shared_ptr<common::S3ConnectionPool> connection_pool)
+  : Writer(config, thread_pool, connection_pool)
 {
 }
 
@@ -21,7 +22,7 @@ zarr::ZarrV2Writer::flush_impl_()
     // create chunk files
     CHECK(sinks_.empty());
     const std::string data_root =
-      (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
+      data_root_ + "/" + std::to_string(append_chunk_index_);
 
     {
         SinkCreator creator(thread_pool_, connection_pool_);
@@ -124,7 +125,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(config, thread_pool);
+            zarr::ZarrV2Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = 64 * 48 * 2;
 
@@ -240,7 +242,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(config, thread_pool);
+            zarr::ZarrV2Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame =
@@ -339,7 +342,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(config, thread_pool);
+            zarr::ZarrV2Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame =
