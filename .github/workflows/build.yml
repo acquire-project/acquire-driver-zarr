@@ -3,8 +3,6 @@ name: Build
 on:
   push:
     branches: [ "main" ]
-  pull_request: # TODO (aliddell): revert
-    branches: [ "main" ]
 
 jobs:
   build:
@@ -45,19 +43,9 @@ jobs:
         shell: bash
 
       - name: CMake
-        if: matrix.platform != 'macos-latest'
         run: |
           cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
           cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
-
-      - name: CMake (macOS)
-        if: matrix.platform == 'macos-latest'
-        run: |
-          curl -o lipo-dir-merge.py https://raw.githubusercontent.com/faaxm/lipo-dir-merge/main/lipo-dir-merge.py
-          ${{github.workspace}}/vcpkg/vcpkg install --triplet=x64-osx
-          ${{github.workspace}}/vcpkg/vcpkg install --triplet=arm64-osx
-          brew install tree
-          tree
 
       - name: Build
         run: |
