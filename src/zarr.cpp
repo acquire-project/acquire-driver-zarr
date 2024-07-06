@@ -690,8 +690,12 @@ template<typename T>
 void
 test_average_frame_inner(const SampleType& stype)
 {
-    auto* src = (VideoFrame*)malloc(sizeof(VideoFrame) + 9 * sizeof(T));
-    src->bytes_of_frame = common::align_up(sizeof(*src) + 9 * sizeof(T), 8);
+    const size_t bytes_of_frame =
+      common::align_up(sizeof(VideoFrame) + 9 * sizeof(T), 8);
+    auto* src = (VideoFrame*)malloc(bytes_of_frame);
+    CHECK(src);
+
+    src->bytes_of_frame = bytes_of_frame;
     src->shape = {
         .dims = {
           .channels = 1,
