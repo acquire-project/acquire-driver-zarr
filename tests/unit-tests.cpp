@@ -84,6 +84,9 @@ main()
 #define CASE(e) { .name = #e, .test = (int (*)())lib_load(&lib, #e) }
         CASE(unit_test__average_frame),
         CASE(unit_test__thread_pool__push_to_job_queue),
+        CASE(unit_test__s3_connection__make_bucket),
+        CASE(unit_test__s3_connection__put_object),
+        CASE(unit_test__s3_connection__upload_multipart_object),
         CASE(unit_test__sink_creator__create_chunk_file_sinks),
         CASE(unit_test__sink_creator__create_shard_file_sinks),
         CASE(unit_test__chunk_lattice_index),
