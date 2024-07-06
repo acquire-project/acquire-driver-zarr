@@ -9,8 +9,9 @@ namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV3Writer::ZarrV3Writer(
   const WriterConfig& array_spec,
-  std::shared_ptr<common::ThreadPool> thread_pool)
-  : Writer(array_spec, thread_pool)
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  std::shared_ptr<common::S3ConnectionPool> connection_pool)
+  : Writer(array_spec, thread_pool, connection_pool)
   , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
   , shard_tables_{ common::number_of_shards(array_spec.dimensions) }
 {
@@ -33,7 +34,7 @@ zarr::ZarrV3Writer::flush_impl_()
         .string();
 
     {
-        SinkCreator creator(thread_pool_);
+        SinkCreator creator(thread_pool_, connection_pool_);
         if (sinks_.empty() &&
             !creator.make_data_sinks(data_root,
                                      config_.dimensions,
@@ -208,7 +209,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(config, thread_pool);
+            zarr::ZarrV3Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = 64 * 48 * 2;
 
@@ -345,7 +347,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(config, thread_pool);
+            zarr::ZarrV3Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame =
@@ -466,7 +469,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(config, thread_pool);
+            zarr::ZarrV3Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
             frame->bytes_of_frame =

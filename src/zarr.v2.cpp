@@ -50,7 +50,8 @@ zarr::ZarrV2::allocate_writers_()
         .compression_params = blosc_compression_params_,
     };
 
-    writers_.push_back(std::make_shared<ZarrV2Writer>(config, thread_pool_));
+    writers_.push_back(
+      std::make_shared<ZarrV2Writer>(config, thread_pool_, connection_pool_));
 
     if (enable_multiscale_) {
         WriterConfig downsampled_config;
@@ -59,8 +60,8 @@ zarr::ZarrV2::allocate_writers_()
         int level = 1;
         while (do_downsample) {
             do_downsample = downsample(config, downsampled_config);
-            writers_.push_back(
-              std::make_shared<ZarrV2Writer>(downsampled_config, thread_pool_));
+            writers_.push_back(std::make_shared<ZarrV2Writer>(
+              downsampled_config, thread_pool_, connection_pool_));
             scaled_frames_.emplace(level++, std::nullopt);
 
             config = std::move(downsampled_config);
@@ -72,7 +73,7 @@ zarr::ZarrV2::allocate_writers_()
 void
 zarr::ZarrV2::make_metadata_sinks_()
 {
-    SinkCreator creator(thread_pool_);
+    SinkCreator creator(thread_pool_, connection_pool_);
     CHECK(creator.create_v2_metadata_sinks(
       dataset_root_, writers_.size(), metadata_sinks_));
 }
