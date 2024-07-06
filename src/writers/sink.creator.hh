@@ -75,6 +75,20 @@ struct SinkCreator final
       std::queue<std::string>& dir_paths,
       std::queue<std::string>& file_paths,
       std::vector<std::unique_ptr<Sink>>& metadata_sinks);
+
+    /// @brief Create an S3 bucket.
+    /// @param[in] bucket_name The name of the bucket to create.
+    /// @return True iff the bucket was created successfully.
+    [[nodiscard]] bool make_s3_bucket_(const std::string& bucket_name);
+
+    /// @brief Create a collection of S3 objects.
+    /// @param[in] bucket_name The name of the bucket.
+    /// @param[in,out] object_keys The keys of the objects to create.
+    /// @param[out] sinks The sinks created.
+    [[nodiscard]] bool make_s3_objects_(
+      const std::string& bucket_name,
+      std::queue<std::string>& object_keys,
+      std::vector<std::unique_ptr<Sink>>& sinks);
 };
 } // namespace acquire::sink::zarr
 

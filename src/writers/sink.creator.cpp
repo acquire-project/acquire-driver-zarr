@@ -1,5 +1,6 @@
 #include "sink.creator.hh"
 #include "file.sink.hh"
+#include "s3.sink.hh"
 #include "common/utilities.hh"
 
 #include <latch>
@@ -25,14 +26,38 @@ zarr::SinkCreator::make_data_sinks(
 {
     std::queue<std::string> paths;
 
-    std::string base_dir = base_uri;
-    if (base_uri.starts_with("file://")) {
-        base_dir = base_uri.substr(7);
-    }
-    paths.emplace(base_dir);
+    bool is_s3 = common::is_s3_uri(base_uri);
+    std::string bucket_name;
+    if (is_s3) {
+        auto tokens = common::split_uri(base_uri);
+        CHECK(tokens.size() > 2);
+        bucket_name = tokens.at(2);
 
-    if (!make_dirs_(paths)) {
-        return false;
+        // create the bucket if it doesn't already exist
+        if (!make_s3_bucket_(bucket_name)) {
+            return false;
+        }
+
+        std::string base_dir;
+        for (auto i = 3; i < tokens.size() - 1; ++i) {
+            base_dir += tokens.at(i) + "/";
+        }
+        if (tokens.size() > 3) {
+            base_dir += tokens.at(tokens.size() - 1);
+        }
+
+        paths.push(base_dir);
+    } else {
+        std::string base_dir = base_uri;
+
+        if (base_uri.starts_with("file://")) {
+            base_dir = base_uri.substr(7);
+        }
+        paths.emplace(base_dir);
+
+        if (!make_dirs_(paths)) {
+            return false;
+        }
     }
 
     // create directories
@@ -52,7 +77,7 @@ zarr::SinkCreator::make_data_sinks(
             }
         }
 
-        if (!make_dirs_(paths)) {
+        if (!is_s3 && !make_dirs_(paths)) {
             return false;
         }
     }
@@ -73,7 +98,8 @@ zarr::SinkCreator::make_data_sinks(
         }
     }
 
-    return make_files_(paths, part_sinks);
+    return is_s3 ? make_s3_objects_(bucket_name, paths, part_sinks)
+                 : make_files_(paths, part_sinks);
 }
 
 bool
@@ -239,41 +265,154 @@ zarr::SinkCreator::make_metadata_sinks_(
   std::queue<std::string>& file_paths,
   std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
-    std::string base_dir = base_uri;
-    if (base_uri.starts_with("file://")) {
-        base_dir = base_uri.substr(7);
-    }
+    bool is_s3 = common::is_s3_uri(base_uri);
+    std::string bucket_name;
+    std::string base_dir;
 
-    // remove trailing slashes
-    if (base_uri.ends_with("/") || base_uri.ends_with("\\")) {
-        base_dir = base_dir.substr(0, base_dir.size() - 1);
-    }
+    if (is_s3) {
+        auto tokens = common::split_uri(base_uri);
+        CHECK(tokens.size() > 2);
+        bucket_name = tokens.at(2);
 
-    // create the base directories if they don't already exist
-    // we create them in serial because
-    // 1. there are only a few of them; and
-    // 2. they may be nested
-    while (!dir_paths.empty()) {
-        const auto dir = base_dir + "/" + dir_paths.front();
-        dir_paths.pop();
-        if (!fs::is_directory(dir) && !fs::create_directories(dir)) {
+        for (auto i = 3; i < tokens.size() - 1; ++i) {
+            base_dir += tokens.at(i) + "/";
+        }
+        if (tokens.size() > 3) {
+            base_dir += tokens.at(tokens.size() - 1);
+        }
+
+        // create the bucket if it doesn't already exist
+        if (!make_s3_bucket_(bucket_name)) {
             return false;
+        }
+    } else {
+        base_dir = base_uri;
+        if (base_uri.starts_with("file://")) {
+            base_dir = base_uri.substr(7);
+        }
+
+        // remove trailing slashes
+        if (base_uri.ends_with("/") || base_uri.ends_with("\\")) {
+            base_dir = base_dir.substr(0, base_dir.size() - 1);
+        }
+
+        // create the base directories if they don't already exist
+        // we create them in serial because
+        // 1. there are only a few of them; and
+        // 2. they may be nested
+        while (!dir_paths.empty()) {
+            const auto dir = base_dir + "/" + dir_paths.front();
+            dir_paths.pop();
+            if (!fs::is_directory(dir) && !fs::create_directories(dir)) {
+                return false;
+            }
         }
     }
 
     // make files
     size_t n_paths = file_paths.size();
+    const std::string prefix = base_dir.empty() ? "" : base_dir + "/";
     for (auto i = 0; i < n_paths; ++i) {
-        const auto path = base_dir + "/" + file_paths.front();
+        const auto path = prefix + file_paths.front();
         file_paths.pop();
         file_paths.push(path);
     }
 
-    if (!make_files_(file_paths, metadata_sinks)) {
+    return is_s3 ? make_s3_objects_(bucket_name, file_paths, metadata_sinks)
+                 : make_files_(file_paths, metadata_sinks);
+}
+
+bool
+zarr::SinkCreator::make_s3_bucket_(const std::string& bucket_name)
+{
+    if (bucket_name.empty()) {
         return false;
     }
 
-    return true;
+    bool retval = false;
+    std::unique_ptr<common::S3Connection> conn;
+    try {
+        EXPECT(connection_pool_, "S3 connection pool not provided.");
+        CHECK(conn = connection_pool_->get_connection());
+        retval = conn->make_bucket(bucket_name);
+    } catch (const std::exception& exc) {
+        LOGE("Failed to create S3 bucket '%s': %s",
+             bucket_name.c_str(),
+             exc.what());
+    } catch (...) {
+        LOGE("Failed to create S3 bucket '%s': (unknown)", bucket_name.c_str());
+    }
+
+    if (conn) {
+        connection_pool_->release_connection(std::move(conn));
+    }
+
+    return retval;
+}
+bool
+zarr::SinkCreator::make_s3_objects_(const std::string& bucket_name,
+                                    std::queue<std::string>& object_keys,
+                                    std::vector<std::unique_ptr<Sink>>& sinks)
+{
+    if (object_keys.empty()) {
+        return true;
+    }
+    if (!connection_pool_) {
+        LOGE("S3 connection pool not provided.");
+        return false;
+    }
+
+    std::atomic<bool> all_successful = true;
+
+    const auto n_objects = object_keys.size();
+    sinks.resize(n_objects);
+    std::fill(sinks.begin(), sinks.end(), nullptr);
+    std::latch latch(n_objects);
+
+    for (auto i = 0; i < n_objects; ++i) {
+        const auto object_key = object_keys.front();
+        object_keys.pop();
+
+        std::unique_ptr<Sink>* psink = sinks.data() + i;
+
+        thread_pool_->push_to_job_queue(
+          [this, bucket_name, object_key, psink, &latch, &all_successful](
+            std::string& err) -> bool {
+              bool success = false;
+
+              try {
+                  if (all_successful) {
+                      *psink = std::make_unique<S3Sink>(
+                        bucket_name, object_key, connection_pool_);
+                  }
+                  success = true;
+              } catch (const std::exception& exc) {
+                  char buf[128];
+                  snprintf(buf,
+                           sizeof(buf),
+                           "Failed to create S3 object '%s': %s.",
+                           object_key.c_str(),
+                           exc.what());
+                  err = buf;
+              } catch (...) {
+                  char buf[128];
+                  snprintf(buf,
+                           sizeof(buf),
+                           "Failed to create S3 object '%s': (unknown).",
+                           object_key.c_str());
+                  err = buf;
+              }
+
+              latch.count_down();
+              all_successful = all_successful && success;
+
+              return success;
+          });
+    }
+
+    latch.wait();
+
+    return all_successful;
 }
 
 #ifndef NO_UNIT_TESTS
