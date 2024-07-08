@@ -7,9 +7,9 @@
 // forward declaration of some C API functions
 //static int storage_properties_dimensions_init(struct StorageProperties* self, size_t size);
 
-void AcquireZarrWriter::open()
+void AcquireZarrWriter::start()
 {
-    impl_->open();
+    impl_->start();
 }
 
 void AcquireZarrWriter::append(uint8_t* image_data, size_t image_size)

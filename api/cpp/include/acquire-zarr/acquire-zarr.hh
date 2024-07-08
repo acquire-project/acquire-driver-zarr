@@ -61,7 +61,7 @@ class AcquireZarrWriter
     AcquireZarrWriter() { create_impl();}
     ~AcquireZarrWriter() = default;
 
-    void open();
+    void start();
     void append(uint8_t* image_data, size_t image_size);
 
 

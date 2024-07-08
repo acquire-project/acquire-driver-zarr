@@ -27,7 +27,7 @@ AcquireZarrWriter::Impl::Impl()
     zarr_version_ = 2;
 }
 
-void AcquireZarrWriter::Impl::open()
+void AcquireZarrWriter::Impl::start()
 {
 
     create_zarr_sink();

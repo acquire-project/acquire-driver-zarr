@@ -12,7 +12,7 @@ def test_zarr_v2():
     
     fname = "test.zar"
     zarr.uri = fname
-    print ( "uri =", len(zarr.uri))
+
     assert zarr.uri == "test.zar"
     
     zarr.dimensions = ["x", "y", "t"]
@@ -32,7 +32,7 @@ def test_zarr_v2():
     zarr.compression_shuffle = 0
     assert zarr.compression_shuffle == 0
     
-    zarr.open()
+    zarr.start()
     for i in range(3):
         zarr.append(data)
         #sleep(0.5)
