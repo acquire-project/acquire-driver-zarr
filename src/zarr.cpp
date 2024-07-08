@@ -338,9 +338,6 @@ zarr::Zarr::set(const StorageProperties* props)
            "Cannot set properties while running.");
     CHECK(props);
 
-    StoragePropertyMetadata meta{};
-    get_meta(&meta);
-
     // checks the directory exists and is writable
     validate_props(props);
     // TODO (aliddell): we will eventually support S3 URIs,
@@ -354,14 +351,7 @@ zarr::Zarr::set(const StorageProperties* props)
     pixel_scale_um_ = props->pixel_scale_um;
 
     set_dimensions_(props);
-
-    if (props->enable_multiscale && !meta.multiscale_is_supported) {
-        // TODO (aliddell): https://github.com/ome/ngff/pull/206
-        LOGE("OME-Zarr multiscale not yet supported in Zarr v3. "
-             "Multiscale arrays will not be written.");
-    }
-    enable_multiscale_ = meta.multiscale_is_supported &&
-                         props->enable_multiscale &&
+    enable_multiscale_ = props->enable_multiscale &&
                          is_multiscale_supported(acquisition_dimensions_);
 }
 
@@ -416,6 +406,7 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
     memset(meta, 0, sizeof(*meta));
 
     meta->chunking_is_supported = 1;
+    meta->multiscale_is_supported = 1;
 }
 
 void
