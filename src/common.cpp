@@ -1,7 +1,4 @@
 #include "common.hh"
-#include "zarr.hh"
-
-#include "platform.h"
 
 #include <cmath>
 #include <thread>
@@ -197,19 +194,6 @@ common::bytes_per_chunk(const std::vector<Dimension>& dimensions,
     }
 
     return n_bytes;
-}
-
-const char*
-common::sample_type_to_dtype(SampleType t)
-
-{
-    static const char* table[] = { "u1", "u2", "i1", "i2",
-                                   "f4", "u2", "u2", "u2" };
-    if (t < countof(table)) {
-        return table[t];
-    } else {
-        throw std::runtime_error("Invalid sample type.");
-    }
 }
 
 const char*

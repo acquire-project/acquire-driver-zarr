@@ -131,13 +131,6 @@ size_t
 bytes_per_chunk(const std::vector<Dimension>& dimensions,
                 const SampleType& dtype);
 
-/// @brief Get the Zarr dtype for a given SampleType.
-/// @param t An enumerated sample type.
-/// @throw std::runtime_error if @par t is not a valid SampleType.
-/// @return A representation of the SampleType @par t expected by a Zarr reader.
-const char*
-sample_type_to_dtype(SampleType t);
-
 /// @brief Get a string representation of the SampleType enum.
 /// @param t An enumerated sample type.
 /// @return A human-readable representation of the SampleType @par t.

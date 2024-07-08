@@ -4,6 +4,8 @@
 
 #include "nlohmann/json.hpp"
 
+#include <bit>
+
 namespace zarr = acquire::sink::zarr;
 
 namespace {
@@ -21,6 +23,21 @@ compressed_zarr_v2_init()
         LOGE("Exception: (unknown)");
     }
     return nullptr;
+}
+
+std::string
+sample_type_to_dtype(SampleType t)
+
+{
+    const std::string dtype_prefix =
+      std::endian::native == std::endian::big ? ">" : "<";
+
+    std::string table[] = { "u1", "u2", "i1", "i2", "f4", "u2", "u2", "u2" };
+    if (t < countof(table)) {
+        return dtype_prefix + table[t];
+    } else {
+        throw std::runtime_error("Invalid sample type.");
+    }
 }
 } // end ::{anonymous} namespace
 
@@ -249,7 +266,7 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     metadata["zarr_format"] = 2;
     metadata["shape"] = array_shape;
     metadata["chunks"] = chunk_shape;
-    metadata["dtype"] = common::sample_type_to_dtype(image_shape.type);
+    metadata["dtype"] = sample_type_to_dtype(image_shape.type);
     metadata["fill_value"] = 0;
     metadata["order"] = "C";
     metadata["filters"] = nullptr;
