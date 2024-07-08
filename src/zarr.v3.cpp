@@ -82,7 +82,6 @@ void
 zarr::ZarrV3::write_base_metadata_() const
 {
     namespace fs = std::filesystem;
-    using json = nlohmann::json;
 
     json metadata;
     metadata["extensions"] = json::array();
@@ -115,7 +114,6 @@ void
 zarr::ZarrV3::write_group_metadata_() const
 {
     namespace fs = std::filesystem;
-    using json = nlohmann::json;
 
     json metadata;
     metadata["attributes"]["acquire"] =
@@ -125,6 +123,7 @@ zarr::ZarrV3::write_group_metadata_() const
                                                     true,    // allow exceptions
                                                     true     // ignore comments
                                         );
+    metadata["attributes"]["multiscales"] = make_multiscale_metadata_();
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
@@ -137,7 +136,6 @@ void
 zarr::ZarrV3::write_array_metadata_(size_t level) const
 {
     namespace fs = std::filesystem;
-    using json = nlohmann::json;
 
     CHECK(level < writers_.size());
     const auto& writer = writers_.at(level);
