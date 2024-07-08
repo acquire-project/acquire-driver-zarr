@@ -169,7 +169,7 @@ main()
 
                 CHECK(props.first_frame_id == 0); // this is ignored
 
-                CHECK(props.enable_multiscale == !name.starts_with("ZarrV3"));
+                CHECK(props.enable_multiscale);
 
                 storage_properties_destroy(&props);
 
