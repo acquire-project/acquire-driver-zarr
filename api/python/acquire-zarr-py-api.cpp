@@ -28,7 +28,6 @@ public:
         auto buf = image_data.request();
         uint8_t *ptr = (uint8_t*)buf.ptr;
         AcquireZarrWriter::append(ptr, buf.itemsize * buf.size);
-
     }
     
 };
@@ -46,6 +45,13 @@ PYBIND11_MODULE(acquire_zarr, m) {
            append
     )pbdoc";
 
+
+    py::enum_<AcquireZarrCompressionCodec>(m, "CompressionCodec")
+        .value("COMPRESSION_NONE", AcquireZarrCompressionCodec::COMPRESSION_NONE)
+        .value("COMPRESSION_BLOSC_LZ4", AcquireZarrCompressionCodec::COMPRESSION_BLOSC_LZ4)
+        .value("COMPRESSION_BLOSC_ZSTD", AcquireZarrCompressionCodec::COMPRESSION_BLOSC_ZSTD)
+        .export_values();
+
     py::class_<PyAcquireZarrWriter>(m, "AcquireZarrWriter")
         .def(py::init<>())
         .def("append", &PyAcquireZarrWriter::append)
@@ -60,7 +66,11 @@ PYBIND11_MODULE(acquire_zarr, m) {
         .def_property("dimension_sizes", &PyAcquireZarrWriter::get_dimension_sizes, &PyAcquireZarrWriter::set_dimension_sizes)
         .def_property("dimension_pixels_per_chunk", &PyAcquireZarrWriter::get_chunk_sizes, &PyAcquireZarrWriter::get_chunk_sizes)
         .def_property("dimension_chunks_per_shard", &PyAcquireZarrWriter::get_shard_sizes, &PyAcquireZarrWriter::get_shard_sizes)
-        .def_property("enable_multiscale", &PyAcquireZarrWriter::get_enable_multiscale, &PyAcquireZarrWriter::set_enable_multiscale);
+        .def_property("enable_multiscale", &PyAcquireZarrWriter::get_enable_multiscale, &PyAcquireZarrWriter::set_enable_multiscale)
+        .def_property("compression_codec", &PyAcquireZarrWriter::get_compression_codec, &PyAcquireZarrWriter::set_compression_codec)
+        .def_property("compression_level", &PyAcquireZarrWriter::get_compression_level, &PyAcquireZarrWriter::set_compression_level)
+        .def_property("compression_shuffle", &PyAcquireZarrWriter::get_compression_shuffle, &PyAcquireZarrWriter::set_compression_shuffle)
+        ;
 #ifdef VERSION_INFO
     m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
 #else

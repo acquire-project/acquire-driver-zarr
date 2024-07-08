@@ -19,7 +19,10 @@ void AcquireZarrWriter::append(uint8_t* image_data, size_t image_size)
 
 std::vector<uint32_t> AcquireZarrWriter::get_shape() const
 {
-    return {impl_->video_frame_.shape.dims.channels, impl_->video_frame_.shape.dims.width, impl_->video_frame_.shape.dims.height, impl_->video_frame_.shape.dims.planes};
+    return {impl_->video_frame_.shape.dims.channels, 
+        impl_->video_frame_.shape.dims.width, 
+        impl_->video_frame_.shape.dims.height, 
+        impl_->video_frame_.shape.dims.planes};
 }
 
 void AcquireZarrWriter::set_shape(const std::vector<uint32_t>& shape)
@@ -198,6 +201,58 @@ void AcquireZarrWriter::set_enable_multiscale(bool multiscale)
 {
     impl_->storage_properties_.enable_multiscale = multiscale ? 1 : 0;
 }
+
+AcquireZarrCompressionCodec AcquireZarrWriter::get_compression_codec() const
+
+{
+
+    auto ret {AcquireZarrCompressionCodec::COMPRESSION_NONE};
+
+    if(impl_->blosc_params_.codec_id == asz::compression_codec_as_string< asz::BloscCodecId::Lz4 >())
+        ret = AcquireZarrCompressionCodec::COMPRESSION_BLOSC_LZ4;
+    else if(impl_->blosc_params_.codec_id == asz::compression_codec_as_string< asz::BloscCodecId::Zstd >())
+        ret = AcquireZarrCompressionCodec::COMPRESSION_BLOSC_ZSTD;
+
+
+    return ret;
+}
+
+void AcquireZarrWriter::set_compression_codec(AcquireZarrCompressionCodec compression)
+{
+    switch (compression)
+    {
+        case AcquireZarrCompressionCodec::COMPRESSION_BLOSC_LZ4:
+            impl_->blosc_params_.codec_id = asz::compression_codec_as_string< asz::BloscCodecId::Lz4 >();
+            break;
+        case AcquireZarrCompressionCodec::COMPRESSION_BLOSC_ZSTD:
+            impl_->blosc_params_.codec_id = asz::compression_codec_as_string< asz::BloscCodecId::Zstd >();
+            break;
+        default:
+            impl_->blosc_params_.codec_id = ""; // blank means no compression
+    }
+}
+
+int AcquireZarrWriter::get_compression_level() const
+{
+    return impl_->blosc_params_.clevel;
+}
+
+void AcquireZarrWriter::set_compression_level(int level)
+{
+    impl_->blosc_params_.clevel = level;
+}
+
+int AcquireZarrWriter::get_compression_shuffle() const
+{
+    return impl_->blosc_params_.shuffle;
+}
+
+
+void AcquireZarrWriter::set_compression_shuffle(int shuffle)
+{
+    impl_->blosc_params_.shuffle = shuffle;
+}
+
 
 void AcquireZarrWriter::create_impl()
 {

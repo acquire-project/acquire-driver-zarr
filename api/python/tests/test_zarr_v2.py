@@ -21,6 +21,17 @@ def test_zarr_v2():
     zarr.dimension_sizes = [64, 64, 0]
     assert zarr.dimension_sizes == [64, 64, 0]
     
+    zarr.compression_codec = acquire_zarr.CompressionCodec.COMPRESSION_NONE
+    assert zarr.compression_codec == acquire_zarr.CompressionCodec.COMPRESSION_NONE
+    
+    zarr.compression_codec = acquire_zarr.CompressionCodec.COMPRESSION_BLOSC_ZSTD
+    assert zarr.compression_codec == acquire_zarr.CompressionCodec.COMPRESSION_BLOSC_ZSTD
+    
+    zarr.compression_level = 5
+    assert zarr.compression_level == 5
+    zarr.compression_shuffle = 0
+    assert zarr.compression_shuffle == 0
+    
     zarr.open()
     for i in range(3):
         zarr.append(data)

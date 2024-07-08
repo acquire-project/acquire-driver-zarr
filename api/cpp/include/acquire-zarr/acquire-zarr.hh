@@ -46,6 +46,15 @@ struct AcquireZarrSinkConfig
 
 */
 
+enum class AcquireZarrCompressionCodec
+{
+    COMPRESSION_NONE,
+    COMPRESSION_BLOSC_LZ4,
+    COMPRESSION_BLOSC_ZSTD,
+} ;
+
+
+
 class AcquireZarrWriter 
 {
   public:
@@ -167,6 +176,15 @@ class AcquireZarrWriter
 
     void set_enable_multiscale(bool multiscale);
     bool get_enable_multiscale() const;
+
+    void set_compression_codec(AcquireZarrCompressionCodec compression);
+    AcquireZarrCompressionCodec get_compression_codec() const;
+
+    void set_compression_level(int level);
+    int get_compression_level() const;
+
+    void set_compression_shuffle(int shuffle);
+    int get_compression_shuffle() const;
 
   private:
     

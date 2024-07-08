@@ -3,8 +3,7 @@
 
 
 #include "acquire-zarr/acquire-zarr.hh"
-#include "zarr.v2.hh"
-//#include "zarr.v3.hh"
+#include "zarr.hh"
 
 namespace asz = acquire::sink::zarr;
 
@@ -27,11 +26,16 @@ class AcquireZarrWriter::Impl
     /// @brief Create the Zarr sink object
     virtual void create_zarr_sink();
 
+    /// @brief Zarr version
+    uint8_t zarr_version_;
+
     // use shared_ptr for polymorphism of zarr version.
-    std::unique_ptr<struct asz::Zarr> zarr_sink_;
+    std::shared_ptr<struct asz::Zarr> zarr_sink_;
 
     /// @brief Data structure to hold the storage properties for the Zarr sink
     struct StorageProperties storage_properties_;
+
+    struct asz::BloscCompressionParams blosc_params_;
 
     // video frame needs to be the last member of the struct
     struct VideoFrame video_frame_;
