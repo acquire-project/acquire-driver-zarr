@@ -1,5 +1,5 @@
 set(ACQUIRE_BUILD_API_CPP OFF CACHE BOOL "Build the stand-alone C++ API")
-set(ACQUIRE_BUILD_API_C OFF CACHE BOOL "Build the stand-alone C API")
+set(ACQUIRE_BUILD_API_C OFF CACHE BOOL "Build the stand-alone C API (in development, not yet implemented)")
 set(ACQUIRE_BUILD_API_PY OFF CACHE BOOL "Build the stand-alone Python API")
 
 if(ACQUIRE_BUILD_API_C)

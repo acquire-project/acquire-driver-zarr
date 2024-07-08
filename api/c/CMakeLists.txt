@@ -1,5 +1,7 @@
 project(acquire-zarr-c-api)
 
+MESSAGE(FATAL_ERROR "C API is not yet implemented")
+
 set(tgt acquire-zarr-c)
 set(ACQUIRE_C_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/acquire-zarr/acquire-zarr.h)
 
