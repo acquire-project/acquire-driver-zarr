@@ -17,6 +17,16 @@ void AcquireZarrWriter::append(uint8_t* image_data, size_t image_size)
     impl_->append(image_data, image_size);
 }
 
+void AcquireZarrWriter::set_use_v3(bool use_v3)
+{
+    impl_->zarr_version_ = use_v3 ? 3 : 2;
+}
+
+bool AcquireZarrWriter::get_use_v3() const
+{
+    return impl_->zarr_version_ == 3;
+}
+
 std::vector<uint32_t> AcquireZarrWriter::get_shape() const
 {
     return {impl_->video_frame_.shape.dims.channels, 

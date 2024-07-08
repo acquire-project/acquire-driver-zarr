@@ -56,6 +56,7 @@ PYBIND11_MODULE(acquire_zarr, m) {
         .def(py::init<>())
         .def("append", &PyAcquireZarrWriter::append)
         .def("start", &PyAcquireZarrWriter::start)
+        .def_property("use_v3", &PyAcquireZarrWriter::get_use_v3, &PyAcquireZarrWriter::set_use_v3)
         .def_property("shape", &PyAcquireZarrWriter::get_shape, &PyAcquireZarrWriter::set_shape)
         .def_property("uri", &PyAcquireZarrWriter::get_uri, &PyAcquireZarrWriter::set_uri)
         .def_property("external_json_metadata", &PyAcquireZarrWriter::get_metadata, &PyAcquireZarrWriter::setExternalMetadata)

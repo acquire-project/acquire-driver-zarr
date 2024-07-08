@@ -7,13 +7,11 @@ from time import sleep
 
 data = np.arange(64, 64, 3, dtype=np.uint8)
 
-def test_zarr_v2():
+def check_zarr(v3: bool, uri: str) -> None:
     zarr = acquire_zarr.AcquireZarrWriter()
     
-    fname = "test.zar"
-    zarr.uri = fname
-
-    assert zarr.uri == "test.zar"
+    zarr.use_v3 = v3
+    zarr.uri = uri
     
     zarr.dimensions = ["x", "y", "t"]
     assert zarr.dimensions == ["x", "y", "t"]
@@ -37,3 +35,9 @@ def test_zarr_v2():
         zarr.append(data)
         #sleep(0.5)
         
+
+def test_zarr_v2() -> None:
+    check_zarr(False, "test_v2.zarr")
+    
+def test_zarr_v3() -> None:
+    check_zarr(True, "test_v3.zarr")

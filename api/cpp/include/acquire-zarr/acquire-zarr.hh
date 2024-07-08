@@ -67,6 +67,21 @@ class AcquireZarrWriter
 
     // Getters and setters for configuration
     
+
+    /**
+     * Set the Zarr version to use.
+     * 
+     * @param use_v3 true to use Zarr version 3, false to use version 2
+     */
+    void set_use_v3(bool use_v3);
+
+    /**
+     * Get the Zarr version to use.
+     * 
+     * @returns true if using Zarr version 3, false if using version 2
+     */
+    bool get_use_v3() const;
+
     /**
      * Get the shape of the image data.
      * 
