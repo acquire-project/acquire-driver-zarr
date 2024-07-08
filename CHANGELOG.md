@@ -12,6 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Calling `acquire_get_configuration` with a Zarr storage device now returns a URI of the storage device, with file://
   scheme indicator and absolute path, assuming localhost.
 
+### Added
+
+- Support for multiscale in Zarr V3 stores.
+
 ## [0.1.11](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.10..v0.1.11) - 2024-04-22
 
 ### Fixed
