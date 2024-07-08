@@ -23,6 +23,7 @@ if (${WITH_EXAMPLES})
                 acquire-core-logger
                 acquire-core-platform
                 acquire-video-runtime
+                nlohmann_json::nlohmann_json
         )
     endforeach ()
 
