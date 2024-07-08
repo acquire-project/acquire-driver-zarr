@@ -39,6 +39,7 @@ else ()
             write-zarr-v3-raw-with-ragged-sharding
             write-zarr-v3-raw-chunk-exceeds-array
             write-zarr-v3-compressed
+            write-zarr-v3-raw-multiscale
     )
 
     foreach (name ${tests})
