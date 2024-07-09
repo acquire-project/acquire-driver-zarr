@@ -3,6 +3,7 @@
 #include "platform.h" // clock
 #include "logger.h"
 
+#include <bit>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
@@ -232,6 +233,10 @@ validate()
     // check metadata
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
+
+    const std::string dtype =
+      std::endian::native == std::endian::little ? "<u1" : ">u1";
+    CHECK(dtype == zarray["dtype"].get<std::string>());
 
     auto shape = zarray["shape"];
     ASSERT_EQ(int, "%d", frames_per_chunk, shape[0]);
