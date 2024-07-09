@@ -167,27 +167,21 @@ common::bytes_per_chunk(const std::vector<Dimension>& dimensions,
 }
 
 const char*
-common::sample_type_to_dtype(SampleType t)
-
-{
-    static const char* table[] = { "u1", "u2", "i1", "i2",
-                                   "f4", "u2", "u2", "u2" };
-    if (t < countof(table)) {
-        return table[t];
-    } else {
-        throw std::runtime_error("Invalid sample type.");
-    }
-}
-
-const char*
 common::sample_type_to_string(SampleType t) noexcept
 {
-    static const char* table[] = { "u8",  "u16", "i8",  "i16",
-                                   "f32", "u16", "u16", "u16" };
-    if (t < countof(table)) {
-        return table[t];
-    } else {
-        return "unrecognized pixel type";
+    switch (t) {
+        case SampleType_u8:
+            return "u8";
+        case SampleType_u16:
+            return "u16";
+        case SampleType_i8:
+            return "i8";
+        case SampleType_i16:
+            return "i16";
+        case SampleType_f32:
+            return "f32";
+        default:
+            return "unrecognized pixel type";
     }
 }
 
