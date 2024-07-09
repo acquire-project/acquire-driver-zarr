@@ -171,6 +171,10 @@ validate()
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
 
+    const std::string dtype =
+      std::endian::native == std::endian::little ? "<u1" : ">u1";
+    CHECK(dtype == zarray["dtype"].get<std::string>());
+
     auto shape = zarray["shape"];
     ASSERT_EQ(int, "%d", chunk_planes, shape[0]);
     ASSERT_EQ(int, "%d", 1, shape[1]);

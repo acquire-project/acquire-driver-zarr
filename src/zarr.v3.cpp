@@ -24,6 +24,30 @@ compressed_zarr_v3_init()
     }
     return nullptr;
 }
+
+std::string
+sample_type_to_dtype(SampleType t)
+
+{
+    switch (t) {
+        case SampleType_u8:
+            return "uint8";
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            return "uint16";
+        case SampleType_i8:
+            return "int8";
+        case SampleType_i16:
+            return "int16";
+        case SampleType_f32:
+            return "float32";
+        default:
+            throw std::runtime_error("Invalid SampleType: " +
+                                     std::to_string(static_cast<int>(t)));
+    }
+}
 } // end ::{anonymous} namespace
 
 zarr::ZarrV3::ZarrV3(BloscCompressionParams&& compression_params)
@@ -175,7 +199,7 @@ zarr::ZarrV3::write_array_metadata_(size_t level) const
     });
 
     metadata["chunk_memory_layout"] = "C";
-    metadata["data_type"] = common::sample_type_to_dtype(image_shape.type);
+    metadata["data_type"] = sample_type_to_dtype(image_shape.type);
     metadata["extensions"] = json::array();
     metadata["fill_value"] = 0;
     metadata["shape"] = array_shape;
