@@ -201,13 +201,9 @@ common::split_uri(const std::string& uri)
     auto end = uri.find_first_of(delim);
 
     std::vector<std::string> out;
-    while (end <= std::string::npos) {
+    while (end != std::string::npos) {
         if (end > begin) {
             out.emplace_back(uri.substr(begin, end - begin));
-        }
-
-        if (end == std::string::npos) {
-            break;
         }
 
         begin = end + 1;
