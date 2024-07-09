@@ -4,15 +4,14 @@
 namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 
-common::ThreadPool::ThreadPool(size_t n_threads,
+common::ThreadPool::ThreadPool(unsigned int n_threads,
                                std::function<void(const std::string&)> err)
   : error_handler_{ err }
   , is_accepting_jobs_{ true }
 {
+    const unsigned int one = 1;
     n_threads = std::clamp(
-      n_threads,
-      (size_t)1,
-      (size_t)std::max(std::thread::hardware_concurrency(), (unsigned)1));
+      n_threads, one, std::max(std::thread::hardware_concurrency(), one));
 
     for (auto i = 0; i < n_threads; ++i) {
         threads_.emplace_back([this] { thread_worker_(); });
@@ -32,11 +31,12 @@ common::ThreadPool::~ThreadPool() noexcept
 void
 common::ThreadPool::push_to_job_queue(JobT&& job)
 {
-    std::unique_lock lock(jobs_mutex_);
-    CHECK(is_accepting_jobs_);
+    {
+        std::unique_lock lock(jobs_mutex_);
+        CHECK(is_accepting_jobs_);
 
-    jobs_.push(std::move(job));
-    lock.unlock();
+        jobs_.push(std::move(job));
+    }
 
     cv_.notify_one();
 }
