@@ -32,11 +32,23 @@ sample_type_to_dtype(SampleType t)
     const std::string dtype_prefix =
       std::endian::native == std::endian::big ? ">" : "<";
 
-    std::string table[] = { "u1", "u2", "i1", "i2", "f4", "u2", "u2", "u2" };
-    if (t < countof(table)) {
-        return dtype_prefix + table[t];
-    } else {
-        throw std::runtime_error("Invalid sample type.");
+    switch (t) {
+        case SampleType_u8:
+            return dtype_prefix + "u1";
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            return dtype_prefix + "u2";
+        case SampleType_i8:
+            return dtype_prefix + "i1";
+        case SampleType_i16:
+            return dtype_prefix + "i2";
+        case SampleType_f32:
+            return dtype_prefix + "f4";
+        default:
+            throw std::runtime_error("Invalid SampleType: " +
+                                     std::to_string(static_cast<int>(t)));
     }
 }
 } // end ::{anonymous} namespace

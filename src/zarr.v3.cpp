@@ -29,12 +29,23 @@ std::string
 sample_type_to_dtype(SampleType t)
 
 {
-    std::string table[] = { "uint8",   "uint16", "int8",   "int16",
-                            "float32", "uint16", "uint16", "uint16" };
-    if (t < countof(table)) {
-        return table[t];
-    } else {
-        throw std::runtime_error("Invalid sample type.");
+    switch (t) {
+        case SampleType_u8:
+            return "uint8";
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            return "uint16";
+        case SampleType_i8:
+            return "int8";
+        case SampleType_i16:
+            return "int16";
+        case SampleType_f32:
+            return "float32";
+        default:
+            throw std::runtime_error("Invalid SampleType: " +
+                                     std::to_string(static_cast<int>(t)));
     }
 }
 } // end ::{anonymous} namespace
