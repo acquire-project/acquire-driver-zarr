@@ -54,26 +54,27 @@ jobs:
       - name: Merge arm64/x86_64 binaries
         if: matrix.platform == 'macos-latest'
         run: |
-          brew install tree pkg-config rsync
+          brew install pkg-config rsync
           vcpkg install --triplet arm64-osx
           cp -r vcpkg_installed/arm64-osx .
           vcpkg install --triplet x64-osx
-          rsync -auv --delete arm64-osx/ vcpkg_installed/arm64-osx
+          rsync -au --delete arm64-osx/ vcpkg_installed/arm64-osx
           curl -o lipo-dir-merge.py https://raw.githubusercontent.com/faaxm/lipo-dir-merge/main/lipo-dir-merge.py
           python3 lipo-dir-merge.py vcpkg_installed/x64-osx vcpkg_installed/arm64-osx vcpkg_installed/${{matrix.vcpkg_triplet}}
-          tree -d vcpkg_installed
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
 
-#      - name: CMake
-#        run: |
-#          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
-#          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
-#
-#      - name: Build
-#        run: |
-#          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
-#          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
-#
-#      - uses: actions/upload-artifact@v3
-#        with:
-#          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
-#          path: ${{github.workspace}}/*.zip
+      - name: CMake
+        if: matrix.platform != 'macos-latest'
+        run: |
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+
+      - name: Build
+        run: |
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
+          path: ${{github.workspace}}/*.zip
