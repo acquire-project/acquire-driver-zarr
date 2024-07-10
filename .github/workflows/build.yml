@@ -55,16 +55,13 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install tree pkg-config
-          vcpkg install --triplet x64-osx
-          echo "-----------------"
-          ls vcpkg_installed
-          echo "-----------------"
           vcpkg install --triplet arm64-osx
-          echo "-----------------"
-          ls vcpkg_installed
-          echo "-----------------"
-#          mkdir -p ${{github.workspace}}/vcpkg/installed/${{matrix.vcpkg_triplet}}/tools
-#          cp -r ${{github.workspace}}/vcpkg/installed/universal-osx/tools/* ${{github.workspace}}/vcpkg/installed/${{matrix.vcpkg_triplet}}/tools
+          mv vcpkg_installed/arm64-osx .
+          vcpkg install --triplet x64-osx
+          mv arm64-osx vcpkg_installed
+          curl -o lipo-dir-merge.py https://raw.githubusercontent.com/faaxm/lipo-dir-merge/main/lipo-dir-merge.py
+          python3 lipo-dir-merge.py vcpkg_installed/x64-osx vcpkg_installed/arm64-osx vcpkg_installed/${{matrix.vcpkg_triplet}}
+          tree -d vcpkg_installed/
 
 #      - name: CMake
 #        run: |
