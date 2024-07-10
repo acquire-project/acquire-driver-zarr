@@ -55,11 +55,14 @@ jobs:
         if: matrix.platform == 'macos-latest'
         run: |
           brew install tree pkg-config
-          ls
           vcpkg install --triplet x64-osx
-          ls
+          echo "-----------------"
+          ls vcpkg_installed
+          echo "-----------------"
           vcpkg install --triplet arm64-osx
-          ls
+          echo "-----------------"
+          ls vcpkg_installed
+          echo "-----------------"
 #          mkdir -p ${{github.workspace}}/vcpkg/installed/${{matrix.vcpkg_triplet}}/tools
 #          cp -r ${{github.workspace}}/vcpkg/installed/universal-osx/tools/* ${{github.workspace}}/vcpkg/installed/${{matrix.vcpkg_triplet}}/tools
 
