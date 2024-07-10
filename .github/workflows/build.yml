@@ -54,13 +54,12 @@ jobs:
       - name: Merge arm64/x86_64 binaries
         if: matrix.platform == 'macos-latest'
         run: |
-          brew install tree
-          tree -d >before.txt
-          curl -o lipo-dir-merge.py https://raw.githubusercontent.com/faaxm/lipo-dir-merge/main/lipo-dir-merge.py
+          brew install tree pkg-config
+          ls
           vcpkg install --triplet x64-osx
+          ls
           vcpkg install --triplet arm64-osx
-          tree -d >after.txt
-          diff before.txt after.txt
+          ls
 #          mkdir -p ${{github.workspace}}/vcpkg/installed/${{matrix.vcpkg_triplet}}/tools
 #          cp -r ${{github.workspace}}/vcpkg/installed/universal-osx/tools/* ${{github.workspace}}/vcpkg/installed/${{matrix.vcpkg_triplet}}/tools
 
