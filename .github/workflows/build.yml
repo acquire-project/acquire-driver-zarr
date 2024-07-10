@@ -9,59 +9,59 @@ on:
       - "main"
 
 jobs:
-#  windows-and-linux-build:
-#    strategy:
-#      matrix:
-#        build_type:
-#          - "Debug"
-#          - "Release"
-#        platform:
-#          - "windows-latest"
-#          - "ubuntu-latest"
-#        include:
-#          - platform: "windows-latest"
-#            vcpkg_triplet: "x64-windows-static"
-#          - platform: "ubuntu-latest"
-#            vcpkg_triplet: "x64-linux"
-#
-#    runs-on: ${{ matrix.platform }}
-#
-#    permissions:
-#      actions: write
-#
-#    steps:
-#      - name: Cancel Previous Runs
-#        uses: styfle/cancel-workflow-action@0.10.0
-#        with:
-#          access_token: ${{ github.token }}
-#
-#      - uses: actions/checkout@v3
-#        with:
-#          submodules: true
-#
-#      - name: Install vcpkg
-#        run: |
-#          git clone https://github.com/microsoft/vcpkg.git
-#          cd vcpkg && ./bootstrap-vcpkg.sh
-#          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
-#          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
-#          ./vcpkg integrate install
-#        shell: bash
-#
-#      - name: CMake
-#        run: |
-#          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
-#          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
-#
-#      - name: Build
-#        run: |
-#          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
-#          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
-#
-#      - uses: actions/upload-artifact@v3
-#        with:
-#          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
-#          path: ${{github.workspace}}/*.zip
+  #  windows-and-linux-build:
+  #    strategy:
+  #      matrix:
+  #        build_type:
+  #          - "Debug"
+  #          - "Release"
+  #        platform:
+  #          - "windows-latest"
+  #          - "ubuntu-latest"
+  #        include:
+  #          - platform: "windows-latest"
+  #            vcpkg_triplet: "x64-windows-static"
+  #          - platform: "ubuntu-latest"
+  #            vcpkg_triplet: "x64-linux"
+  #
+  #    runs-on: ${{ matrix.platform }}
+  #
+  #    permissions:
+  #      actions: write
+  #
+  #    steps:
+  #      - name: Cancel Previous Runs
+  #        uses: styfle/cancel-workflow-action@0.10.0
+  #        with:
+  #          access_token: ${{ github.token }}
+  #
+  #      - uses: actions/checkout@v3
+  #        with:
+  #          submodules: true
+  #
+  #      - name: Install vcpkg
+  #        run: |
+  #          git clone https://github.com/microsoft/vcpkg.git
+  #          cd vcpkg && ./bootstrap-vcpkg.sh
+  #          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
+  #          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
+  #          ./vcpkg integrate install
+  #        shell: bash
+  #
+  #      - name: CMake
+  #        run: |
+  #          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
+  #          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+  #
+  #      - name: Build
+  #        run: |
+  #          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+  #          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
+  #
+  #      - uses: actions/upload-artifact@v3
+  #        with:
+  #          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
+  #          path: ${{github.workspace}}/*.zip
 
   mac-build:
     strategy:
@@ -69,21 +69,16 @@ jobs:
         build_type:
           - "Debug"
           - "Release"
-        vcpkg_triplet:
-          - "x64-osx"
-          - "arm64-osx"
-        include:
-          - vcpkg_triplet: "x64-osx"
-            arch: "x86_64"
-          - vcpkg_triplet: "arm64-osx"
-            arch: "arm64"
+#        vcpkg_triplet:
+#          - "x64-osx"
+#          - "arm64-osx"
 #        include:
-#          - platform: "macos-13"
-#            vcpkg_triplet: "x64-osx"
-#          - platform: "macos-14"
-#            vcpkg_triplet: "arm64-osx"
+#          - vcpkg_triplet: "x64-osx"
+#            arch: "x86_64"
+#          - vcpkg_triplet: "arm64-osx"
+#            arch: "arm64"
 
-    runs-on: "macos-14"
+    runs-on: "macos-latest"
 
     permissions:
       actions: write
@@ -107,17 +102,32 @@ jobs:
           ./vcpkg integrate install
         shell: bash
 
-      - name: CMake
+      - name: Build for x64
         run: |
-          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="${{matrix.arch}}"
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=x64-osx
+          cmake -B ${{github.workspace}}/build-x64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="x86_64" -DNOTEST=1
+          cmake --build ${{github.workspace}}/build-x64 --config ${{matrix.build_type}}
 
-      - name: Build
+      - name: Build for arm64
         run: |
-          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=arm64-osx
+          cmake -B ${{github.workspace}}/build-arm64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64" -DNOTEST=1
+          cmake --build ${{github.workspace}}/build-arm64 --config ${{matrix.build_type}}
+
+      - name: Create a universal binary
+        run: |
+          cp -r build-x64 build
+          lipo -create build-x64/src/acquire-core-libs/src/acquire-core-platform/osx/libacquire-core-platform.a build-arm64/src/acquire-core-libs/src/acquire-core-platform/osx/libacquire-core-platform.a -output build/src/acquire-core-libs/src/acquire-core-platform/osx/libacquire-core-platform.a
+          lipo -create build-x64/src/acquire-core-libs/src/acquire-device-properties/libacquire-device-properties.a build-arm64/src/acquire-core-libs/src/acquire-device-properties/libacquire-device-properties.a -output build/src/acquire-core-libs/src/acquire-device-properties/libacquire-device-properties.a
+          lipo -create build-x64/src/acquire-core-libs/src/acquire-core-logger/libacquire-core-logger.a build-arm64/src/acquire-core-libs/src/acquire-core-logger/libacquire-core-logger.a -output build/src/acquire-core-libs/src/acquire-core-logger/libacquire-core-logger.a
+          lipo -create build-x64/src/acquire-core-libs/src/acquire-device-hal/libacquire-device-hal.a build-arm64/src/acquire-core-libs/src/acquire-device-hal/libacquire-device-hal.a -output build/src/acquire-core-libs/src/acquire-device-hal/libacquire-device-hal.a
+          lipo -create build-x64/src/libacquire-driver-zarr.so build-arm64/src/libacquire-driver-zarr.so -output build/libacquire-driver-zarr.so
+
+      - name: Pack up
+        run: |
           cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
 
       - uses: actions/upload-artifact@v3
         with:
-          name: macos-latest ${{matrix.vcpkg_triplet}} ${{matrix.build_type}} binaries
+          name: macos-latest ${{matrix.build_type}} binaries
           path: ${{github.workspace}}/*.zip
