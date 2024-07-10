@@ -59,9 +59,6 @@ jobs:
           mv vcpkg_installed/arm64-osx .
           vcpkg install --triplet x64-osx
           mv arm64-osx vcpkg_installed
-          curl -o lipo-dir-merge.py https://raw.githubusercontent.com/faaxm/lipo-dir-merge/main/lipo-dir-merge.py
-          python3 lipo-dir-merge.py vcpkg_installed/x64-osx vcpkg_installed/arm64-osx vcpkg_installed/${{matrix.vcpkg_triplet}}
-          tree -d vcpkg_installed/
 
 #      - name: CMake
 #        run: |
