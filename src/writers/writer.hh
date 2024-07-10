@@ -4,7 +4,8 @@
 #include "platform.h"
 #include "device/props/components.h"
 
-#include "../common.hh"
+#include "common/dimension.hh"
+#include "common/thread.pool.hh"
 #include "blosc.compressor.hh"
 #include "file.sink.hh"
 

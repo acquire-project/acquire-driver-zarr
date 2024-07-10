@@ -1,6 +1,6 @@
 #include <stdexcept>
 #include "writer.hh"
-#include "../zarr.hh"
+#include "common/utilities.hh"
 
 #include <cmath>
 #include <functional>
