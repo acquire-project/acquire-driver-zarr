@@ -4,20 +4,19 @@
 namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 
-common::ThreadPool::ThreadPool(size_t n_threads,
+common::ThreadPool::ThreadPool(unsigned int n_threads,
                                std::function<void(const std::string&)> err)
   : error_handler_{ err }
   , is_accepting_jobs_{ true }
 {
     n_threads = std::clamp(
-      n_threads,
-      (size_t)1,
-      (size_t)std::max(std::thread::hardware_concurrency(), (unsigned)1));
+      n_threads, 1u, std::max(std::thread::hardware_concurrency(), 1u));
 
     for (auto i = 0; i < n_threads; ++i) {
         threads_.emplace_back([this] { thread_worker_(); });
     }
 }
+
 common::ThreadPool::~ThreadPool() noexcept
 {
     {
@@ -29,26 +28,26 @@ common::ThreadPool::~ThreadPool() noexcept
 
     await_stop();
 }
+
 void
 common::ThreadPool::push_to_job_queue(JobT&& job)
 {
     std::unique_lock lock(jobs_mutex_);
     CHECK(is_accepting_jobs_);
-
     jobs_.push(std::move(job));
-    lock.unlock();
 
     cv_.notify_one();
 }
+
 void
 common::ThreadPool::await_stop() noexcept
 {
     {
         std::scoped_lock lock(jobs_mutex_);
         is_accepting_jobs_ = false;
-    }
 
-    cv_.notify_all();
+        cv_.notify_all();
+    }
 
     // spin down threads
     for (auto& thread : threads_) {
@@ -57,6 +56,7 @@ common::ThreadPool::await_stop() noexcept
         }
     }
 }
+
 std::optional<common::ThreadPool::JobT>
 common::ThreadPool::pop_from_job_queue_() noexcept
 {
@@ -68,11 +68,13 @@ common::ThreadPool::pop_from_job_queue_() noexcept
     jobs_.pop();
     return job;
 }
+
 bool
 common::ThreadPool::should_stop_() const noexcept
 {
     return !is_accepting_jobs_ && jobs_.empty();
 }
+
 void
 common::ThreadPool::thread_worker_()
 {
