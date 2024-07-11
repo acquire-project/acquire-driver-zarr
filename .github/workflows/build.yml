@@ -4,64 +4,61 @@ on:
   push:
     branches:
       - "main"
-  pull_request:
-    branches:
-      - "main"
 
 jobs:
-  #  windows-and-linux-build:
-  #    strategy:
-  #      matrix:
-  #        build_type:
-  #          - "Debug"
-  #          - "Release"
-  #        platform:
-  #          - "windows-latest"
-  #          - "ubuntu-latest"
-  #        include:
-  #          - platform: "windows-latest"
-  #            vcpkg_triplet: "x64-windows-static"
-  #          - platform: "ubuntu-latest"
-  #            vcpkg_triplet: "x64-linux"
-  #
-  #    runs-on: ${{ matrix.platform }}
-  #
-  #    permissions:
-  #      actions: write
-  #
-  #    steps:
-  #      - name: Cancel Previous Runs
-  #        uses: styfle/cancel-workflow-action@0.10.0
-  #        with:
-  #          access_token: ${{ github.token }}
-  #
-  #      - uses: actions/checkout@v3
-  #        with:
-  #          submodules: true
-  #
-  #      - name: Install vcpkg
-  #        run: |
-  #          git clone https://github.com/microsoft/vcpkg.git
-  #          cd vcpkg && ./bootstrap-vcpkg.sh
-  #          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
-  #          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
-  #          ./vcpkg integrate install
-  #        shell: bash
-  #
-  #      - name: CMake
-  #        run: |
-  #          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
-  #          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
-  #
-  #      - name: Build
-  #        run: |
-  #          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
-  #          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
-  #
-  #      - uses: actions/upload-artifact@v3
-  #        with:
-  #          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
-  #          path: ${{github.workspace}}/*.zip
+  windows-and-linux-build:
+    strategy:
+      matrix:
+        build_type:
+          - "Debug"
+          - "Release"
+        platform:
+          - "windows-latest"
+          - "ubuntu-latest"
+        include:
+          - platform: "windows-latest"
+            vcpkg_triplet: "x64-windows-static"
+          - platform: "ubuntu-latest"
+            vcpkg_triplet: "x64-linux"
+
+    runs-on: ${{ matrix.platform }}
+
+    permissions:
+      actions: write
+
+    steps:
+      - name: Cancel Previous Runs
+        uses: styfle/cancel-workflow-action@0.10.0
+        with:
+          access_token: ${{ github.token }}
+
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg && ./bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
+          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
+          ./vcpkg integrate install
+        shell: bash
+
+      - name: CMake
+        run: |
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+
+      - name: Build
+        run: |
+          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
+          path: ${{github.workspace}}/*.zip
 
   mac-build:
     strategy:
@@ -69,14 +66,6 @@ jobs:
         build_type:
           - "Debug"
           - "Release"
-#        vcpkg_triplet:
-#          - "x64-osx"
-#          - "arm64-osx"
-#        include:
-#          - vcpkg_triplet: "x64-osx"
-#            arch: "x86_64"
-#          - vcpkg_triplet: "arm64-osx"
-#            arch: "arm64"
 
     runs-on: "macos-latest"
 
@@ -116,7 +105,7 @@ jobs:
         run: |
           cp -r ${{github.workspace}}/build-x64 ${{github.workspace}}/build && cd ${{github.workspace}}/build
           for filename in $(find . -type f -exec grep -H "build-x64" {} \; | awk '{print $1}' | sed -e 's/:.*//' | sort -u); do sed -i.bak -e "s/build-x64/build/g" $filename && rm ${filename}.bak; done
-          for lib in `find . -type f \( -name "*.so" -o -name "*.a" \)`; do rm $lib && lipo -create ../build-x64/${lib} ../build-arm64/${lib} -output $lib; lipo -info $lib; done
+          for lib in `find . -type f \( -name "*.so" -o -name "*.a" \)`; do rm $lib && lipo -create ../build-x64/${lib} ../build-arm64/${lib} -output $lib; done
 
       - name: Pack up
         run: |
