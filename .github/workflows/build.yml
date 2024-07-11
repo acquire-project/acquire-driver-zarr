@@ -2,23 +2,83 @@ name: Build
 
 on:
   push:
-    branches: [ "main" ]
+    branches:
+      - "main"
+  pull_request:
+    branches:
+      - "main"
 
 jobs:
-  build:
+  #  windows-and-linux-build:
+  #    strategy:
+  #      matrix:
+  #        build_type:
+  #          - "Debug"
+  #          - "Release"
+  #        platform:
+  #          - "windows-latest"
+  #          - "ubuntu-latest"
+  #        include:
+  #          - platform: "windows-latest"
+  #            vcpkg_triplet: "x64-windows-static"
+  #          - platform: "ubuntu-latest"
+  #            vcpkg_triplet: "x64-linux"
+  #
+  #    runs-on: ${{ matrix.platform }}
+  #
+  #    permissions:
+  #      actions: write
+  #
+  #    steps:
+  #      - name: Cancel Previous Runs
+  #        uses: styfle/cancel-workflow-action@0.10.0
+  #        with:
+  #          access_token: ${{ github.token }}
+  #
+  #      - uses: actions/checkout@v3
+  #        with:
+  #          submodules: true
+  #
+  #      - name: Install vcpkg
+  #        run: |
+  #          git clone https://github.com/microsoft/vcpkg.git
+  #          cd vcpkg && ./bootstrap-vcpkg.sh
+  #          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
+  #          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
+  #          ./vcpkg integrate install
+  #        shell: bash
+  #
+  #      - name: CMake
+  #        run: |
+  #          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
+  #          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+  #
+  #      - name: Build
+  #        run: |
+  #          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+  #          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
+  #
+  #      - uses: actions/upload-artifact@v3
+  #        with:
+  #          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
+  #          path: ${{github.workspace}}/*.zip
+
+  mac-build:
     strategy:
       matrix:
-        build_type: [ Debug, Release ]
-        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
-        include:
-          - platform: "windows-latest"
-            vcpkg_triplet: "x64-windows-static"
-          - platform: "ubuntu-latest"
-            vcpkg_triplet: "x64-linux"
-          - platform: "macos-latest"
-            vcpkg_triplet: "arm64-osx"
+        build_type:
+          - "Debug"
+          - "Release"
+#        vcpkg_triplet:
+#          - "x64-osx"
+#          - "arm64-osx"
+#        include:
+#          - vcpkg_triplet: "x64-osx"
+#            arch: "x86_64"
+#          - vcpkg_triplet: "arm64-osx"
+#            arch: "arm64"
 
-    runs-on: ${{ matrix.platform }}
+    runs-on: "macos-latest"
 
     permissions:
       actions: write
@@ -42,17 +102,28 @@ jobs:
           ./vcpkg integrate install
         shell: bash
 
-      - name: CMake
+      - name: Build for x64
         run: |
-          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=x64-osx -DVCPKG_INSTALLED_DIR=${{github.workspace}}/vcpkg-x64 -B ${{github.workspace}}/build-x64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="x86_64" -DNOTEST=1
+          cmake --build ${{github.workspace}}/build-x64 --config ${{matrix.build_type}}
 
-      - name: Build
+      - name: Build for arm64
         run: |
-          cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=arm64-osx -DVCPKG_INSTALLED_DIR=${{github.workspace}}/vcpkg-arm64 -B ${{github.workspace}}/build-arm64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64" -DNOTEST=1
+          cmake --build ${{github.workspace}}/build-arm64 --config ${{matrix.build_type}}
+
+      - name: Create a universal binary
+        run: |
+          cp -r ${{github.workspace}}/build-x64 ${{github.workspace}}/build
+          cd ${{github.workspace}}/build
+          for lib in `find . -type f \( -name "*.so" -o -name "*.a" \)`; do lipo -create ${{github.workspace}}/build-x64/${lib} ${{github.workspace}}/build-arm64/${lib} -output ${{github.workspace}}/build/$lib; done
+          sed -ie "s/build-x64/build/g" CPackConfig.cmake
+
+      - name: Pack up
+        run: |
           cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
 
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{matrix.platform}} ${{matrix.build_type}} binaries
+          name: macos-latest ${{matrix.build_type}} binaries
           path: ${{github.workspace}}/*.zip
