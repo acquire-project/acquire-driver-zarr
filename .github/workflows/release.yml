@@ -117,7 +117,7 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: ${{matrix.platform}} binaries
+          name: macos-latest binaries
           path: ${{github.workspace}}/*.zip
 
   release:
