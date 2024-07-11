@@ -182,6 +182,10 @@ verify_layer(const LayerTestCase& test_case)
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
 
+    const std::string dtype =
+      std::endian::native == std::endian::little ? "<u1" : ">u1";
+    CHECK(dtype == zarray["dtype"].get<std::string>());
+
     const auto shape = zarray["shape"];
     ASSERT_EQ(int, "%d", frames_per_layer, shape[0]);
     ASSERT_EQ(int, "%d", layer_frame_height, shape[1]);

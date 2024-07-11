@@ -20,7 +20,7 @@ struct ThreadPool final
     // std::string& argument to the error handler is a diagnostic message from
     // the failing job and is logged to the error stream by the Zarr driver when
     // the next call to `append()` is made.
-    ThreadPool(size_t n_threads, std::function<void(const std::string&)> err);
+    ThreadPool(unsigned int n_threads, std::function<void(const std::string&)> err);
     ~ThreadPool() noexcept;
 
     void push_to_job_queue(JobT&& job);

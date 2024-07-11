@@ -187,7 +187,9 @@ validate(AcquireRuntime* runtime)
     ASSERT_EQ(int, "%d", 32, chunk_shape[3]);
 
     CHECK("C" == metadata["chunk_memory_layout"]);
-    CHECK("u1" == metadata["data_type"]);
+
+    CHECK("uint8" == metadata["data_type"].get<std::string>());
+
     CHECK(metadata["extensions"].empty());
 
     const auto array_shape = metadata["shape"];

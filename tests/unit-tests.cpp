@@ -82,6 +82,7 @@ main()
     };
     const std::vector<testcase> tests{
 #define CASE(e) { .name = #e, .test = (int (*)())lib_load(&lib, #e) }
+        CASE(unit_test__trim),
         CASE(unit_test__average_frame),
         CASE(unit_test__thread_pool__push_to_job_queue),
         CASE(unit_test__s3_connection__make_bucket),
