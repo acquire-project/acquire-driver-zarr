@@ -71,8 +71,6 @@ target_include_directories(${tgt}-obj PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-core-platform/${my_platform}
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-device-kit
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-device-properties
-        ${CMAKE_CURRENT_LIST_DIR}/../src/3rdParty/cblosc/inc
-        ${CMAKE_CURRENT_LIST_DIR}/../src/3rdParty/json/inc
 )
 
 # target_include_directories(${tgt} PRIVATE

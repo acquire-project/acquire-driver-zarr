@@ -25,8 +25,8 @@ target_link_libraries(${tgt} PRIVATE
         acquire-device-kit
         acquire-device-properties
         acquire-driver-zarr-obj
-        cblosc
-        json
+        blosc_static
+        nlohmann_json::nlohmann_json
 )
 
 set_target_properties(${tgt} PROPERTIES
