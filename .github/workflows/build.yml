@@ -114,10 +114,9 @@ jobs:
 
       - name: Create a universal binary
         run: |
-          cp -r ${{github.workspace}}/build-x64 ${{github.workspace}}/build
-          cd ${{github.workspace}}/build
-          for lib in `find . -type f \( -name "*.so" -o -name "*.a" \)`; do lipo -create ${{github.workspace}}/build-x64/${lib} ${{github.workspace}}/build-arm64/${lib} -output ${{github.workspace}}/build/$lib; done
-          sed -ie "s/build-x64/build/g" CPackConfig.cmake
+          cp -r ${{github.workspace}}/build-x64 ${{github.workspace}}/build && cd ${{github.workspace}}/build
+          for filename in $(find . -type f -exec grep -H "build-x64" {} \; | awk '{print $1}' | sed -e 's/:.*//' | sort -u); do sed -i.bak -e "s/build-x64/build/g" $filename && rm ${filename}.bak; done
+          for lib in `find . -type f \( -name "*.so" -o -name "*.a" \)`; do rm $lib && lipo -create ../build-x64/${lib} ../build-arm64/${lib} -output $lib; lipo -info $lib; done
 
       - name: Pack up
         run: |
