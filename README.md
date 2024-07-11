@@ -21,9 +21,10 @@ We prefer using [vcpkg](https://vcpkg.io/en/) for dependency management, as it i
   - `export PATH=$VCPKG_ROOT:$PATH`
   - [Click here](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables?view=powershell-7.4#set-environment-variables-in-the-system-control-panel) to learn how to add environment variables on Windows.
 - Select the default CMake preset before building (consider deleting your build directory first)
-  - `cmake --preset=default`
-  - If you're building this project on Windows, you might need to specify your compiler triplet. This ensures that all dependencies are built as static libraries. You can specify the triplet during the preset selection process.
-    - `cmake --preset=default -DVCPKG_TARGET_TRIPLET=x64-windows-static`
+  - `cmake --preset=default -B /path/to/build`
+    - (Alternatively, from the build directory, run `cmake --preset=default /path/to/source`.)
+    - If you're building this project on Windows, you might need to specify your compiler triplet. This ensures that all dependencies are built as static libraries. You can specify the triplet during the preset selection process.
+      - `cmake --preset=default -DVCPKG_TARGET_TRIPLET=x64-windows-static ...`
 
 ## Devices
 
