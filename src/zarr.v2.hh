@@ -19,7 +19,7 @@ struct ZarrV2 final : public Zarr
     void allocate_writers_() override;
 
     /// Metadata
-    std::vector<std::string> make_metadata_sink_paths_() override;
+    void make_metadata_sinks_() override;
 
     // fixed metadata
     void write_base_metadata_() const override;

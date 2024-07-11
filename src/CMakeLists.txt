@@ -1,5 +1,4 @@
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-add_subdirectory(3rdParty)
 
 if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
@@ -10,9 +9,17 @@ set(tgt acquire-driver-zarr)
 
 #COMPILE SOURCES AS AN OBJECT LIBRARY
 add_library(${tgt}-obj OBJECT 
-        common.hh
-        common.cpp
+#        common.hh
+#        common.cpp
+        common/dimension.hh
+        common/dimension.cpp
+        common/thread.pool.hh
+        common/thread.pool.cpp
+        common/utilities.hh
+        common/utilities.cpp
         writers/sink.hh
+        writers/sink.creator.hh
+        writers/sink.creator.cpp
         writers/file.sink.hh
         writers/file.sink.cpp
         writers/writer.hh
@@ -38,8 +45,8 @@ set(${tgt}_deps
         acquire-core-platform
         acquire-device-kit
         acquire-device-properties
-        cblosc
-        json
+        blosc_static
+        nlohmann_json::nlohmann_json
 )
 
 # TOD0: this will get the includes for all dependencies listed above.
@@ -67,6 +74,10 @@ target_include_directories(${tgt}-obj PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}/../src/3rdParty/cblosc/inc
         ${CMAKE_CURRENT_LIST_DIR}/../src/3rdParty/json/inc
 )
+
+# target_include_directories(${tgt} PRIVATE
+#   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+# )
 
 add_library(${tgt} MODULE $<TARGET_OBJECTS:${tgt}-obj>)
 

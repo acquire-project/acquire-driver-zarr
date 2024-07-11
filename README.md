@@ -6,6 +6,26 @@
 
 This is an Acquire Driver that supports chunked streaming to [zarr][].
 
+## Installing Dependencies
+
+This driver uses the following libraries:
+- blosc v1.21.5
+- nlohmann-json v3.11.3
+
+We prefer using [vcpkg](https://vcpkg.io/en/) for dependency management, as it integrates well with CMake. Below are instructions for installing vcpkg locally and configuring it to fetch and compile the necessary dependencies (the steps are taken from [this vcpkg guide](https://learn.microsoft.com/en-us/vcpkg/get_started/get-started?pivots=shell-bash)).
+
+- `git clone https://github.com/microsoft/vcpkg.git`
+- `cd vcpkg && ./bootstrap-vcpkg.sh `
+- Add export commands to your shell's profile script (e.g., `~/.bashrc` or `~/.zshrc`)
+  - `export VCPKG_ROOT=/path/to/vcpkg`
+  - `export PATH=$VCPKG_ROOT:$PATH`
+  - [Click here](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_environment_variables?view=powershell-7.4#set-environment-variables-in-the-system-control-panel) to learn how to add environment variables on Windows.
+- Select the default CMake preset before building (consider deleting your build directory first)
+  - `cmake --preset=default -B /path/to/build`
+    - (Alternatively, from the build directory, run `cmake --preset=default /path/to/source`.)
+    - If you're building this project on Windows, you might need to specify your compiler triplet. This ensures that all dependencies are built as static libraries. You can specify the triplet during the preset selection process.
+      - `cmake --preset=default -DVCPKG_TARGET_TRIPLET=x64-windows-static ...`
+
 ## Devices
 
 ### Storage

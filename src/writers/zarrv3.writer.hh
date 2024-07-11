@@ -1,10 +1,6 @@
 #ifndef H_ACQUIRE_ZARR_V3_WRITER_V0
 #define H_ACQUIRE_ZARR_V3_WRITER_V0
 
-#ifndef __cplusplus
-#error "This header requires C++20"
-#endif
-
 #include "writer.hh"
 
 #include "platform.h"
@@ -24,7 +20,7 @@ struct ZarrV3Writer final : public Writer
 {
   public:
     ZarrV3Writer() = delete;
-    ZarrV3Writer(const ArrayConfig& array_spec,
+    ZarrV3Writer(const WriterConfig& array_spec,
                  std::shared_ptr<common::ThreadPool> thread_pool);
 
     ~ZarrV3Writer() override = default;

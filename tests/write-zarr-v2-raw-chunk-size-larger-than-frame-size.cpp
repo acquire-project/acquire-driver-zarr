@@ -7,7 +7,7 @@
 #include <fstream>
 #include <stdexcept>
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -232,6 +232,10 @@ validate()
     // check metadata
     std::ifstream f(zarray_path);
     json zarray = json::parse(f);
+
+    const std::string dtype =
+      std::endian::native == std::endian::little ? "<u1" : ">u1";
+    CHECK(dtype == zarray["dtype"].get<std::string>());
 
     auto shape = zarray["shape"];
     ASSERT_EQ(int, "%d", frames_per_chunk, shape[0]);

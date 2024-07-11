@@ -1,7 +1,7 @@
 #include "zarr.hh"
 
 #include "writers/zarrv2.writer.hh"
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 #include <tuple> // std::ignore
 
@@ -141,8 +141,9 @@ scale_image(const VideoFrame* src)
     const auto height = src->shape.dims.height;
     const auto h_pad = height + (height % downscale);
 
-    auto* dst = (VideoFrame*)malloc(sizeof(VideoFrame) +
-                                    w_pad * h_pad * factor * sizeof(T));
+    const size_t bytes_of_frame = common::align_up(
+      sizeof(VideoFrame) + w_pad * h_pad * factor * bytes_of_type, 8);
+    auto* dst = (VideoFrame*)malloc(bytes_of_frame);
     memcpy(dst, src, sizeof(VideoFrame));
 
     dst->shape.dims.width = w_pad / downscale;
@@ -152,13 +153,11 @@ scale_image(const VideoFrame* src)
     dst->shape.strides.planes =
       dst->shape.strides.height * dst->shape.dims.height;
 
-    dst->bytes_of_frame =
-      dst->shape.dims.planes * dst->shape.strides.planes * sizeof(T) +
-      sizeof(*dst);
+    dst->bytes_of_frame = bytes_of_frame;
 
     const auto* src_img = (T*)src->data;
     auto* dst_img = (T*)dst->data;
-    memset(dst_img, 0, dst->bytes_of_frame - sizeof(*dst));
+    memset(dst_img, 0, bytes_of_image(&dst->shape));
 
     size_t dst_idx = 0;
     for (auto row = 0; row < height; row += downscale) {
@@ -190,8 +189,8 @@ average_two_frames(VideoFrame* dst, const VideoFrame* src)
     CHECK(src);
     CHECK(dst->bytes_of_frame == src->bytes_of_frame);
 
-    const auto bytes_of_image = dst->bytes_of_frame - sizeof(*dst);
-    const auto num_pixels = bytes_of_image / sizeof(T);
+    const auto nbytes_image = bytes_of_image(&dst->shape);
+    const auto num_pixels = nbytes_image / sizeof(T);
     for (auto i = 0; i < num_pixels; ++i) {
         dst->data[i] = (T)(0.5f * ((float)dst->data[i] + (float)src->data[i]));
     }
@@ -346,7 +345,7 @@ zarr::Zarr::set(const StorageProperties* props)
     validate_props(props);
     // TODO (aliddell): we will eventually support S3 URIs,
     //  dataset_root_ should be a string
-    dataset_root_ = as_path(*props);
+    dataset_root_ = as_path(*props).string();
 
     if (props->external_metadata_json.str) {
         external_metadata_json_ = props->external_metadata_json.str;
@@ -371,8 +370,6 @@ zarr::Zarr::get(StorageProperties* props) const
 {
     CHECK(props);
     storage_properties_destroy(props);
-
-    const std::string dataset_root = dataset_root_.string();
 
     std::string uri;
     if (!dataset_root_.empty()) {
@@ -441,10 +438,7 @@ zarr::Zarr::start()
 
     allocate_writers_();
 
-    if (!dataset_root_.string().starts_with("s3://")) {
-        make_metadata_sinks_<FileCreator>();
-    }
-
+    make_metadata_sinks_();
     write_fixed_metadata_();
 
     state = DeviceState_Running;
@@ -463,11 +457,6 @@ zarr::Zarr::stop() noexcept
         try {
             // must precede close of chunk file
             write_mutable_metadata_();
-            for (Sink* sink_ : metadata_sinks_) {
-                if (auto* sink = dynamic_cast<FileSink*>(sink_)) {
-                    sink_close<FileSink>(sink);
-                }
-            }
             metadata_sinks_.clear();
 
             for (auto& writer : writers_) {
@@ -484,8 +473,8 @@ zarr::Zarr::stop() noexcept
 
             // should be empty, but just in case
             for (auto& [_, frame] : scaled_frames_) {
-                if (frame.has_value() && frame.value()) {
-                    free(frame.value());
+                if (frame && *frame) {
+                    free(*frame);
                 }
             }
             scaled_frames_.clear();
@@ -701,8 +690,12 @@ template<typename T>
 void
 test_average_frame_inner(const SampleType& stype)
 {
-    auto* src = (VideoFrame*)malloc(sizeof(VideoFrame) + 9 * sizeof(T));
-    src->bytes_of_frame = sizeof(*src) + 9 * sizeof(T);
+    const size_t bytes_of_frame =
+      common::align_up(sizeof(VideoFrame) + 9 * sizeof(T), 8);
+    auto* src = (VideoFrame*)malloc(bytes_of_frame);
+    CHECK(src);
+
+    src->bytes_of_frame = bytes_of_frame;
     src->shape = {
         .dims = {
           .channels = 1,

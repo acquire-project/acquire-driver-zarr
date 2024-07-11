@@ -9,7 +9,7 @@
 #include <fstream>
 #include <stdexcept>
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -260,7 +260,7 @@ validate()
     ASSERT_EQ(int, "%d", chunk_width, chunk_shape[2]);
 
     CHECK("C" == metadata["chunk_memory_layout"]);
-    CHECK("u1" == metadata["data_type"]);
+    CHECK("uint8" == metadata["data_type"]);
     CHECK(metadata["extensions"].empty());
 
     const auto array_shape = metadata["shape"];

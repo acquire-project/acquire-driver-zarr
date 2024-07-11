@@ -53,6 +53,7 @@ else ()
                 acquire-core-logger
                 acquire-core-platform
                 acquire-video-runtime
+                nlohmann_json::nlohmann_json
         )
 
         add_test(NAME test-${tgt} COMMAND ${tgt})

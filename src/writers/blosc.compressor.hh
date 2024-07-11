@@ -1,12 +1,9 @@
 #ifndef H_ACQUIRE_ZARR_BLOSC_COMPRESSOR_V0
 #define H_ACQUIRE_ZARR_BLOSC_COMPRESSOR_V0
 
-#ifndef __cplusplus
-#error "This header requires C++20"
-#endif
-
 #include "blosc.h"
-#include "json.hpp"
+
+#include "nlohmann/json.hpp"
 
 namespace acquire::sink::zarr {
 enum class BloscCodecId : uint8_t

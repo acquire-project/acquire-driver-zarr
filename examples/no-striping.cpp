@@ -12,7 +12,7 @@
 #include <fstream>
 #include <stdexcept>
 
-#include "tests/json.hpp"
+#include <nlohmann/json.hpp>
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;

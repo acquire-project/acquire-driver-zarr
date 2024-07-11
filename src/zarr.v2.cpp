@@ -1,7 +1,10 @@
 #include "zarr.v2.hh"
 #include "writers/zarrv2.writer.hh"
+#include "writers/sink.creator.hh"
 
-#include "json.hpp"
+#include "nlohmann/json.hpp"
+
+#include <bit>
 
 namespace zarr = acquire::sink::zarr;
 
@@ -20,6 +23,33 @@ compressed_zarr_v2_init()
         LOGE("Exception: (unknown)");
     }
     return nullptr;
+}
+
+std::string
+sample_type_to_dtype(SampleType t)
+
+{
+    const std::string dtype_prefix =
+      std::endian::native == std::endian::big ? ">" : "<";
+
+    switch (t) {
+        case SampleType_u8:
+            return dtype_prefix + "u1";
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            return dtype_prefix + "u2";
+        case SampleType_i8:
+            return dtype_prefix + "i1";
+        case SampleType_i16:
+            return dtype_prefix + "i2";
+        case SampleType_f32:
+            return dtype_prefix + "f4";
+        default:
+            throw std::runtime_error("Invalid SampleType: " +
+                                     std::to_string(static_cast<int>(t)));
+    }
 }
 } // end ::{anonymous} namespace
 
@@ -42,16 +72,17 @@ zarr::ZarrV2::allocate_writers_()
 {
     writers_.clear();
 
-    ArrayConfig config = {
+    WriterConfig config = {
         .image_shape = image_shape_,
         .dimensions = acquisition_dimensions_,
-        .data_root = (dataset_root_ / "0").string(),
+        .data_root = dataset_root_ + "/0",
         .compression_params = blosc_compression_params_,
     };
+
     writers_.push_back(std::make_shared<ZarrV2Writer>(config, thread_pool_));
 
     if (enable_multiscale_) {
-        ArrayConfig downsampled_config;
+        WriterConfig downsampled_config;
 
         bool do_downsample = true;
         int level = 1;
@@ -67,21 +98,12 @@ zarr::ZarrV2::allocate_writers_()
     }
 }
 
-std::vector<std::string>
-zarr::ZarrV2::make_metadata_sink_paths_()
+void
+zarr::ZarrV2::make_metadata_sinks_()
 {
-    std::vector<std::string> metadata_sink_paths = {
-        (dataset_root_ / ".metadata").string(),     // base metadata
-        (dataset_root_ / "0" / ".zattrs").string(), // external metadata
-        (dataset_root_ / ".zattrs").string(),       // group metadata
-    };
-
-    for (auto i = 0; i < writers_.size(); ++i) {
-        metadata_sink_paths.push_back(
-          (dataset_root_ / std::to_string(i) / ".zarray").string());
-    }
-
-    return metadata_sink_paths;
+    SinkCreator creator(thread_pool_);
+    CHECK(creator.create_v2_metadata_sinks(
+      dataset_root_, writers_.size(), metadata_sinks_));
 }
 
 void
@@ -93,7 +115,9 @@ zarr::ZarrV2::write_base_metadata_() const
     const json metadata = { { "zarr_format", 2 } };
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(0);
+    CHECK(!metadata_sinks_.empty());
+    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(0);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -103,7 +127,6 @@ zarr::ZarrV2::write_external_metadata_() const
     namespace fs = std::filesystem;
     using json = nlohmann::json;
 
-    std::string zattrs_path = (dataset_root_ / "0" / ".zattrs").string();
     std::string metadata_str = external_metadata_json_.empty()
                                  ? "{}"
                                  : json::parse(external_metadata_json_,
@@ -113,7 +136,9 @@ zarr::ZarrV2::write_external_metadata_() const
                                                )
                                      .dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(1);
+    CHECK(metadata_sinks_.size() > 1);
+    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(1);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -217,7 +242,9 @@ zarr::ZarrV2::write_group_metadata_() const
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(2);
+    CHECK(metadata_sinks_.size() > 2);
+    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(2);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
@@ -230,7 +257,7 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     CHECK(level < writers_.size());
     const auto& writer = writers_.at(level);
 
-    const ArrayConfig& config = writer->config();
+    const WriterConfig& config = writer->config();
     const auto& image_shape = config.image_shape;
 
     std::vector<size_t> array_shape;
@@ -251,21 +278,23 @@ zarr::ZarrV2::write_array_metadata_(size_t level) const
     metadata["zarr_format"] = 2;
     metadata["shape"] = array_shape;
     metadata["chunks"] = chunk_shape;
-    metadata["dtype"] = common::sample_type_to_dtype(image_shape.type);
+    metadata["dtype"] = sample_type_to_dtype(image_shape.type);
     metadata["fill_value"] = 0;
     metadata["order"] = "C";
     metadata["filters"] = nullptr;
     metadata["dimension_separator"] = "/";
 
-    if (config.compression_params.has_value()) {
-        metadata["compressor"] = config.compression_params.value();
+    if (config.compression_params) {
+        metadata["compressor"] = *config.compression_params;
     } else {
         metadata["compressor"] = nullptr;
     }
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    Sink* sink = metadata_sinks_.at(3 + level);
+    CHECK(metadata_sinks_.size() > 3 + level);
+    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(3 + level);
+    CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
 
