@@ -1,10 +1,10 @@
-#include <stdexcept>
 #include "writer.hh"
 #include "common/utilities.hh"
 
 #include <cmath>
 #include <functional>
 #include <latch>
+#include <stdexcept>
 
 namespace zarr = acquire::sink::zarr;
 
@@ -177,9 +177,11 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 
 /// Writer
 zarr::Writer::Writer(const WriterConfig& config,
-                     std::shared_ptr<common::ThreadPool> thread_pool)
+                     std::shared_ptr<common::ThreadPool> thread_pool,
+                     std::shared_ptr<common::S3ConnectionPool> connection_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
+  , connection_pool_{ connection_pool }
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
   , append_chunk_index_{ 0 }
@@ -463,7 +465,7 @@ class TestWriter : public zarr::Writer
   public:
     TestWriter(const zarr::WriterConfig& array_spec,
                std::shared_ptr<common::ThreadPool> thread_pool)
-      : zarr::Writer(array_spec, thread_pool)
+      : zarr::Writer(array_spec, thread_pool, nullptr)
     {
     }
 

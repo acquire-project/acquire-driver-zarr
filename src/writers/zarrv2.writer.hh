@@ -21,7 +21,8 @@ struct ZarrV2Writer final : public Writer
   public:
     ZarrV2Writer() = delete;
     ZarrV2Writer(const WriterConfig& config,
-                 std::shared_ptr<common::ThreadPool> thread_pool);
+                 std::shared_ptr<common::ThreadPool> thread_pool,
+                 std::shared_ptr<common::S3ConnectionPool> connection_pool);
 
     ~ZarrV2Writer() override = default;
 
