@@ -19,12 +19,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [ "windows-latest", "ubuntu-latest", "macos-latest" ]
+        platform:
+          - "ubuntu-latest"
+          - "windows-latest"
+          - "macos-latest"
         include:
-          - platform: "windows-latest"
-            vcpkg_triplet: "x64-windows-static"
           - platform: "ubuntu-latest"
             vcpkg_triplet: "x64-linux"
+          - platform: "windows-latest"
+            vcpkg_triplet: "x64-windows-static"
           - platform: "macos-latest"
             vcpkg_triplet: "arm64-osx"
     permissions:
