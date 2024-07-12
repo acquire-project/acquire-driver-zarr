@@ -93,6 +93,7 @@ main()
         CASE(unit_test__chunk_lattice_index),
         CASE(unit_test__tile_group_offset),
         CASE(unit_test__chunk_internal_offset),
+        CASE(unit_test__split_uri),
         CASE(unit_test__writer__write_frame_to_chunks),
         CASE(unit_test__downsample_writer_config),
         CASE(unit_test__zarrv2_writer__write_even),

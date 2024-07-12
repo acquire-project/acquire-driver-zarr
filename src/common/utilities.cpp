@@ -201,9 +201,16 @@ common::split_uri(const std::string& uri)
     auto end = uri.find_first_of(delim);
 
     std::vector<std::string> out;
-    while (end != std::string::npos) {
+    while (end <= std::string::npos) {
         if (end > begin) {
-            out.emplace_back(uri.substr(begin, end - begin));
+            std::string part = uri.substr(begin, end - begin);
+            if (!part.empty()) {
+                out.emplace_back(part);
+            }
+        }
+
+        if (end == std::string::npos) {
+            break;
         }
 
         begin = end + 1;
@@ -480,6 +487,76 @@ extern "C"
 
         return retval;
     }
-}
 
+    acquire_export int unit_test__split_uri()
+    {
+        try {
+            auto parts = common::split_uri("s3://bucket/key");
+            CHECK(parts.size() == 3);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+            CHECK(parts[2] == "key");
+
+            parts = common::split_uri("s3://bucket/key/");
+            CHECK(parts.size() == 3);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+            CHECK(parts[2] == "key");
+
+            parts = common::split_uri("s3://bucket/key/with/slashes");
+            CHECK(parts.size() == 5);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+            CHECK(parts[2] == "key");
+            CHECK(parts[3] == "with");
+            CHECK(parts[4] == "slashes");
+
+            parts = common::split_uri("s3://bucket");
+            CHECK(parts.size() == 2);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+
+            parts = common::split_uri("s3://");
+            CHECK(parts.size() == 1);
+            CHECK(parts[0] == "s3:");
+
+            parts = common::split_uri("s3:///");
+            CHECK(parts.size() == 1);
+            CHECK(parts[0] == "s3:");
+
+            parts = common::split_uri("s3://bucket/");
+            CHECK(parts.size() == 2);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+
+            parts = common::split_uri("s3://bucket/");
+            CHECK(parts.size() == 2);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+
+            parts = common::split_uri("s3://bucket/key/with/slashes/");
+            CHECK(parts.size() == 5);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+            CHECK(parts[2] == "key");
+            CHECK(parts[3] == "with");
+            CHECK(parts[4] == "slashes");
+
+            parts = common::split_uri("s3://bucket/key/with/slashes//");
+            CHECK(parts.size() == 5);
+            CHECK(parts[0] == "s3:");
+            CHECK(parts[1] == "bucket");
+            CHECK(parts[2] == "key");
+            CHECK(parts[3] == "with");
+            CHECK(parts[4] == "slashes");
+            return 1;
+        } catch (const std::exception& exc) {
+            LOGE("Exception: %s\n", exc.what());
+        } catch (...) {
+            LOGE("Exception: (unknown)");
+        }
+
+        return 0;
+    }
+}
 #endif

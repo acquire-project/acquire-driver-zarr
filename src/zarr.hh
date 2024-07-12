@@ -45,6 +45,8 @@ struct Zarr : public Storage
 
     /// changes on set
     std::string dataset_root_;
+    std::string access_key_id_;
+    std::string secret_access_key_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     bool enable_multiscale_;
