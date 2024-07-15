@@ -1,3 +1,5 @@
+add_subdirectory(3rdParty)
+
 if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
@@ -44,6 +46,7 @@ target_link_libraries(${tgt} PRIVATE
         acquire-device-properties
         blosc_static
         nlohmann_json::nlohmann_json
+        miniocpp::miniocpp
 )
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"

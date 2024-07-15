@@ -1,12 +1,17 @@
 {
   "dependencies": [
     {
-        "name": "blosc",
-        "version>=": "1.21.5"
+      "name": "blosc",
+      "version>=": "1.21.5"
     },
     {
-        "name": "nlohmann-json",
-        "version>=": "3.11.3"
-    }
+      "name": "nlohmann-json",
+      "version>=": "3.11.3"
+    },
+    { "name": "curlpp" },
+    { "name": "inih", "features": ["cpp"] },
+    { "name": "openssl" },
+    { "name": "pugixml" },
+    { "name": "zlib", "platform": "windows" }
   ]
 }
