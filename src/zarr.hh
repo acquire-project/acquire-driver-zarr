@@ -3,7 +3,8 @@
 
 #include "device/kit/storage.h"
 
-#include "common.hh"
+#include "common/utilities.hh"
+#include "common/thread.pool.hh"
 #include "writers/writer.hh"
 #include "writers/blosc.compressor.hh"
 
