@@ -1,5 +1,4 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
-#define H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
+#pragma once
 
 #include <condition_variable>
 #include <list>
@@ -89,4 +88,3 @@ struct S3ConnectionPool final
     [[nodiscard]] bool should_stop_() const;
 };
 } // namespace acquire::sink::zarr::common
-#endif // H_ACQUIRE_STORAGE_ZARR_S3_CONNECTION_POOL_V0
