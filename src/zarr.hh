@@ -33,7 +33,7 @@ struct Zarr : public Storage
     void start();
     int stop() noexcept;
     size_t append(const VideoFrame* frames, size_t nbytes);
-    size_t append_frame(uint8_t *constdata,
+    size_t append_frame(const uint8_t* data,
                         size_t bytes_of_data,
                         const ImageShape& shape);
     void reserve_image_shape(const ImageShape* shape);
@@ -89,7 +89,7 @@ struct Zarr : public Storage
     virtual void write_array_metadata_(size_t level) const = 0;
 
     /// Multiscale
-    void write_multiscale_frames_(uint8_t *const data_,
+    void write_multiscale_frames_(const uint8_t* data_,
                                   size_t bytes_of_data,
                                   const ImageShape& shape_);
 };

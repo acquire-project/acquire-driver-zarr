@@ -128,12 +128,13 @@ is_multiscale_supported(const std::vector<zarr::Dimension>& dims)
 
 template<typename T>
 VideoFrame*
-scale_image(uint8_t* const data,
+scale_image(const uint8_t* const data,
             size_t bytes_of_data,
             const struct ImageShape& shape)
 {
     CHECK(data);
     CHECK(bytes_of_data);
+
     const int downscale = 2;
     constexpr size_t bytes_of_type = sizeof(T);
     const auto factor = 0.25f;
@@ -146,10 +147,13 @@ scale_image(uint8_t* const data,
 
     const auto size_of_image =
       static_cast<uint32_t>(w_pad * h_pad * factor * bytes_of_type);
+
     const size_t bytes_of_frame =
       common::align_up(sizeof(VideoFrame) + size_of_image, 8);
+
     auto* dst = (VideoFrame*)malloc(bytes_of_frame);
     CHECK(dst);
+    dst->bytes_of_frame = bytes_of_frame;
 
     {
         dst->shape = shape;
@@ -161,8 +165,6 @@ scale_image(uint8_t* const data,
             .height = dst->shape.dims.width,
             .planes = dst->shape.dims.width * dst->shape.dims.height,
         };
-
-        dst->bytes_of_frame = bytes_of_frame;
 
         CHECK(bytes_of_image(&dst->shape) == size_of_image);
     }
@@ -536,7 +538,7 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
 }
 
 size_t
-zarr::Zarr::append_frame(uint8_t* const data,
+zarr::Zarr::append_frame(const uint8_t* const data,
                          size_t bytes_of_data,
                          const ImageShape& shape)
 {
@@ -653,15 +655,15 @@ zarr::Zarr::write_mutable_metadata_() const
 }
 
 void
-zarr::Zarr::write_multiscale_frames_(uint8_t* const data_,
+zarr::Zarr::write_multiscale_frames_(const uint8_t* const data_,
                                      size_t bytes_of_data,
                                      const ImageShape& shape_)
 {
-    uint8_t* data = data_;
+    auto* data = const_cast<uint8_t*>(data_);
     ImageShape shape = shape_;
     struct VideoFrame* dst;
 
-    std::function<VideoFrame*(uint8_t* const, size_t, const ImageShape&)> scale;
+    std::function<VideoFrame*(const uint8_t*, size_t, const ImageShape&)> scale;
     std::function<void(VideoFrame*, const VideoFrame*)> average2;
     switch (shape.type) {
         case SampleType_u10:
@@ -702,6 +704,7 @@ zarr::Zarr::write_multiscale_frames_(uint8_t* const data_,
             // average
             average2(dst, scaled_frames_.at(i).value());
 
+            // write the downsampled frame
             const size_t bytes_of_frame = bytes_of_image(&dst->shape);
             CHECK(writers_.at(i)->write(dst->data, bytes_of_frame));
 
@@ -715,7 +718,8 @@ zarr::Zarr::write_multiscale_frames_(uint8_t* const data_,
                 shape = dst->shape;
                 bytes_of_data = bytes_of_image(&shape);
             } else {
-                free(dst); // FIXME (aliddell): find a way to reuse
+                // no longer needed
+                free(dst);
             }
         } else {
             scaled_frames_.at(i) = dst;
