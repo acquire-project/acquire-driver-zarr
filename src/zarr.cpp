@@ -128,36 +128,48 @@ is_multiscale_supported(const std::vector<zarr::Dimension>& dims)
 
 template<typename T>
 VideoFrame*
-scale_image(const VideoFrame* src)
+scale_image(uint8_t* const data,
+            size_t bytes_of_data,
+            const struct ImageShape& shape)
 {
-    CHECK(src);
+    CHECK(data);
+    CHECK(bytes_of_data);
     const int downscale = 2;
     constexpr size_t bytes_of_type = sizeof(T);
     const auto factor = 0.25f;
 
-    const auto width = src->shape.dims.width;
+    const auto width = shape.dims.width;
     const auto w_pad = width + (width % downscale);
 
-    const auto height = src->shape.dims.height;
+    const auto height = shape.dims.height;
     const auto h_pad = height + (height % downscale);
 
-    const size_t bytes_of_frame = common::align_up(
-      sizeof(VideoFrame) + w_pad * h_pad * factor * bytes_of_type, 8);
+    const auto size_of_image =
+      static_cast<uint32_t>(w_pad * h_pad * factor * bytes_of_type);
+    const size_t bytes_of_frame =
+      common::align_up(sizeof(VideoFrame) + size_of_image, 8);
     auto* dst = (VideoFrame*)malloc(bytes_of_frame);
-    memcpy(dst, src, sizeof(VideoFrame));
+    CHECK(dst);
 
-    dst->shape.dims.width = w_pad / downscale;
-    dst->shape.dims.height = h_pad / downscale;
-    dst->shape.strides.height =
-      dst->shape.strides.width * dst->shape.dims.width;
-    dst->shape.strides.planes =
-      dst->shape.strides.height * dst->shape.dims.height;
+    {
+        dst->shape = shape;
+        dst->shape.dims = {
+            .width = w_pad / downscale,
+            .height = h_pad / downscale,
+        };
+        dst->shape.strides = {
+            .height = dst->shape.dims.width,
+            .planes = dst->shape.dims.width * dst->shape.dims.height,
+        };
 
-    dst->bytes_of_frame = bytes_of_frame;
+        dst->bytes_of_frame = bytes_of_frame;
 
-    const auto* src_img = (T*)src->data;
+        CHECK(bytes_of_image(&dst->shape) == size_of_image);
+    }
+
+    const auto* src_img = (T*)data;
     auto* dst_img = (T*)dst->data;
-    memset(dst_img, 0, bytes_of_image(&dst->shape));
+    memset(dst_img, 0, size_of_image);
 
     size_t dst_idx = 0;
     for (auto row = 0; row < height; row += downscale) {
@@ -511,14 +523,42 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     };
 
     for (cur = frames; cur < end; cur = next()) {
-        EXPECT(writers_.at(0)->write(cur), "%s", error_msg_.c_str());
-
-        // multiscale
-        if (writers_.size() > 1) {
-            write_multiscale_frames_(cur);
-        }
+        const size_t bytes_of_frame = bytes_of_image(&cur->shape);
+        const size_t bytes_written = append_frame(
+          const_cast<uint8_t*>(cur->data), bytes_of_frame, cur->shape);
+        EXPECT(bytes_written == bytes_of_frame,
+               "Expected to write %zu bytes, but wrote %zu.",
+               bytes_of_frame,
+               bytes_written);
     }
+
     return nbytes;
+}
+
+size_t
+zarr::Zarr::append_frame(uint8_t* const data,
+                         size_t bytes_of_data,
+                         const ImageShape& shape)
+{
+    CHECK(DeviceState_Running == state);
+    EXPECT(!error_, "%s", error_msg_.c_str());
+
+    if (!data || !bytes_of_data) {
+        return 0;
+    }
+
+    const size_t bytes_written = writers_.at(0)->write(data, bytes_of_data);
+    if (bytes_written != bytes_of_data) {
+        set_error("Failed to write frame.");
+        return bytes_written;
+    }
+
+    // multiscale
+    if (writers_.size() > 1) {
+        write_multiscale_frames_(data, bytes_written, shape);
+    }
+
+    return bytes_written;
 }
 
 void
@@ -613,14 +653,17 @@ zarr::Zarr::write_mutable_metadata_() const
 }
 
 void
-zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
+zarr::Zarr::write_multiscale_frames_(uint8_t* const data_,
+                                     size_t bytes_of_data,
+                                     const ImageShape& shape_)
 {
-    const VideoFrame* src = frame;
-    VideoFrame* dst;
+    uint8_t* data = data_;
+    ImageShape shape = shape_;
+    struct VideoFrame* dst;
 
-    std::function<VideoFrame*(const VideoFrame*)> scale;
+    std::function<VideoFrame*(uint8_t* const, size_t, const ImageShape&)> scale;
     std::function<void(VideoFrame*, const VideoFrame*)> average2;
-    switch (frame->shape.type) {
+    switch (shape.type) {
         case SampleType_u10:
         case SampleType_u12:
         case SampleType_u14:
@@ -649,17 +692,18 @@ zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
             snprintf(err_msg,
                      sizeof(err_msg),
                      "Unsupported pixel type: %s",
-                     common::sample_type_to_string(frame->shape.type));
+                     common::sample_type_to_string(shape.type));
             throw std::runtime_error(err_msg);
     }
 
     for (auto i = 1; i < writers_.size(); ++i) {
-        dst = scale(src);
+        dst = scale(data, bytes_of_data, shape);
         if (scaled_frames_.at(i).has_value()) {
             // average
             average2(dst, scaled_frames_.at(i).value());
 
-            CHECK(writers_.at(i)->write(dst));
+            const size_t bytes_of_frame = bytes_of_image(&dst->shape);
+            CHECK(writers_.at(i)->write(dst->data, bytes_of_frame));
 
             // clean up this level of detail
             free(scaled_frames_.at(i).value());
@@ -667,7 +711,9 @@ zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
 
             // setup for next iteration
             if (i + 1 < writers_.size()) {
-                src = dst;
+                data = dst->data;
+                shape = dst->shape;
+                bytes_of_data = bytes_of_image(&shape);
             } else {
                 free(dst); // FIXME (aliddell): find a way to reuse
             }
@@ -716,7 +762,8 @@ test_average_frame_inner(const SampleType& stype)
         ((T*)src->data)[i] = (T)(i + 1);
     }
 
-    auto dst = scale_image<T>(src);
+    auto dst =
+      scale_image<T>(src->data, bytes_of_image(&src->shape), src->shape);
     CHECK(((T*)dst->data)[0] == (T)3);
     CHECK(((T*)dst->data)[1] == (T)4.5);
     CHECK(((T*)dst->data)[2] == (T)7.5);
