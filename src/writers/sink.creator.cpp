@@ -33,10 +33,7 @@ zarr::SinkCreator::make_data_sinks(
         CHECK(tokens.size() > 2);
         bucket_name = tokens.at(2);
 
-        // create the bucket if it doesn't already exist
-        if (!make_s3_bucket_(bucket_name)) {
-            return false;
-        }
+        CHECK(bucket_exists_(bucket_name));
 
         std::string base_dir;
         for (auto i = 3; i < tokens.size() - 1; ++i) {
@@ -103,52 +100,42 @@ zarr::SinkCreator::make_data_sinks(
 }
 
 bool
-zarr::SinkCreator::create_v2_metadata_sinks(
+zarr::SinkCreator::make_metadata_sinks(
+  acquire::sink::zarr::ZarrVersion version,
   const std::string& base_uri,
   size_t n_arrays,
   std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
-    if (base_uri.empty()) {
-        LOGE("Base URI is empty.");
-        return false;
-    }
+    EXPECT(!base_uri.empty(), "URI must not be empty.");
 
     std::queue<std::string> dir_paths, file_paths;
 
-    file_paths.emplace(".metadata"); // base metadata
-    file_paths.emplace("0/.zattrs"); // external metadata
-    file_paths.emplace(".zattrs");   // group metadata
+    switch (version) {
+        case ZarrVersion::V2:
+            file_paths.emplace(".metadata"); // base metadata
+            file_paths.emplace("0/.zattrs"); // external metadata
+            file_paths.emplace(".zattrs");   // group metadata
 
-    for (auto i = 0; i < n_arrays; ++i) {
-        const auto idx_string = std::to_string(i);
-        dir_paths.push(idx_string);
-        file_paths.push(idx_string + "/.zarray"); // array metadata
-    }
+            for (auto i = 0; i < n_arrays; ++i) {
+                const auto idx_string = std::to_string(i);
+                dir_paths.push(idx_string);
+                file_paths.push(idx_string + "/.zarray"); // array metadata
+            }
+            break;
+        case ZarrVersion::V3:
+            dir_paths.emplace("meta");
+            dir_paths.emplace("meta/root");
 
-    return make_metadata_sinks_(
-      base_uri, dir_paths, file_paths, metadata_sinks);
-}
-
-bool
-zarr::SinkCreator::create_v3_metadata_sinks(
-  const std::string& base_uri,
-  size_t n_arrays,
-  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
-{
-    if (base_uri.empty()) {
-        LOGE("Base URI is empty.");
-        return false;
-    }
-
-    std::queue<std::string> dir_paths, file_paths;
-
-    dir_paths.emplace("meta");
-    dir_paths.emplace("meta/root");
-
-    file_paths.emplace("zarr.json");
-    file_paths.emplace("meta/root.group.json");
-    for (auto i = 0; i < n_arrays; ++i) {
-        file_paths.push("meta/root/" + std::to_string(i) + ".array.json");
+            file_paths.emplace("zarr.json");
+            file_paths.emplace("meta/root.group.json");
+            for (auto i = 0; i < n_arrays; ++i) {
+                file_paths.push("meta/root/" + std::to_string(i) +
+                                ".array.json");
+            }
+            break;
+        default:
+            throw std::runtime_error("Invalid Zarr version " +
+                                     std::to_string(static_cast<int>(version)));
     }
 
     return make_metadata_sinks_(
@@ -282,7 +269,7 @@ zarr::SinkCreator::make_metadata_sinks_(
         }
 
         // create the bucket if it doesn't already exist
-        if (!make_s3_bucket_(bucket_name)) {
+        if (!bucket_exists_(bucket_name)) {
             return false;
         }
     } else {
@@ -323,32 +310,19 @@ zarr::SinkCreator::make_metadata_sinks_(
 }
 
 bool
-zarr::SinkCreator::make_s3_bucket_(const std::string& bucket_name)
+zarr::SinkCreator::bucket_exists_(const std::string& bucket_name)
 {
-    if (bucket_name.empty()) {
-        return false;
-    }
+    CHECK(!bucket_name.empty());
+    EXPECT(connection_pool_, "S3 connection pool not provided.");
 
-    bool retval = false;
-    std::unique_ptr<common::S3Connection> conn;
-    try {
-        EXPECT(connection_pool_, "S3 connection pool not provided.");
-        CHECK(conn = connection_pool_->get_connection());
-        retval = conn->make_bucket(bucket_name);
-    } catch (const std::exception& exc) {
-        LOGE("Failed to create S3 bucket '%s': %s",
-             bucket_name.c_str(),
-             exc.what());
-    } catch (...) {
-        LOGE("Failed to create S3 bucket '%s': (unknown)", bucket_name.c_str());
-    }
+    auto conn = connection_pool_->get_connection();
+    bool bucket_exists = conn->bucket_exists(bucket_name);
 
-    if (conn) {
-        connection_pool_->release_connection(std::move(conn));
-    }
+    connection_pool_->return_connection(std::move(conn));
 
-    return retval;
+    return bucket_exists;
 }
+
 bool
 zarr::SinkCreator::make_s3_objects_(const std::string& bucket_name,
                                     std::queue<std::string>& object_keys,

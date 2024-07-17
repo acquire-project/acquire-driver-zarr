@@ -1,22 +1,15 @@
 /// @file write-zarr-v2-to-s3.cpp
 /// @brief Test using Zarr V2 storage with S3 backend.
 
-#if __has_include("s3.credentials.hh")
-
 #include "device/hal/device.manager.h"
 #include "acquire.h"
 #include "logger.h"
 
 #include <miniocpp/client.h>
 
+#include <cstdlib>
 #include <stdexcept>
 #include <vector>
-
-/// Defines the following constants:
-/// - ZARR_S3_ENDPOINT ("http://...") - the URI of the S3 server
-/// - ZARR_S3_ACCESS_KEY_ID - the access key ID for the S3 server
-/// - ZARR_S3_SECRET_ACCESS_KEY - the secret access key for the S3 server
-#include "s3.credentials.hh"
 
 void
 reporter(int is_error,
@@ -88,18 +81,52 @@ reporter(int is_error,
     } while (0)
 
 namespace {
-const std::string bucket_name = "write-zarr-v2-to-s3";
+std::string s3_endpoint;
+std::string s3_bucket_name;
+std::string s3_access_key_id;
+std::string s3_secret_access_key;
+
+bool
+get_credentials()
+{
+    char* env = nullptr;
+    if (!(env = std::getenv("ZARR_S3_ENDPOINT"))) {
+        ERR("ZARR_S3_ENDPOINT not set.");
+        return false;
+    }
+    s3_endpoint = env;
+
+    if (!(env = std::getenv("ZARR_S3_BUCKET_NAME"))) {
+        ERR("ZARR_S3_BUCKET_NAME not set.");
+        return false;
+    }
+    s3_bucket_name = env;
+
+    if (!(env = std::getenv("ZARR_S3_ACCESS_KEY_ID"))) {
+        ERR("ZARR_S3_ACCESS_KEY_ID not set.");
+        return false;
+    }
+    s3_access_key_id = env;
+
+    if (!(env = std::getenv("ZARR_S3_SECRET_ACCESS_KEY"))) {
+        ERR("ZARR_S3_SECRET_ACCESS_KEY not set.");
+        return false;
+    }
+    s3_secret_access_key = env;
+
+    return true;
+}
 
 bool
 bucket_exists(minio::s3::Client& client)
 {
-    if (bucket_name.empty()) {
+    if (s3_bucket_name.empty()) {
         return false;
     }
 
     try {
         minio::s3::BucketExistsArgs args;
-        args.bucket = bucket_name;
+        args.bucket = s3_bucket_name;
 
         minio::s3::BucketExistsResponse response = client.BucketExists(args);
         CHECK(response);
@@ -113,46 +140,26 @@ bucket_exists(minio::s3::Client& client)
 }
 
 bool
-clear_bucket(minio::s3::Client& client)
+remove_items(minio::s3::Client& client,
+             const std::vector<std::string>& item_keys)
 {
-    if (bucket_name.empty()) {
-        return false;
-    }
-
-    if (!bucket_exists(client)) {
-        return true;
-    }
-
-    LOG("Clearing bucket %s", bucket_name.c_str());
-
     std::list<minio::s3::DeleteObject> objects;
-
-    try {
-        minio::s3::ListObjectsArgs args;
-        args.bucket = bucket_name;
-        args.recursive = true;
-        minio::s3::ListObjectsResult result = client.ListObjects(args);
-
-        for (; result; result++) {
-            minio::s3::Item item = *result;
-            minio::s3::DeleteObject object;
-            object.name = item.name;
-            objects.push_back(object);
-        }
-    } catch (const std::exception& e) {
-        ERR("Failed to clear bucket %s: %s", bucket_name.c_str(), e.what());
-        return false;
+    for (const auto& key : item_keys) {
+        minio::s3::DeleteObject object;
+        object.name = key;
+        objects.push_back(object);
     }
 
     try {
         minio::s3::RemoveObjectsArgs args;
-        args.bucket = bucket_name;
+        args.bucket = s3_bucket_name;
 
-        std::list<minio::s3::DeleteObject>::iterator it = objects.begin();
+        auto it = objects.begin();
 
         args.func = [&objects = objects,
                      &i = it](minio::s3::DeleteObject& obj) -> bool {
-            if (i == objects.end()) return false;
+            if (i == objects.end())
+                return false;
             obj = *i;
             i++;
             return true;
@@ -171,37 +178,7 @@ clear_bucket(minio::s3::Client& client)
 
         return true;
     } catch (const std::exception& e) {
-        ERR("Failed to clear bucket %s: %s", bucket_name.c_str(), e.what());
-    }
-
-    return false;
-}
-
-bool
-destroy_bucket(minio::s3::Client& client)
-{
-    if (bucket_name.empty()) {
-        return false;
-    }
-
-    // first check if the bucket exists, do nothing if it does
-    if (!bucket_exists(client)) {
-        return true;
-    }
-
-    // clear the bucket before destroying it
-    CHECK(clear_bucket(client));
-
-    LOG("Destroying bucket %s", bucket_name.c_str());
-    minio::s3::RemoveBucketArgs args;
-    args.bucket = bucket_name;
-
-    try {
-        minio::s3::RemoveBucketResponse response = client.RemoveBucket(args);
-
-        return (bool)response;
-    } catch (const std::exception& e) {
-        ERR("Failed to destroy bucket %s: %s", bucket_name.c_str(), e.what());
+        ERR("Failed to clear bucket %s: %s", s3_bucket_name.c_str(), e.what());
     }
 
     return false;
@@ -210,13 +187,13 @@ destroy_bucket(minio::s3::Client& client)
 bool
 object_exists(minio::s3::Client& client, const std::string& object_name)
 {
-    if (bucket_name.empty() || object_name.empty()) {
+    if (s3_bucket_name.empty() || object_name.empty()) {
         return false;
     }
 
     try {
         minio::s3::StatObjectArgs args;
-        args.bucket = bucket_name;
+        args.bucket = s3_bucket_name;
         args.object = object_name;
 
         minio::s3::StatObjectResponse response = client.StatObject(args);
@@ -225,7 +202,7 @@ object_exists(minio::s3::Client& client, const std::string& object_name)
     } catch (const std::exception& e) {
         ERR("Failed to check if object %s exists in bucket %s: %s",
             object_name.c_str(),
-            bucket_name.c_str(),
+            s3_bucket_name.c_str(),
             e.what());
     }
 
@@ -261,21 +238,20 @@ configure(AcquireRuntime* runtime)
                                 SIZED("ZarrBlosc1Lz4ByteShuffle"),
                                 &props.video[0].storage.identifier));
 
-    // destroy the bucket if it already exists
+    // check if the bucket already exists
     {
-        const std::string endpoint = ZARR_S3_ENDPOINT;
-        minio::s3::BaseUrl url(endpoint);
-        url.https = endpoint.starts_with("https://");
+        minio::s3::BaseUrl url(s3_endpoint);
+        url.https = s3_endpoint.starts_with("https://");
 
-        minio::creds::StaticProvider provider(ZARR_S3_ACCESS_KEY_ID,
-                                              ZARR_S3_SECRET_ACCESS_KEY);
+        minio::creds::StaticProvider provider(s3_access_key_id,
+                                              s3_secret_access_key);
 
         minio::s3::Client client(url, &provider);
 
-        CHECK(destroy_bucket(client));
+        CHECK(bucket_exists(client));
     }
 
-    std::string uri = ZARR_S3_ENDPOINT + ("/" + bucket_name);
+    std::string uri = s3_endpoint + ("/" + s3_bucket_name);
     storage_properties_init(&props.video[0].storage.settings,
                             0,
                             uri.c_str(),
@@ -286,8 +262,11 @@ configure(AcquireRuntime* runtime)
                             3);
     CHECK(storage_properties_set_access_key_and_secret(
       &props.video[0].storage.settings,
-      SIZED(ZARR_S3_ACCESS_KEY_ID) + 1,
-      SIZED(ZARR_S3_SECRET_ACCESS_KEY) + 1));
+      s3_access_key_id.c_str(),
+      s3_access_key_id.size() + 1,
+      s3_secret_access_key.c_str(),
+      s3_secret_access_key.size() + 1
+      ));
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
@@ -322,70 +301,57 @@ acquire(AcquireRuntime* runtime)
 }
 
 void
-validate(AcquireRuntime* runtime)
+validate_and_cleanup(AcquireRuntime* runtime)
 {
-    std::string endpoint = ZARR_S3_ENDPOINT;
-    minio::s3::BaseUrl url(endpoint);
-    url.https = endpoint.starts_with("https://");
-
-    minio::creds::StaticProvider provider(ZARR_S3_ACCESS_KEY_ID,
-                                          ZARR_S3_SECRET_ACCESS_KEY);
-
-    minio::s3::Client client(url, &provider);
-
-    CHECK(bucket_exists(client));
-
-    std::vector<std::string> paths;
-    paths.push_back(".metadata");
-    paths.push_back(".zattrs");
-    paths.push_back("0/.zarray");
-    paths.push_back("0/.zattrs");
-
+    std::vector<std::string> paths{
+        ".metadata",
+        ".zattrs",
+        "0/.zarray",
+        "0/.zattrs",
+    };
     for (auto i = 0; i < 20; ++i) {
         paths.push_back("0/" + std::to_string(i) + "/0/0");
         paths.push_back("0/" + std::to_string(i) + "/1/0");
     }
 
-    for (const auto& path : paths) {
-        CHECK(object_exists(client, path));
-    }
-}
+    minio::s3::BaseUrl url(s3_endpoint);
+    url.https = s3_endpoint.starts_with("https://");
 
-void
-cleanup(AcquireRuntime* runtime) noexcept
-{
-    if (runtime) {
-        acquire_shutdown(runtime);
-    }
+    minio::creds::StaticProvider provider(s3_access_key_id,
+                                          s3_secret_access_key);
+
+    minio::s3::Client client(url, &provider);
+    CHECK(bucket_exists(client));
 
     try {
-        const std::string endpoint = ZARR_S3_ENDPOINT;
-        minio::s3::BaseUrl url(endpoint);
-        url.https = endpoint.starts_with("https://");
-
-        minio::creds::StaticProvider provider(ZARR_S3_ACCESS_KEY_ID,
-                                              ZARR_S3_SECRET_ACCESS_KEY);
-
-        minio::s3::Client client(url, &provider);
-
-        CHECK(destroy_bucket(client));
+        for (const auto& path : paths) {
+            CHECK(object_exists(client, path));
+        }
     } catch (const std::exception& e) {
         ERR("Exception: %s", e.what());
     } catch (...) {
         ERR("Unknown exception");
     }
+    remove_items(client, paths);
+
+    CHECK(runtime);
+    acquire_shutdown(runtime);
 }
 
 int
 main()
 {
+    if (!get_credentials()) {
+        return 0;
+    }
+
     int retval = 1;
     AcquireRuntime* runtime = acquire_init(reporter);
 
     try {
         configure(runtime);
         acquire(runtime);
-        validate(runtime);
+        validate_and_cleanup(runtime);
         retval = 0;
     } catch (const std::exception& e) {
         ERR("Exception: %s", e.what());
@@ -393,13 +359,5 @@ main()
         ERR("Unknown exception");
     }
 
-    cleanup(runtime);
     return retval;
 }
-#else
-int
-main()
-{
-    return 0;
-}
-#endif

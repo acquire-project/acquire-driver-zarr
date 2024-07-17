@@ -70,10 +70,12 @@ zarr::S3Sink::put_object_()
 
     bool retval = false;
 
+    std::span<uint8_t> data{ buf_.data(), buf_size_ };
+
     try {
-        std::string etag;
-        CHECK(connection->put_object(
-          bucket_name_, object_key_, buf_.data(), buf_size_, etag));
+        std::string etag =
+          connection->put_object(bucket_name_, object_key_, data);
+        CHECK(!etag.empty());
 
         retval = true;
         buf_size_ = 0;
@@ -84,7 +86,7 @@ zarr::S3Sink::put_object_()
     }
 
     // cleanup
-    connection_pool_->release_connection(std::move(connection));
+    connection_pool_->return_connection(std::move(connection));
 
     return retval;
 }
@@ -103,20 +105,18 @@ zarr::S3Sink::flush_part_()
 
     std::string upload_id = upload_id_;
     if (upload_id.empty()) {
-        CHECK(connection->create_multipart_object(
-          bucket_name_, object_key_, upload_id));
+        upload_id =
+          connection->create_multipart_object(bucket_name_, object_key_);
+        CHECK(!upload_id.empty());
     }
 
     minio::s3::Part part;
     part.number = (unsigned int)parts_.size() + 1;
 
-    CHECK(connection->upload_multipart_object_part(bucket_name_,
-                                                   object_key_,
-                                                   upload_id,
-                                                   buf_.data(),
-                                                   buf_size_,
-                                                   part.number,
-                                                   part.etag));
+    std::span<uint8_t> data(buf_.data(), buf_size_);
+    part.etag = connection->upload_multipart_object_part(
+      bucket_name_, object_key_, upload_id, data, part.number);
+    CHECK(!part.etag.empty());
 
     parts_.push_back(part);
 
@@ -124,7 +124,7 @@ zarr::S3Sink::flush_part_()
     upload_id_ = upload_id;
 
     // cleanup
-    connection_pool_->release_connection(std::move(connection));
+    connection_pool_->return_connection(std::move(connection));
     buf_size_ = 0;
 
     return true;
@@ -153,7 +153,7 @@ zarr::S3Sink::finalize_multipart_upload_()
         LOGE("Error: (unknown)");
     }
 
-    connection_pool_->release_connection(std::move(connection));
+    connection_pool_->return_connection(std::move(connection));
 
     return retval;
 }

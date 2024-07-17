@@ -22,8 +22,13 @@ namespace acquire::sink::zarr {
 
 struct Zarr;
 
-namespace common {
+enum class ZarrVersion
+{
+    V2 = 2,
+    V3
+};
 
+namespace common {
 /// @brief Get the number of chunks along a dimension.
 /// @param dimension A dimension.
 /// @return The number of, possibly ragged, chunks along the dimension, given
