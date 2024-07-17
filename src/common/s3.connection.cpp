@@ -26,7 +26,7 @@ common::S3Connection::S3Connection(const std::string& endpoint,
 bool
 common::S3Connection::check_connection()
 {
-    return (bool)client_->ListBuckets();
+    return static_cast<bool>(client_->ListBuckets());
 }
 
 bool
@@ -219,8 +219,6 @@ common::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
                                            const std::string& secret_access_key)
   : is_accepting_connections_{ true }
 {
-    CHECK(n_connections > 0);
-
     for (auto i = 0; i < n_connections; ++i) {
         auto connection = std::make_unique<S3Connection>(
           endpoint, access_key_id, secret_access_key);
@@ -230,6 +228,8 @@ common::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
               endpoint, access_key_id, secret_access_key));
         }
     }
+
+    CHECK(!connections_.empty());
 }
 
 common::S3ConnectionPool::~S3ConnectionPool() noexcept
