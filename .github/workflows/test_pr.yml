@@ -15,7 +15,7 @@ jobs:
   test:
     name: ${{ matrix.platform }}
     runs-on: ${{ matrix.platform }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -52,6 +52,14 @@ jobs:
           echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
           ./vcpkg integrate install
         shell: bash
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y autoconf automake autoconf-archive
+
+      - name: Install MacOS system dependencies
+        if: runner.os == 'macOS'
+        run: NONINTERACTIVE=1 brew install autoconf automake autoconf-archive
 
       - name: Configure CMake
         run: |
