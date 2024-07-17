@@ -21,8 +21,8 @@ std::string get_from_acquire_string(const String& src)
 AcquireZarrWriter::Impl::Impl()
 {
     //zarr_sink_ = std::make_shared<struct asz::Zarr>();
-    memset(&storage_properties_, 0, sizeof(storage_properties_));
-    memset(&video_frame_, 0, sizeof(video_frame_));
+    memset(&storage_properties_, 0, sizeof(struct StorageProperties));
+    memset(&shape_, 0, sizeof(struct ImageShape));
 
     zarr_version_ = 2;
 }
@@ -36,13 +36,11 @@ void AcquireZarrWriter::Impl::start()
     zarr_sink_->start();
 }
 
-void AcquireZarrWriter::Impl::append(uint8_t* image_data, size_t image_size)
+void AcquireZarrWriter::Impl::append(const uint8_t* image_data, size_t image_size)
 {
 
-    // todo: check image size against expected size
-    memcpy(video_frame_.data, image_data, image_size);
-    const VideoFrame* const_frame = &video_frame_;
-    zarr_sink_->append(const_frame, image_size);
+    // todo: check image size against expected size?
+    zarr_sink_->append_frame(image_data, image_size, shape_);
 }
 
 void AcquireZarrWriter::Impl::create_zarr_sink()

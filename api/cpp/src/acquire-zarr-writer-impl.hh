@@ -18,7 +18,7 @@ class AcquireZarrWriter::Impl
     ~Impl() = default;
 
     void start();
-    void append(uint8_t* image_data, size_t image_size);
+    void append(const uint8_t* image_data, size_t image_size);
 
     friend AcquireZarrWriter;
   protected:
@@ -37,8 +37,8 @@ class AcquireZarrWriter::Impl
 
     struct asz::BloscCompressionParams blosc_params_;
 
-    // video frame needs to be the last member of the struct
-    struct VideoFrame video_frame_;
+    // Image
+    struct ImageShape shape_;
 
 
 }; 
