@@ -10,6 +10,8 @@ add_library(${tgt} MODULE
         common/dimension.cpp
         common/thread.pool.hh
         common/thread.pool.cpp
+        common/s3.connection.hh
+        common/s3.connection.cpp
         common/utilities.hh
         common/utilities.cpp
         writers/sink.hh

@@ -8,8 +8,11 @@
 namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 
-zarr::SinkCreator::SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool_)
+zarr::SinkCreator::SinkCreator(
+  std::shared_ptr<common::ThreadPool> thread_pool_,
+  std::shared_ptr<common::S3ConnectionPool> connection_pool)
   : thread_pool_{ thread_pool_ }
+  , connection_pool_{ connection_pool }
 {
 }
 
@@ -291,7 +294,7 @@ extern "C"
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s\n", err.c_str()); });
-            zarr::SinkCreator creator{ thread_pool };
+            zarr::SinkCreator creator{ thread_pool, nullptr };
 
             std::vector<zarr::Dimension> dims;
             dims.emplace_back("x", DimensionType_Space, 10, 2, 0); // 5 chunks
@@ -337,7 +340,7 @@ extern "C"
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
-            zarr::SinkCreator creator{ thread_pool };
+            zarr::SinkCreator creator{ thread_pool, nullptr };
 
             std::vector<zarr::Dimension> dims;
             dims.emplace_back(

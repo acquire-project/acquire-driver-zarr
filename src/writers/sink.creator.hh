@@ -4,6 +4,7 @@
 #include "sink.hh"
 #include "common/dimension.hh"
 #include "common/thread.pool.hh"
+#include "common/s3.connection.hh"
 
 #include <optional>
 #include <memory>
@@ -13,7 +14,8 @@ struct SinkCreator final
 {
   public:
     SinkCreator() = delete;
-    explicit SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool);
+    SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool_,
+                std::shared_ptr<common::S3ConnectionPool> connection_pool);
     ~SinkCreator() noexcept = default;
 
     /// @brief Create a collection of data sinks, either chunk or shard.
@@ -48,6 +50,7 @@ struct SinkCreator final
 
   private:
     std::shared_ptr<common::ThreadPool> thread_pool_;
+    std::shared_ptr<common::S3ConnectionPool> connection_pool_; // could be null
 
     /// @brief Parallel create a collection of directories.
     /// @param[in] dir_paths The directories to create.
