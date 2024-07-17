@@ -188,21 +188,19 @@ zarr::Writer::Writer(const WriterConfig& config,
     data_root_ = config_.data_root;
 }
 
-bool
-zarr::Writer::write(const VideoFrame* frame)
+size_t
+zarr::Writer::write(const uint8_t* data, size_t bytes_of_frame)
 {
-    validate_frame_(frame);
+    if (bytes_of_image(&config_.image_shape) != bytes_of_frame) {
+        return 0;
+    }
+
     if (chunk_buffers_.empty()) {
         make_buffers_();
     }
 
     // split the incoming frame into tiles and write them to the chunk buffers
-    const auto& dimensions = config_.dimensions;
-
-    const auto bytes_written =
-      write_frame_to_chunks_(frame->data, bytes_of_image(&frame->shape));
-    const auto bytes_of_frame = bytes_of_image(&frame->shape);
-    CHECK(bytes_written == bytes_of_frame);
+    const auto bytes_written = write_frame_to_chunks_(data, bytes_of_frame);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
 
@@ -210,7 +208,7 @@ zarr::Writer::write(const VideoFrame* frame)
         flush_();
     }
 
-    return true;
+    return bytes_written;
 }
 
 void
@@ -250,27 +248,6 @@ zarr::Writer::make_buffers_() noexcept
     }
 }
 
-void
-zarr::Writer::validate_frame_(const VideoFrame* frame)
-{
-    CHECK(frame);
-
-    EXPECT(frame->shape.dims.width == config_.image_shape.dims.width,
-           "Expected frame to have %d columns. Got %d.",
-           config_.image_shape.dims.width,
-           frame->shape.dims.width);
-
-    EXPECT(frame->shape.dims.height == config_.image_shape.dims.height,
-           "Expected frame to have %d rows. Got %d.",
-           config_.image_shape.dims.height,
-           frame->shape.dims.height);
-
-    EXPECT(frame->shape.type == config_.image_shape.type,
-           "Expected frame to have pixel type %s. Got %s.",
-           common::sample_type_to_string(config_.image_shape.type),
-           common::sample_type_to_string(frame->shape.type));
-}
-
 size_t
 zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
@@ -284,13 +261,16 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
     const auto& dimensions = config_.dimensions;
     const auto tile_cols = dimensions.at(0).chunk_size_px;
     const auto tile_rows = dimensions.at(1).chunk_size_px;
+
+    if (tile_cols == 0 || tile_rows == 0) {
+        return 0;
+    }
+
     const auto bytes_per_row = tile_cols * bytes_per_px;
 
     size_t bytes_written = 0;
 
-    CHECK(tile_cols);
     const auto n_tiles_x = (frame_cols + tile_cols - 1) / tile_cols;
-    CHECK(tile_rows);
     const auto n_tiles_y = (frame_rows + tile_rows - 1) / tile_rows;
 
     // don't take the frame id from the incoming frame, as the camera may have
@@ -308,7 +288,8 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
         for (auto j = 0; j < n_tiles_x; ++j) {
             const auto c = group_offset + i * n_tiles_x + j;
             auto& chunk = chunk_buffers_.at(c);
-            auto chunk_it = chunk.begin() + chunk_offset;
+            auto chunk_it =
+              chunk.begin() + static_cast<long long>(chunk_offset);
 
             for (auto k = 0; k < tile_rows; ++k) {
                 const auto frame_row = i * tile_rows + k;
@@ -322,15 +303,21 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
                       bytes_per_px * (frame_row * frame_cols + frame_col);
                     const auto nbytes = region_width * bytes_per_px;
                     const auto region_stop = region_start + nbytes;
-                    EXPECT(region_stop <= buf_size, "Buffer overflow");
+                    if (region_stop > buf_size) {
+                        LOGE("Buffer overflow");
+                        return bytes_written;
+                    }
 
                     // copy region
-                    EXPECT(chunk_it + nbytes <= chunk.end(), "Buffer overflow");
+                    if (nbytes > std::distance(chunk_it, chunk.end())) {
+                        LOGE("Buffer overflow");
+                        return bytes_written;
+                    }
                     std::copy(buf + region_start, buf + region_stop, chunk_it);
 
                     bytes_written += (region_stop - region_start);
                 }
-                chunk_it += bytes_per_row;
+                chunk_it += static_cast<long long>(bytes_per_row);
             }
         }
     }
@@ -750,8 +737,44 @@ extern "C"
     acquire_export int unit_test__writer__write_frame_to_chunks()
     {
         const auto base_dir = fs::temp_directory_path() / "acquire";
-        struct VideoFrame* frame = nullptr;
         int retval = 0;
+
+        const unsigned int array_width = 64, array_height = 48,
+                           array_planes = 2, array_channels = 1,
+                           array_timepoints = 2;
+        const unsigned int chunk_width = 16, chunk_height = 16,
+                           chunk_planes = 1, chunk_channels = 1,
+                           chunk_timepoints = 1;
+
+        const unsigned int chunks_in_x =
+          (array_width + chunk_width - 1) / chunk_width; // 4 chunks
+        const unsigned int chunks_in_y =
+          (array_height + chunk_height - 1) / chunk_height; // 3 chunks
+
+        const unsigned int chunks_in_z =
+          (array_planes + chunk_planes - 1) / chunk_planes; // 2 chunks
+        const unsigned int chunks_in_c =
+          (array_channels + chunk_channels - 1) / chunk_channels; // 1 chunk
+        const unsigned int chunks_in_t =
+          (array_timepoints + chunk_timepoints - 1) /
+          chunk_timepoints; // 2 chunks
+        const unsigned int n_frames =
+          array_planes * array_channels * array_timepoints;
+
+        const ImageShape shape
+        {
+            .dims = {
+                .width = array_width,
+                .height = array_height,
+              },
+              .strides = {
+                .width = 1,
+                .height = array_width,
+                .planes = array_width * array_height,
+              },
+              .type = SampleType_u16,
+        };
+        const unsigned int nbytes_px = bytes_of_type(shape.type);
 
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
@@ -759,25 +782,16 @@ extern "C"
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
             std::vector<zarr::Dimension> dims;
-            dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
-            dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
-            dims.emplace_back("z", DimensionType_Space, 2, 1, 0);   // 2 chunks
-            dims.emplace_back("c", DimensionType_Channel, 1, 1, 0); // 1 chunk
             dims.emplace_back(
-              "t", DimensionType_Time, 2, 1, 0); // 1 timepoint/chunk
-
-            ImageShape shape {
-                .dims = {
-                    .width = 64,
-                    .height = 48,
-                },
-                .strides = {
-                  .width = 1,
-                  .height = 64,
-                  .planes = 64 * 48
-                },
-                .type = SampleType_u16,
-            };
+              "x", DimensionType_Space, array_width, chunk_width, 0);
+            dims.emplace_back(
+              "y", DimensionType_Space, array_height, chunk_height, 0);
+            dims.emplace_back(
+              "z", DimensionType_Space, array_planes, chunk_planes, 0);
+            dims.emplace_back(
+              "c", DimensionType_Channel, array_channels, chunk_channels, 0);
+            dims.emplace_back(
+              "t", DimensionType_Time, array_timepoints, chunk_timepoints, 0);
 
             zarr::WriterConfig config = {
                 .image_shape = shape,
@@ -788,16 +802,11 @@ extern "C"
 
             TestWriter writer(config, thread_pool);
 
-            const size_t frame_size = 64 * 48 * 2;
+            const size_t frame_size = array_width * array_height * nbytes_px;
+            std::vector<uint8_t> data(frame_size, 0);
 
-            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + frame_size);
-            frame->bytes_of_frame =
-              common::align_up(sizeof(VideoFrame) + frame_size, 8);
-            frame->shape = shape;
-            memset(frame->data, 0, frame_size);
-
-            for (auto i = 0; i < 2 * 1 * 2; ++i) {
-                CHECK(writer.write(frame));
+            for (auto i = 0; i < n_frames; ++i) {
+                CHECK(writer.write(data.data(), frame_size) == frame_size);
             }
 
             retval = 1;
@@ -810,9 +819,6 @@ extern "C"
         // cleanup
         if (fs::exists(base_dir)) {
             fs::remove_all(base_dir);
-        }
-        if (frame) {
-            free(frame);
         }
         return retval;
     }
