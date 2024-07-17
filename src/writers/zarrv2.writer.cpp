@@ -87,9 +87,46 @@ extern "C"
 {
     acquire_export int unit_test__zarrv2_writer__write_even()
     {
-        const fs::path base_dir = fs::temp_directory_path() / "acquire";
-        struct VideoFrame* frame = nullptr;
         int retval = 0;
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
+
+        const unsigned int array_width = 64, array_height = 48,
+                           array_planes = 6, array_channels = 8,
+                           array_timepoints = 10;
+        const unsigned int n_frames =
+          array_planes * array_channels * array_timepoints;
+
+        const unsigned int chunk_width = 16, chunk_height = 16,
+                           chunk_planes = 2, chunk_channels = 4,
+                           chunk_timepoints = 5;
+
+        const unsigned int chunks_in_x =
+          (array_width + chunk_width - 1) / chunk_width; // 4 chunks
+        const unsigned int chunks_in_y =
+          (array_height + chunk_height - 1) / chunk_height; // 3 chunks
+
+        const unsigned int chunks_in_z =
+          (array_planes + chunk_planes - 1) / chunk_planes; // 3 chunks
+        const unsigned int chunks_in_c =
+          (array_channels + chunk_channels - 1) / chunk_channels; // 2 chunks
+        const unsigned int chunks_in_t =
+          (array_timepoints + chunk_timepoints - 1) /
+          chunk_timepoints; // 2 chunks
+
+        const ImageShape shape
+          {
+              .dims = {
+                .width = array_width,
+                .height = array_height,
+              },
+              .strides = {
+                .width = 1,
+                .height = array_width,
+                .planes = array_width * array_height,
+              },
+              .type = SampleType_u16,
+          };
+        const unsigned int nbytes_px = bytes_of_type(shape.type);
 
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
@@ -97,26 +134,16 @@ extern "C"
               [](const std::string& err) { LOGE("Error: %s\n", err.c_str()); });
 
             std::vector<zarr::Dimension> dims;
-            dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
-            dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
-            dims.emplace_back("z", DimensionType_Space, 6, 2, 0);   // 3 chunks
-            dims.emplace_back("c", DimensionType_Channel, 8, 4, 0); // 2 chunks
             dims.emplace_back(
-              "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
-
-            ImageShape shape {
-                .dims = {
-                  .width = 64,
-                  .height = 48,
-                },
-                .strides = {
-                  .channels = 1,
-                  .width = 1,
-                  .height = 64,
-                  .planes = 64 * 48
-                },
-                .type = SampleType_u16,
-            };
+              "x", DimensionType_Space, array_width, chunk_width, 0);
+            dims.emplace_back(
+              "y", DimensionType_Space, array_height, chunk_height, 0);
+            dims.emplace_back(
+              "z", DimensionType_Space, array_planes, chunk_planes, 0);
+            dims.emplace_back(
+              "c", DimensionType_Channel, array_channels, chunk_channels, 0);
+            dims.emplace_back(
+              "t", DimensionType_Time, array_timepoints, chunk_timepoints, 0);
 
             zarr::WriterConfig config = {
                 .image_shape = shape,
@@ -128,64 +155,58 @@ extern "C"
             zarr::ZarrV2Writer writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
-            const size_t frame_size = 64 * 48 * 2;
+            const size_t frame_size = array_width * array_height * nbytes_px;
+            std::vector<uint8_t> data(frame_size, 0);
 
-            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + frame_size);
-            frame->bytes_of_frame =
-              common::align_up(sizeof(VideoFrame) + frame_size, 8);
-            frame->shape = shape;
-            memset(frame->data, 0, frame_size);
-
-            for (auto i = 0; i < 6 * 8 * 5 * 2; ++i) { // 2 time points
-                frame->frame_id = i;
-                CHECK(writer.write(frame));
+            for (auto i = 0; i < n_frames; ++i) { // 2 time points
+                CHECK(writer.write(data.data(), frame_size));
             }
             writer.finalize();
 
-            const auto expected_file_size = 16 * // x
-                                            16 * // y
-                                            2 *  // z
-                                            4 *  // c
-                                            5 *  // t
-                                            2;   // bytes per pixel
+            const auto expected_file_size = chunk_width * chunk_height *
+                                            chunk_planes * chunk_channels *
+                                            chunk_timepoints * nbytes_px;
 
             CHECK(fs::is_directory(base_dir));
-            for (auto t = 0; t < 2; ++t) {
+            for (auto t = 0; t < chunks_in_t; ++t) {
                 const auto t_dir = base_dir / std::to_string(t);
                 CHECK(fs::is_directory(t_dir));
 
-                for (auto c = 0; c < 2; ++c) {
+                for (auto c = 0; c < chunks_in_c; ++c) {
                     const auto c_dir = t_dir / std::to_string(c);
                     CHECK(fs::is_directory(c_dir));
 
-                    for (auto z = 0; z < 3; ++z) {
+                    for (auto z = 0; z < chunks_in_z; ++z) {
                         const auto z_dir = c_dir / std::to_string(z);
                         CHECK(fs::is_directory(z_dir));
 
-                        for (auto y = 0; y < 3; ++y) {
+                        for (auto y = 0; y < chunks_in_y; ++y) {
                             const auto y_dir = z_dir / std::to_string(y);
                             CHECK(fs::is_directory(y_dir));
 
-                            for (auto x = 0; x < 4; ++x) {
+                            for (auto x = 0; x < chunks_in_x; ++x) {
                                 const auto x_file = y_dir / std::to_string(x);
                                 CHECK(fs::is_regular_file(x_file));
                                 const auto file_size = fs::file_size(x_file);
                                 CHECK(file_size == expected_file_size);
                             }
 
-                            CHECK(!fs::is_regular_file(y_dir / "4"));
+                            CHECK(!fs::is_regular_file(
+                              y_dir / std::to_string(chunks_in_x)));
                         }
 
-                        CHECK(!fs::is_directory(z_dir / "3"));
+                        CHECK(!fs::is_directory(z_dir /
+                                                std::to_string(chunks_in_y)));
                     }
 
-                    CHECK(!fs::is_directory(c_dir / "3"));
+                    CHECK(
+                      !fs::is_directory(c_dir / std::to_string(chunks_in_z)));
                 }
 
-                CHECK(!fs::is_directory(t_dir / "2"));
+                CHECK(!fs::is_directory(t_dir / std::to_string(chunks_in_c)));
             }
 
-            CHECK(!fs::is_directory(base_dir / "2"));
+            CHECK(!fs::is_directory(base_dir / std::to_string(chunks_in_t)));
 
             retval = 1;
         } catch (const std::exception& exc) {
@@ -197,43 +218,58 @@ extern "C"
         // cleanup
         if (fs::exists(base_dir)) {
             fs::remove_all(base_dir);
-        }
-        if (frame) {
-            free(frame);
         }
         return retval;
     }
 
     acquire_export int unit_test__zarrv2_writer__write_ragged_append_dim()
     {
-        const fs::path base_dir = fs::temp_directory_path() / "acquire";
-        struct VideoFrame* frame = nullptr;
         int retval = 0;
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
+
+        const unsigned int array_width = 64, array_height = 48,
+                           array_planes = 5;
+        const unsigned int n_frames =
+          array_planes;
+
+        const unsigned int chunk_width = 16, chunk_height = 16,
+                           chunk_planes = 2;
+
+        const unsigned int chunks_in_x =
+          (array_width + chunk_width - 1) / chunk_width; // 4 chunks
+        const unsigned int chunks_in_y =
+          (array_height + chunk_height - 1) / chunk_height; // 3 chunks
+
+        const unsigned int chunks_in_z =
+          (array_planes + chunk_planes - 1) / chunk_planes; // 3 chunks, ragged
+
+        const ImageShape shape
+          {
+              .dims = {
+                .width = array_width,
+                .height = array_height,
+              },
+              .strides = {
+                .width = 1,
+                .height = array_width,
+                .planes = array_width * array_height,
+              },
+              .type = SampleType_u8,
+          };
+        const unsigned int nbytes_px = bytes_of_type(shape.type);
 
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
-            ImageShape shape {
-                .dims = {
-                  .width = 64,
-                  .height = 48,
-                },
-                .strides = {
-                  .channels = 1,
-                  .width = 1,
-                  .height = 64,
-                  .planes = 64 * 48
-                },
-                .type = SampleType_u8,
-            };
-
             std::vector<zarr::Dimension> dims;
-            dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
-            dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
             dims.emplace_back(
-              "z", DimensionType_Space, 5, 2, 0); // 3 chunks, ragged
+              "x", DimensionType_Space, array_width, chunk_width, 0);
+            dims.emplace_back(
+              "y", DimensionType_Space, array_height, chunk_height, 0);
+            dims.emplace_back(
+              "z", DimensionType_Space, array_planes, chunk_planes, 0);
 
             zarr::WriterConfig config = {
                 .image_shape = shape,
@@ -245,45 +281,41 @@ extern "C"
             zarr::ZarrV2Writer writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
-            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
-            frame->bytes_of_frame =
-              common::align_up(sizeof(VideoFrame) + 64 * 48, 8);
-            frame->shape = shape;
-            memset(frame->data, 0, 64 * 48);
+            const size_t frame_size = array_width * array_height * nbytes_px;
+            std::vector<uint8_t> data(frame_size, 0);
 
-            for (auto i = 0; i < 5; ++i) { // z dimension is ragged
-                frame->frame_id = i;
-                CHECK(writer.write(frame));
+            for (auto i = 0; i < n_frames; ++i) {
+                CHECK(writer.write(data.data(), frame_size) == frame_size);
             }
             writer.finalize();
 
-            const auto expected_file_size = 16 * // x
-                                            16 * // y
-                                            2;   // z
+            const auto expected_file_size =
+              chunk_width * chunk_height * chunk_planes;
 
             CHECK(fs::is_directory(base_dir));
-            for (auto z = 0; z < 3; ++z) {
+            for (auto z = 0; z < chunks_in_z; ++z) {
                 const auto z_dir = base_dir / std::to_string(z);
                 CHECK(fs::is_directory(z_dir));
 
-                for (auto y = 0; y < 3; ++y) {
+                for (auto y = 0; y < chunks_in_y; ++y) {
                     const auto y_dir = z_dir / std::to_string(y);
                     CHECK(fs::is_directory(y_dir));
 
-                    for (auto x = 0; x < 4; ++x) {
+                    for (auto x = 0; x < chunks_in_x; ++x) {
                         const auto x_file = y_dir / std::to_string(x);
                         CHECK(fs::is_regular_file(x_file));
                         const auto file_size = fs::file_size(x_file);
                         CHECK(file_size == expected_file_size);
                     }
 
-                    CHECK(!fs::is_regular_file(y_dir / "4"));
+                    CHECK(!fs::is_regular_file(y_dir /
+                                               std::to_string(chunks_in_x)));
                 }
 
-                CHECK(!fs::is_directory(z_dir / "3"));
+                CHECK(!fs::is_directory(z_dir / std::to_string(chunks_in_y)));
             }
 
-            CHECK(!fs::is_directory(base_dir / "3"));
+            CHECK(!fs::is_directory(base_dir / std::to_string(chunks_in_z)));
 
             retval = 1;
         } catch (const std::exception& exc) {
@@ -296,44 +328,61 @@ extern "C"
         if (fs::exists(base_dir)) {
             fs::remove_all(base_dir);
         }
-        if (frame) {
-            free(frame);
-        }
         return retval;
     }
 
     acquire_export int unit_test__zarrv2_writer__write_ragged_internal_dim()
     {
-        const fs::path base_dir = fs::temp_directory_path() / "acquire";
-        struct VideoFrame* frame = nullptr;
         int retval = 0;
+        const fs::path base_dir = fs::temp_directory_path() / "acquire";
+
+        const unsigned int array_width = 64, array_height = 48,
+                           array_planes = 5, array_timepoints = 5;
+        const unsigned int n_frames = array_planes * array_timepoints;
+
+        const unsigned int chunk_width = 16, chunk_height = 16,
+                           chunk_planes = 2, chunk_timepoints = 5;
+
+        const unsigned int chunks_in_x =
+          (array_width + chunk_width - 1) / chunk_width; // 4 chunks
+        const unsigned int chunks_in_y =
+          (array_height + chunk_height - 1) / chunk_height; // 3 chunks
+
+        const unsigned int chunks_in_z =
+          (array_planes + chunk_planes - 1) / chunk_planes; // 3 chunks, ragged
+        const unsigned int chunks_in_t =
+          (array_timepoints + chunk_timepoints - 1) /
+          chunk_timepoints; // 1 chunk
+
+        const ImageShape shape
+          {
+              .dims = {
+                .width = array_width,
+                .height = array_height,
+              },
+              .strides = {
+                .width = 1,
+                .height = array_width,
+                .planes = array_width * array_height,
+              },
+              .type = SampleType_u8,
+          };
+        const unsigned int nbytes_px = bytes_of_type(shape.type);
 
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
               [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
 
-            ImageShape shape {
-                .dims = {
-                  .width = 64,
-                  .height = 48,
-                },
-                .strides = {
-                  .channels = 1,
-                  .width = 1,
-                  .height = 64,
-                  .planes = 64 * 48
-                },
-                .type = SampleType_u8,
-            };
-
             std::vector<zarr::Dimension> dims;
-            dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
-            dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
             dims.emplace_back(
-              "z", DimensionType_Space, 5, 2, 0); // 3 chunks, ragged
+              "x", DimensionType_Space, array_width, chunk_width, 0);
             dims.emplace_back(
-              "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
+              "y", DimensionType_Space, array_height, chunk_height, 0);
+            dims.emplace_back(
+              "z", DimensionType_Space, array_planes, chunk_planes, 0);
+            dims.emplace_back(
+              "t", DimensionType_Time, array_timepoints, chunk_timepoints, 0);
 
             zarr::WriterConfig config = {
                 .image_shape = shape,
@@ -345,37 +394,31 @@ extern "C"
             zarr::ZarrV2Writer writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
-            frame = (VideoFrame*)malloc(sizeof(VideoFrame) + 64 * 48);
-            frame->bytes_of_frame =
-              common::align_up(sizeof(VideoFrame) + 64 * 48, 8);
-            frame->shape = shape;
-            memset(frame->data, 0, 64 * 48);
+            const size_t frame_size = array_width * array_height * nbytes_px;
+            std::vector<uint8_t> data(frame_size, 0);
 
-            for (auto i = 0; i < 2 * 5; ++i) { // 5 time points
-                frame->frame_id = i;
-                CHECK(writer.write(frame));
+            for (auto i = 0; i < n_frames; ++i) {
+                CHECK(writer.write(data.data(), frame_size) == frame_size);
             }
             writer.finalize();
 
-            const auto expected_file_size = 16 * // x
-                                            16 * // y
-                                            2 *  // z
-                                            5;   // t
+            const auto expected_file_size =
+              chunk_width * chunk_height * chunk_planes * chunk_timepoints;
 
             CHECK(fs::is_directory(base_dir));
-            for (auto t = 0; t < 1; ++t) {
+            for (auto t = 0; t < chunks_in_t; ++t) {
                 const auto t_dir = base_dir / std::to_string(t);
                 CHECK(fs::is_directory(t_dir));
 
-                for (auto z = 0; z < 3; ++z) {
+                for (auto z = 0; z < chunks_in_z; ++z) {
                     const auto z_dir = t_dir / std::to_string(z);
                     CHECK(fs::is_directory(z_dir));
 
-                    for (auto y = 0; y < 3; ++y) {
+                    for (auto y = 0; y < chunks_in_y; ++y) {
                         const auto y_dir = z_dir / std::to_string(y);
                         CHECK(fs::is_directory(y_dir));
 
-                        for (auto x = 0; x < 4; ++x) {
+                        for (auto x = 0; x < chunks_in_x; ++x) {
                             const auto x_file =
                               base_dir / std::to_string(t) / std::to_string(z) /
                               std::to_string(y) / std::to_string(x);
@@ -384,15 +427,15 @@ extern "C"
                             CHECK(file_size == expected_file_size);
                         }
 
-                        CHECK(!fs::is_regular_file(y_dir / "4"));
+                        CHECK(!fs::is_regular_file(y_dir / std::to_string(chunks_in_x)));
                     }
 
-                    CHECK(!fs::is_directory(z_dir / "3"));
+                    CHECK(!fs::is_directory(z_dir / std::to_string(chunks_in_y)));
                 }
 
-                CHECK(!fs::is_directory(t_dir / "3"));
+                CHECK(!fs::is_directory(t_dir / std::to_string(chunks_in_z)));
             }
-            CHECK(!fs::is_directory(base_dir / "1"));
+            CHECK(!fs::is_directory(base_dir / std::to_string(chunks_in_t)));
 
             retval = 1;
         } catch (const std::exception& exc) {
@@ -404,9 +447,6 @@ extern "C"
         // cleanup
         if (fs::exists(base_dir)) {
             fs::remove_all(base_dir);
-        }
-        if (frame) {
-            free(frame);
         }
         return retval;
     }
