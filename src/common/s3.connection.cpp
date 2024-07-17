@@ -2,6 +2,7 @@
 #include "utilities.hh"
 
 #include <miniocpp/client.h>
+#include <miniocpp/utils.h>
 
 #include <list>
 #include <sstream>
@@ -23,232 +24,142 @@ common::S3Connection::S3Connection(const std::string& endpoint,
     CHECK(client_);
 }
 
-common::S3Connection::~S3Connection() noexcept
+bool
+common::S3Connection::check_connection()
 {
-    client_.reset();
+    return (bool)client_->ListBuckets();
 }
 
 bool
-common::S3Connection::bucket_exists(const std::string& bucket_name)
+common::S3Connection::bucket_exists(std::string_view bucket_name)
 {
-    if (bucket_name.empty()) {
-        return false;
-    }
+    EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
 
-    try {
-        minio::s3::BucketExistsArgs args;
-        args.bucket = bucket_name;
-
-        minio::s3::BucketExistsResponse response = client_->BucketExists(args);
-        CHECK(response);
-
-        return response.exist;
-    } catch (const std::exception& e) {
-        LOGE("Failed to check existence of bucket: %s", e.what());
-    }
-
-    return false;
-}
-
-bool
-common::S3Connection::make_bucket(const std::string& bucket_name)
-{
-    if (bucket_name.empty()) {
-        return false;
-    }
-
-    // first check if the bucket exists, do nothing if it does
-    if (bucket_exists(bucket_name)) {
-        return true;
-    }
-
-    TRACE("Creating bucket %s", bucket_name.c_str());
-    minio::s3::MakeBucketArgs args;
+    minio::s3::BucketExistsArgs args;
     args.bucket = bucket_name;
 
-    try {
-        minio::s3::MakeBucketResponse response = client_->MakeBucket(args);
-
-        return (bool)response;
-    } catch (const std::exception& e) {
-        LOGE("Failed to create bucket %s: %s", bucket_name.c_str(), e.what());
-    }
-
-    return false;
+    auto response = client_->BucketExists(args);
+    return response.exist;
 }
 
 bool
-common::S3Connection::destroy_bucket(const std::string& bucket_name)
+common::S3Connection::object_exists(std::string_view bucket_name,
+                                    std::string_view object_name)
 {
-    if (bucket_name.empty()) {
-        return false;
-    }
+    EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
+    EXPECT(!object_name.empty(), "Object name must not be empty.");
 
-    // first check if the bucket exists, do nothing if it does
-    if (!bucket_exists(bucket_name)) {
-        return true;
-    }
-
-    TRACE("Destroying bucket %s", bucket_name.c_str());
-    minio::s3::RemoveBucketArgs args;
-    args.bucket = bucket_name;
-
-    try {
-        minio::s3::RemoveBucketResponse response = client_->RemoveBucket(args);
-
-        return (bool)response;
-    } catch (const std::exception& e) {
-        LOGE("Failed to destroy bucket %s: %s", bucket_name.c_str(), e.what());
-    }
-
-    return false;
-}
-
-bool
-common::S3Connection::object_exists(const std::string& bucket_name,
-                                    const std::string& object_name)
-{
-    if (bucket_name.empty() || object_name.empty()) {
-        return false;
-    }
-
-    try {
-        minio::s3::StatObjectArgs args;
-        args.bucket = bucket_name;
-        args.object = object_name;
-
-        minio::s3::StatObjectResponse response = client_->StatObject(args);
-
-        return (bool)response;
-    } catch (const std::exception& e) {
-        LOGE("Failed to check if object %s exists in bucket %s: %s",
-             object_name.c_str(),
-             bucket_name.c_str(),
-             e.what());
-    }
-
-    return false;
-}
-
-bool
-common::S3Connection::put_object(const std::string& bucket_name,
-                                 const std::string& object_name,
-                                 const uint8_t* data,
-                                 size_t nbytes,
-                                 std::string& etag)
-{
-    if (bucket_name.empty() || object_name.empty() || 0 == nbytes) {
-        return false;
-    }
-
-    std::stringstream ss;
-    std::copy(reinterpret_cast<const char*>(data),
-              reinterpret_cast<const char*>(data) + nbytes,
-              std::ostream_iterator<char>(ss));
-
-    TRACE("Putting object %s in bucket %s",
-          object_name.c_str(),
-          bucket_name.c_str());
-    minio::s3::PutObjectArgs args(ss, (long)nbytes, 0);
+    minio::s3::StatObjectArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
 
-    try {
-        minio::s3::PutObjectResponse response = client_->PutObject(args);
-        etag = response.etag;
+    auto response = client_->StatObject(args);
+    // casts to true if response code in 200 range and error message is empty
+    return static_cast<bool>(response);
+}
 
-        return (bool)response;
-    } catch (const std::exception& e) {
+std::string
+common::S3Connection::put_object(std::string_view bucket_name,
+                                 std::string_view object_name,
+                                 std::span<uint8_t> data)
+{
+    EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
+    EXPECT(!object_name.empty(), "Object name must not be empty.");
+    EXPECT(!data.empty(), "Data must not be empty.");
+
+    minio::utils::CharBuffer buffer((char*)const_cast<uint8_t*>(data.data()),
+                                    data.size());
+    std::basic_istream stream(&buffer);
+
+    TRACE(
+      "Putting object %s in bucket %s", object_name.data(), bucket_name.data());
+    minio::s3::PutObjectArgs args(stream, (long)data.size(), 0);
+    args.bucket = bucket_name;
+    args.object = object_name;
+
+    auto response = client_->PutObject(args);
+    if (!response) {
         LOGE("Failed to put object %s in bucket %s: %s",
-             object_name.c_str(),
-             bucket_name.c_str(),
-             e.what());
+             object_name.data(),
+             bucket_name.data(),
+             response.Error().String().c_str());
+        return {};
     }
 
-    return false;
+    return response.etag;
 }
 
 bool
-common::S3Connection::delete_object(const std::string& bucket_name,
-                                    const std::string& object_name)
+common::S3Connection::delete_object(std::string_view bucket_name,
+                                    std::string_view object_name)
 {
-    if (bucket_name.empty() || object_name.empty()) {
-        return false;
-    }
+    EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
+    EXPECT(!object_name.empty(), "Object name must not be empty.");
 
     TRACE("Deleting object %s from bucket %s",
-          object_name.c_str(),
-          bucket_name.c_str());
+          object_name.data(),
+          bucket_name.data());
     minio::s3::RemoveObjectArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
 
-    try {
-        minio::s3::RemoveObjectResponse response = client_->RemoveObject(args);
-
-        return (bool)response;
-    } catch (const std::exception& e) {
+    auto response = client_->RemoveObject(args);
+    if (!response) {
         LOGE("Failed to delete object %s from bucket %s: %s",
-             object_name.c_str(),
-             bucket_name.c_str(),
-             e.what());
-    }
-
-    return false;
-}
-
-bool
-common::S3Connection::create_multipart_object(const std::string& bucket_name,
-                                              const std::string& object_name,
-                                              std::string& upload_id)
-{
-    if (bucket_name.empty() || object_name.empty()) {
+             object_name.data(),
+             bucket_name.data(),
+             response.Error().String().c_str());
         return false;
     }
 
+    return true;
+}
+
+std::string
+common::S3Connection::create_multipart_object(std::string_view bucket_name,
+                                              std::string_view object_name)
+{
+    EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
+    EXPECT(!object_name.empty(), "Object name must not be empty.");
+
     TRACE("Creating multipart object %s in bucket %s",
-          object_name.c_str(),
-          bucket_name.c_str());
+          object_name.data(),
+          bucket_name.data());
     minio::s3::CreateMultipartUploadArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
 
-    try {
-        minio::s3::CreateMultipartUploadResponse response =
-          client_->CreateMultipartUpload(args);
-
-        upload_id = response.upload_id;
-        return (bool)response;
-    } catch (const std::exception& e) {
+    auto response = client_->CreateMultipartUpload(args);
+    if (!response) {
         LOGE("Failed to create multipart object %s in bucket %s: %s",
-             object_name.c_str(),
-             bucket_name.c_str(),
-             e.what());
+             object_name.data(),
+             bucket_name.data(),
+             response.Error().String().c_str());
+        return {};
     }
 
-    return false;
+    return response.upload_id;
 }
 
-bool
-common::S3Connection::upload_multipart_object_part(
-  const std::string& bucket_name,
-  const std::string& object_name,
-  const std::string& upload_id,
-  const uint8_t* data,
-  size_t nbytes,
-  size_t part_number,
-  std::string& etag)
+std::string
+common::S3Connection::upload_multipart_object_part(std::string_view bucket_name,
+                                                   std::string_view object_name,
+                                                   std::string_view upload_id,
+                                                   std::span<uint8_t> data,
+                                                   unsigned int part_number)
 {
-    if (bucket_name.empty() || object_name.empty() || 0 == nbytes) {
-        return false;
-    }
+    EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
+    EXPECT(!object_name.empty(), "Object name must not be empty.");
+    EXPECT(!data.empty(), "Number of bytes must be positive.");
+    EXPECT(part_number, "Part number must be positive.");
 
     TRACE("Uploading multipart object part %zu for object %s in bucket %s",
           part_number,
-          object_name.c_str(),
-          bucket_name.c_str());
+          object_name.data(),
+          bucket_name.data());
 
-    std::string_view sv(reinterpret_cast<const char*>(data), nbytes);
+    std::string_view sv(reinterpret_cast<const char*>(data.data()),
+                        data.size());
 
     minio::s3::UploadPartArgs args;
     args.bucket = bucket_name;
@@ -257,56 +168,50 @@ common::S3Connection::upload_multipart_object_part(
     args.upload_id = upload_id;
     args.data = sv;
 
-    try {
-        minio::s3::UploadPartResponse response = client_->UploadPart(args);
-        etag = response.etag;
-
-        return (bool)response;
-    } catch (const std::exception& e) {
-        LOGE("Failed to upload multipart object part %zu for object %s in "
-             "bucket %s: %s",
+    auto response = client_->UploadPart(args);
+    if (!response) {
+        LOGE("Failed to upload part %zu for object %s in bucket %s: %s",
              part_number,
-             object_name.c_str(),
-             bucket_name.c_str(),
-             e.what());
+             object_name.data(),
+             bucket_name.data(),
+             response.Error().String().c_str());
+        return {};
     }
 
-    return false;
+    return response.etag;
 }
 
 bool
 common::S3Connection::complete_multipart_object(
-  const std::string& bucket_name,
-  const std::string& object_name,
-  const std::string& upload_id,
+  std::string_view bucket_name,
+  std::string_view object_name,
+  std::string_view upload_id,
   const std::list<minio::s3::Part>& parts)
 {
-    if (bucket_name.empty() || object_name.empty()) {
-        return false;
-    }
+    EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
+    EXPECT(!object_name.empty(), "Object name must not be empty.");
+    EXPECT(!upload_id.empty(), "Upload id must not be empty.");
+    EXPECT(!parts.empty(), "Parts list must not be empty.");
 
     TRACE("Completing multipart object %s in bucket %s",
-          object_name.c_str(),
-          bucket_name.c_str());
+          object_name.data(),
+          bucket_name.data());
     minio::s3::CompleteMultipartUploadArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
     args.upload_id = upload_id;
     args.parts = parts;
 
-    try {
-        minio::s3::CompleteMultipartUploadResponse response =
-          client_->CompleteMultipartUpload(args);
-
-        return (bool)response;
-    } catch (const std::exception& e) {
+    auto response = client_->CompleteMultipartUpload(args);
+    if (!response) {
         LOGE("Failed to complete multipart object %s in bucket %s: %s",
-             object_name.c_str(),
-             bucket_name.c_str(),
-             e.what());
+             object_name.data(),
+             bucket_name.data(),
+             response.Error().String().c_str());
+        return false;
     }
 
-    return false;
+    return true;
 }
 
 common::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
@@ -318,8 +223,13 @@ common::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
     CHECK(n_connections > 0);
 
     for (auto i = 0; i < n_connections; ++i) {
-        connections_.push_back(std::make_unique<S3Connection>(
-          endpoint, access_key_id, secret_access_key));
+        auto connection = std::make_unique<S3Connection>(
+          endpoint, access_key_id, secret_access_key);
+
+        if (connection->check_connection()) {
+            connections_.push_back(std::make_unique<S3Connection>(
+              endpoint, access_key_id, secret_access_key));
+        }
     }
 }
 
@@ -335,27 +245,7 @@ common::S3ConnectionPool::get_connection()
     std::unique_lock lock(connections_mutex_);
     cv_.wait(lock, [this] { return !connections_.empty(); });
 
-    if (should_stop_()) {
-        return nullptr;
-    }
-
-    auto conn = pop_from_connection_pool_();
-    return conn;
-}
-
-void
-common::S3ConnectionPool::release_connection(
-  std::unique_ptr<S3Connection>&& conn)
-{
-    std::scoped_lock lock(connections_mutex_);
-    connections_.push_back(std::move(conn));
-    cv_.notify_one();
-}
-
-std::unique_ptr<common::S3Connection>
-common::S3ConnectionPool::pop_from_connection_pool_()
-{
-    if (connections_.empty()) {
+    if (!is_accepting_connections_ || connections_.empty()) {
         return nullptr;
     }
 
@@ -364,10 +254,13 @@ common::S3ConnectionPool::pop_from_connection_pool_()
     return conn;
 }
 
-bool
-common::S3ConnectionPool::should_stop_() const
+void
+common::S3ConnectionPool::return_connection(
+  std::unique_ptr<S3Connection>&& conn)
 {
-    return !is_accepting_connections_;
+    std::scoped_lock lock(connections_mutex_);
+    connections_.push_back(std::move(conn));
+    cv_.notify_one();
 }
 
 #ifndef NO_UNIT_TESTS
@@ -386,42 +279,43 @@ static std::string s3_secret_access_key = ZARR_S3_SECRET_ACCESS_KEY;
 static std::string s3_endpoint, s3_access_key_id, s3_secret_access_key;
 #endif
 
-extern "C"
+namespace {
+
+bool
+make_bucket(minio::s3::Client& client, std::string_view bucket_name)
 {
-    acquire_export int unit_test__s3_connection__make_bucket()
-    {
-        if (s3_endpoint.empty() || s3_access_key_id.empty() ||
-            s3_secret_access_key.empty()) {
-            LOGE("S3 credentials not set.");
-            return 1;
-        }
-
-        const std::string bucket_name = "acquire-test-bucket";
-
-        int retval = 0;
-
-        try {
-            common::S3Connection conn(
-              s3_endpoint, s3_access_key_id, s3_secret_access_key);
-
-            if (conn.bucket_exists(bucket_name)) {
-                CHECK(conn.destroy_bucket(bucket_name));
-            }
-
-            CHECK(conn.make_bucket(bucket_name));
-            CHECK(conn.bucket_exists(bucket_name));
-            CHECK(conn.destroy_bucket(bucket_name));
-
-            retval = 1;
-        } catch (const std::exception& e) {
-            LOGE("Failed to create S3 connection: %s", e.what());
-        } catch (...) {
-            LOGE("Failed to create S3 connection: unknown error");
-        }
-
-        return retval;
+    if (bucket_name.empty()) {
+        return false;
     }
 
+    TRACE("Creating bucket %s", bucket_name.data());
+    minio::s3::MakeBucketArgs args;
+    args.bucket = bucket_name;
+
+    auto response = client.MakeBucket(args);
+
+    return (bool)response;
+}
+
+bool
+destroy_bucket(minio::s3::Client& client, std::string_view bucket_name)
+{
+    if (bucket_name.empty()) {
+        return false;
+    }
+
+    TRACE("Destroying bucket %s", bucket_name.data());
+    minio::s3::RemoveBucketArgs args;
+    args.bucket = bucket_name;
+
+    auto response = client.RemoveBucket(args);
+
+    return (bool)response;
+}
+} // namespace
+
+extern "C"
+{
     acquire_export int unit_test__s3_connection__put_object()
     {
         if (s3_endpoint.empty() || s3_access_key_id.empty() ||
@@ -429,6 +323,13 @@ extern "C"
             LOGE("S3 credentials not set.");
             return 1;
         }
+
+        minio::s3::BaseUrl url(s3_endpoint);
+        url.https = s3_endpoint.starts_with("https");
+
+        minio::creds::StaticProvider provider(s3_access_key_id,
+                                              s3_secret_access_key);
+        minio::s3::Client client(url, &provider);
 
         const std::string bucket_name = "acquire-test-bucket";
         const std::string object_name = "test-object";
@@ -440,27 +341,24 @@ extern "C"
               s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
             if (!conn.bucket_exists(bucket_name)) {
-                CHECK(conn.make_bucket(bucket_name));
+                CHECK(make_bucket(client, bucket_name));
                 CHECK(conn.bucket_exists(bucket_name));
             }
 
-            if (conn.object_exists(bucket_name, object_name)) {
-                CHECK(conn.delete_object(bucket_name, object_name));
-                CHECK(!conn.object_exists(bucket_name, object_name));
-            }
-
-            std::string etag;
+            CHECK(conn.delete_object(bucket_name, object_name));
+            CHECK(!conn.object_exists(bucket_name, object_name));
 
             std::vector<uint8_t> data(1024, 0);
-            CHECK(conn.put_object(
-              bucket_name, object_name, data.data(), data.size(), etag));
 
+            std::string etag =
+              conn.put_object(bucket_name, object_name, std::span<uint8_t>(data.data(), data.size()));
             CHECK(!etag.empty());
+
             CHECK(conn.object_exists(bucket_name, object_name));
 
             // cleanup
             CHECK(conn.delete_object(bucket_name, object_name));
-            CHECK(conn.destroy_bucket(bucket_name));
+            CHECK(destroy_bucket(client, bucket_name));
 
             retval = 1;
         } catch (const std::exception& e) {
@@ -480,6 +378,13 @@ extern "C"
             return 1;
         }
 
+        minio::s3::BaseUrl url(s3_endpoint);
+        url.https = s3_endpoint.starts_with("https");
+
+        minio::creds::StaticProvider provider(s3_access_key_id,
+                                              s3_secret_access_key);
+        minio::s3::Client client(url, &provider);
+
         const std::string bucket_name = "acquire-test-bucket";
         const std::string object_name = "test-object";
 
@@ -490,7 +395,7 @@ extern "C"
               s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
             if (!conn.bucket_exists(bucket_name)) {
-                CHECK(conn.make_bucket(bucket_name));
+                CHECK(make_bucket(client, bucket_name));
                 CHECK(conn.bucket_exists(bucket_name));
             }
 
@@ -499,23 +404,22 @@ extern "C"
                 CHECK(!conn.object_exists(bucket_name, object_name));
             }
 
-            std::string upload_id;
-            CHECK(conn.create_multipart_object(
-              bucket_name, object_name, upload_id));
+            std::string upload_id =
+              conn.create_multipart_object(bucket_name, object_name);
+            CHECK(!upload_id.empty());
 
             std::list<minio::s3::Part> parts;
 
             // parts need to be at least 5MiB, except the last part
             std::vector<uint8_t> data(5 << 20, 0);
             for (auto i = 0; i < 4; ++i) {
-                std::string etag;
-                CHECK(conn.upload_multipart_object_part(bucket_name,
-                                                        object_name,
-                                                        upload_id,
-                                                        data.data(),
-                                                        data.size(),
-                                                        i + 1,
-                                                        etag));
+                std::string etag = conn.upload_multipart_object_part(
+                  bucket_name,
+                  object_name,
+                  upload_id,
+                  std::span<uint8_t>(data.data(), data.size()),
+                  i + 1);
+                CHECK(!etag.empty());
 
                 minio::s3::Part part;
                 part.number = i + 1;
@@ -529,15 +433,13 @@ extern "C"
             {
                 const unsigned int part_number = parts.size() + 1;
                 const size_t part_size = 1 << 20; // 1MiB
-                std::string etag;
-
-                CHECK(conn.upload_multipart_object_part(bucket_name,
-                                                        object_name,
-                                                        upload_id,
-                                                        data.data(),
-                                                        part_size,
-                                                        part_number,
-                                                        etag));
+                std::string etag =
+                  conn.upload_multipart_object_part(bucket_name,
+                                                    object_name,
+                                                    upload_id,
+                                                    std::span<uint8_t>(data.data(), data.size()),
+                                                    part_number);
+                CHECK(!etag.empty());
 
                 minio::s3::Part part;
                 part.number = part_number;
@@ -554,7 +456,7 @@ extern "C"
 
             // cleanup
             CHECK(conn.delete_object(bucket_name, object_name));
-            CHECK(conn.destroy_bucket(bucket_name));
+            CHECK(destroy_bucket(client, bucket_name));
 
             retval = 1;
         } catch (const std::exception& e) {
