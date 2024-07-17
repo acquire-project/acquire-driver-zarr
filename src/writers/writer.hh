@@ -44,7 +44,7 @@ struct Writer
 
     virtual ~Writer() noexcept = default;
 
-    [[nodiscard]] bool write(const VideoFrame* frame);
+    [[nodiscard]] size_t write(const uint8_t* data, size_t bytes_of_frame);
     void finalize();
 
     const WriterConfig& config() const noexcept;
@@ -72,7 +72,6 @@ struct Writer
     bool is_finalizing_;
 
     void make_buffers_() noexcept;
-    void validate_frame_(const VideoFrame* frame);
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
     bool should_flush_() const;
     void compress_buffers_() noexcept;
