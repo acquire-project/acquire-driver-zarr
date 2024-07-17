@@ -12,5 +12,6 @@ if(ACQUIRE_BUILD_API_CPP)
 endif()
 
 if(ACQUIRE_BUILD_API_PY)
+    set(ACQUIRE_BUILD_API_CPP ON CACHE BOOL "Build the stand-alone C++ API" FORCE)
     add_subdirectory(python)
 endif()
