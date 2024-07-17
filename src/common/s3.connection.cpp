@@ -270,16 +270,42 @@ common::S3ConnectionPool::return_connection(
 #define acquire_export
 #endif
 
-#if __has_include("s3.credentials.hh")
-#include "s3.credentials.hh"
-static std::string s3_endpoint = ZARR_S3_ENDPOINT;
-static std::string s3_access_key_id = ZARR_S3_ACCESS_KEY_ID;
-static std::string s3_secret_access_key = ZARR_S3_SECRET_ACCESS_KEY;
-#else
-static std::string s3_endpoint, s3_access_key_id, s3_secret_access_key;
-#endif
+#include <cstdlib>
 
 namespace {
+bool
+get_credentials(std::string& endpoint,
+                std::string& bucket_name,
+                std::string& access_key_id,
+                std::string& secret_access_key)
+{
+    char* env = nullptr;
+    if (!(env = std::getenv("ZARR_S3_ENDPOINT"))) {
+        LOGE("ZARR_S3_ENDPOINT not set.");
+        return false;
+    }
+    endpoint = env;
+
+    if (!(env = std::getenv("ZARR_S3_BUCKET_NAME"))) {
+        LOGE("ZARR_S3_BUCKET_NAME not set.");
+        return false;
+    }
+    bucket_name = env;
+
+    if (!(env = std::getenv("ZARR_S3_ACCESS_KEY_ID"))) {
+        LOGE("ZARR_S3_ACCESS_KEY_ID not set.");
+        return false;
+    }
+    access_key_id = env;
+
+    if (!(env = std::getenv("ZARR_S3_SECRET_ACCESS_KEY"))) {
+        LOGE("ZARR_S3_SECRET_ACCESS_KEY not set.");
+        return false;
+    }
+    secret_access_key = env;
+
+    return true;
+}
 
 bool
 make_bucket(minio::s3::Client& client, std::string_view bucket_name)
@@ -318,9 +344,12 @@ extern "C"
 {
     acquire_export int unit_test__s3_connection__put_object()
     {
-        if (s3_endpoint.empty() || s3_access_key_id.empty() ||
-            s3_secret_access_key.empty()) {
-            LOGE("S3 credentials not set.");
+        std::string s3_endpoint, bucket_name, s3_access_key_id,
+          s3_secret_access_key;
+        if (!get_credentials(s3_endpoint,
+                             bucket_name,
+                             s3_access_key_id,
+                             s3_secret_access_key)) {
             return 1;
         }
 
@@ -331,7 +360,6 @@ extern "C"
                                               s3_secret_access_key);
         minio::s3::Client client(url, &provider);
 
-        const std::string bucket_name = "acquire-test-bucket";
         const std::string object_name = "test-object";
 
         int retval = 0;
@@ -340,10 +368,7 @@ extern "C"
             common::S3Connection conn(
               s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
-            if (!conn.bucket_exists(bucket_name)) {
-                CHECK(make_bucket(client, bucket_name));
-                CHECK(conn.bucket_exists(bucket_name));
-            }
+            CHECK(conn.bucket_exists(bucket_name));
 
             CHECK(conn.delete_object(bucket_name, object_name));
             CHECK(!conn.object_exists(bucket_name, object_name));
@@ -351,14 +376,15 @@ extern "C"
             std::vector<uint8_t> data(1024, 0);
 
             std::string etag =
-              conn.put_object(bucket_name, object_name, std::span<uint8_t>(data.data(), data.size()));
+              conn.put_object(bucket_name,
+                              object_name,
+                              std::span<uint8_t>(data.data(), data.size()));
             CHECK(!etag.empty());
 
             CHECK(conn.object_exists(bucket_name, object_name));
 
             // cleanup
             CHECK(conn.delete_object(bucket_name, object_name));
-            CHECK(destroy_bucket(client, bucket_name));
 
             retval = 1;
         } catch (const std::exception& e) {
@@ -372,9 +398,12 @@ extern "C"
 
     acquire_export int unit_test__s3_connection__upload_multipart_object()
     {
-        if (s3_endpoint.empty() || s3_access_key_id.empty() ||
-            s3_secret_access_key.empty()) {
-            LOGE("S3 credentials not set.");
+        std::string s3_endpoint, bucket_name, s3_access_key_id,
+          s3_secret_access_key;
+        if (!get_credentials(s3_endpoint,
+                             bucket_name,
+                             s3_access_key_id,
+                             s3_secret_access_key)) {
             return 1;
         }
 
@@ -385,7 +414,6 @@ extern "C"
                                               s3_secret_access_key);
         minio::s3::Client client(url, &provider);
 
-        const std::string bucket_name = "acquire-test-bucket";
         const std::string object_name = "test-object";
 
         int retval = 0;
@@ -394,10 +422,7 @@ extern "C"
             common::S3Connection conn(
               s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
-            if (!conn.bucket_exists(bucket_name)) {
-                CHECK(make_bucket(client, bucket_name));
-                CHECK(conn.bucket_exists(bucket_name));
-            }
+            CHECK(conn.bucket_exists(bucket_name));
 
             if (conn.object_exists(bucket_name, object_name)) {
                 CHECK(conn.delete_object(bucket_name, object_name));
@@ -433,12 +458,12 @@ extern "C"
             {
                 const unsigned int part_number = parts.size() + 1;
                 const size_t part_size = 1 << 20; // 1MiB
-                std::string etag =
-                  conn.upload_multipart_object_part(bucket_name,
-                                                    object_name,
-                                                    upload_id,
-                                                    std::span<uint8_t>(data.data(), data.size()),
-                                                    part_number);
+                std::string etag = conn.upload_multipart_object_part(
+                  bucket_name,
+                  object_name,
+                  upload_id,
+                  std::span<uint8_t>(data.data(), data.size()),
+                  part_number);
                 CHECK(!etag.empty());
 
                 minio::s3::Part part;
@@ -456,7 +481,6 @@ extern "C"
 
             // cleanup
             CHECK(conn.delete_object(bucket_name, object_name));
-            CHECK(destroy_bucket(client, bucket_name));
 
             retval = 1;
         } catch (const std::exception& e) {
