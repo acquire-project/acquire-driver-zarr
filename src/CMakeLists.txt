@@ -5,13 +5,10 @@ if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
-
 set(tgt acquire-driver-zarr)
 
 #COMPILE SOURCES AS AN OBJECT LIBRARY
 add_library(${tgt}-obj OBJECT 
-#        common.hh
-#        common.cpp
         common/dimension.hh
         common/dimension.cpp
         common/thread.pool.hh
@@ -51,13 +48,7 @@ set(${tgt}_deps
         miniocpp::miniocpp
 )
 
-# TOD0: this will get the includes for all dependencies listed above.
-# foreach(dep ${${tgt}_deps})
-#     set(tmp ${${dep}_SOURCE_DIR})
-#     list(APPEND ${tgt}_inc ${tmp})
-# endforeach()
-
-# ugly:  get the platform
+# get the platform
 if(WIN32)
     set(my_platform win32)
 elseif(APPLE)
@@ -66,18 +57,17 @@ elseif(LINUX)
         set(my_platform linux)
 endif()
 
-target_include_directories(${tgt}-obj PUBLIC
+target_include_directories(${tgt}-obj 
+        PUBLIC
         ${CMAKE_CURRENT_LIST_DIR}
         ${CMAKE_CURRENT_LIST_DIR}/writers
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-core-logger
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-core-platform/${my_platform}
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-device-kit
-        ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-device-properties
+        ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-device-properties 
+        PRIVATE
+        $<TARGET_PROPERTY:blosc_static,INTERFACE_INCLUDE_DIRECTORIES>
 )
-
-# target_include_directories(${tgt} PRIVATE
-#   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
-# )
 
 add_library(${tgt} MODULE $<TARGET_OBJECTS:${tgt}-obj>)
 
