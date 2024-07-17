@@ -1,7 +1,6 @@
 #include "s3.connection.hh"
 #include "utilities.hh"
 
-#include <miniocpp/client.h>
 #include <miniocpp/utils.h>
 
 #include <list>

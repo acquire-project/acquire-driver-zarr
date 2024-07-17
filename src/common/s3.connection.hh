@@ -8,14 +8,7 @@
 #include <span>
 #include <vector>
 
-namespace minio::s3 {
-class Client;
-class Part;
-} // namespace minio::s3
-
-namespace minio::creds {
-class StaticProvider;
-} // namespace minio::creds
+#include <miniocpp/client.h>
 
 namespace acquire::sink::zarr::common {
 struct S3Connection final
