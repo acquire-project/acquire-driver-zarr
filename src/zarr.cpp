@@ -65,7 +65,7 @@ validate_props(const StorageProperties* props)
 
     if (common::is_s3_uri(uri)) {
         std::vector<std::string> tokens = common::split_uri(uri);
-        CHECK(tokens.size() > 2); // http://bucket/key
+        CHECK(tokens.size() > 2); // http://endpoint/bucket
     } else {
         const fs::path path = as_path(*props);
         fs::path parent_path = path.parent_path().string();
@@ -363,7 +363,7 @@ zarr::Zarr::set(const StorageProperties* props)
 
     if (common::is_s3_uri(uri)) {
         std::vector<std::string> tokens = common::split_uri(uri);
-        CHECK(tokens.size() > 2); // http://bucket/key
+        CHECK(tokens.size() > 2); // http://endpoint/bucket
         dataset_root_ = uri;
     } else {
         dataset_root_ = as_path(*props).string();

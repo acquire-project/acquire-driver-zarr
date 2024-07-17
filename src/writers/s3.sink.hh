@@ -1,5 +1,4 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_WRITERS_S3_SINK_V0
-#define H_ACQUIRE_STORAGE_ZARR_WRITERS_S3_SINK_V0
+#pragma once
 
 #include "sink.hh"
 #include "platform.h"
@@ -34,18 +33,17 @@ struct S3Sink final : public Sink
     std::string upload_id_;
     std::list<minio::s3::Part> parts_;
 
-    [[nodiscard]] bool write_to_buffer_(const uint8_t* buf,
-                                        size_t bytes_of_buf);
-
     // single-part upload
-    [[nodiscard]] bool put_object_();
+    /// @brief Upload the object to S3.
+    /// @returns True if the object was successfully uploaded, otherwise false.
+    [[nodiscard]] bool put_object_() noexcept;
 
     // multipart upload
-    [[nodiscard]] bool flush_part_();
-    [[nodiscard]] bool finalize_multipart_upload_();
-
-    void close_();
+    /// @brief Flush the current part to S3.
+    /// @returns True if the part was successfully flushed, otherwise false.
+    [[nodiscard]] bool flush_part_() noexcept;
+    /// @brief Finalize the multipart upload.
+    /// @returns True if a multipart upload was successfully finalized, otherwise false.
+    [[nodiscard]] bool finalize_multipart_upload_() noexcept;
 };
 } // namespace acquire::sink::zarr
-
-#endif // H_ACQUIRE_STORAGE_ZARR_WRITERS_S3_SINK_V0
