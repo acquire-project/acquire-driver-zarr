@@ -305,38 +305,6 @@ get_credentials(std::string& endpoint,
 
     return true;
 }
-
-bool
-make_bucket(minio::s3::Client& client, std::string_view bucket_name)
-{
-    if (bucket_name.empty()) {
-        return false;
-    }
-
-    TRACE("Creating bucket %s", bucket_name.data());
-    minio::s3::MakeBucketArgs args;
-    args.bucket = bucket_name;
-
-    auto response = client.MakeBucket(args);
-
-    return (bool)response;
-}
-
-bool
-destroy_bucket(minio::s3::Client& client, std::string_view bucket_name)
-{
-    if (bucket_name.empty()) {
-        return false;
-    }
-
-    TRACE("Destroying bucket %s", bucket_name.data());
-    minio::s3::RemoveBucketArgs args;
-    args.bucket = bucket_name;
-
-    auto response = client.RemoveBucket(args);
-
-    return (bool)response;
-}
 } // namespace
 
 extern "C"
