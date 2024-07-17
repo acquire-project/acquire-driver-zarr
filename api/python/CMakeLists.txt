@@ -11,7 +11,5 @@ pybind11_add_module(acquire_zarr acquire-zarr-py-api.cpp)
 target_compile_definitions(acquire_zarr
                            PRIVATE VERSION_INFO=${EXAMPLE_VERSION_INFO})
 
-message(STATUS "ACQUIRE_ZARR_CPP_INCLUDE_DIRECTORIES: ${acquire-zarr-cpp-api_SOURCE_DIR}/include")
-
 target_include_directories(acquire_zarr PRIVATE ${acquire-zarr-cpp-api_SOURCE_DIR}/include) 
 target_link_libraries(acquire_zarr PRIVATE acquire-zarr-cpp)
