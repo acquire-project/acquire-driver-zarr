@@ -10,8 +10,9 @@ namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV2Writer::ZarrV2Writer(
   const WriterConfig& config,
-  std::shared_ptr<common::ThreadPool> thread_pool)
-  : Writer(config, thread_pool)
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  std::shared_ptr<common::S3ConnectionPool> connection_pool)
+  : Writer(config, thread_pool, connection_pool)
 {
 }
 
@@ -24,7 +25,7 @@ zarr::ZarrV2Writer::flush_impl_()
       (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
 
     {
-        SinkCreator creator(thread_pool_);
+        SinkCreator creator(thread_pool_, connection_pool_);
         if (!creator.make_data_sinks(data_root,
                                      config_.dimensions,
                                      common::chunks_along_dimension,
@@ -151,7 +152,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(config, thread_pool);
+            zarr::ZarrV2Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
             std::vector<uint8_t> data(frame_size, 0);
@@ -276,7 +278,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(config, thread_pool);
+            zarr::ZarrV2Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
             std::vector<uint8_t> data(frame_size, 0);
@@ -388,7 +391,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(config, thread_pool);
+            zarr::ZarrV2Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
             std::vector<uint8_t> data(frame_size, 0);
