@@ -13,3 +13,5 @@ target_compile_definitions(acquire_zarr
 
 target_include_directories(acquire_zarr PRIVATE ${acquire-zarr-cpp-api_SOURCE_DIR}/include) 
 target_link_libraries(acquire_zarr PRIVATE acquire-zarr-cpp)
+
+install(TARGETS acquire_zarr LIBRARY DESTINATION acquire_zarr)

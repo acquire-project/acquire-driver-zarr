@@ -9,11 +9,20 @@
         "version>=": "3.11.3"
     },
     {"name": "pybind11"},
-    {"name": "python3"},
+    {
+      "name": "python3",
+      "version>=": "3.0.0"
+    },
     { "name": "curlpp" },
     { "name": "inih", "features": ["cpp"] },
     { "name": "openssl" },
     { "name": "pugixml" },
     { "name": "zlib", "platform": "windows" }
+  ],
+  "overrides" : [
+    {
+      "name": "python3",
+      "version": "3.10.7"
+    }
   ]
 }

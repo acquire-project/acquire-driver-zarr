@@ -24,6 +24,7 @@ AcquireZarrWriter::Impl::Impl()
     memset(&storage_properties_, 0, sizeof(struct StorageProperties));
     memset(&shape_, 0, sizeof(struct ImageShape));
 
+    // Default to v2
     zarr_version_ = 2;
 }
 
