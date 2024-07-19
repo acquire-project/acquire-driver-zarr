@@ -129,13 +129,7 @@ common::S3Connection::create_multipart_object(std::string_view bucket_name,
     args.object = object_name;
 
     auto response = client_->CreateMultipartUpload(args);
-    if (!response) {
-        LOGE("Failed to create multipart object %s in bucket %s: %s",
-             object_name.data(),
-             bucket_name.data(),
-             response.Error().String().c_str());
-        return {};
-    }
+    CHECK(!response.upload_id.empty());
 
     return response.upload_id;
 }

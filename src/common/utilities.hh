@@ -104,11 +104,20 @@ align_up(size_t n, size_t align);
 std::vector<std::string>
 split_uri(const std::string& uri);
 
+/// @brief Get the endpoint and bucket name from a URI.
+/// @param[in] uri String to parse.
+/// @param[out] endpoint The endpoint of the URI.
+/// @param[out] bucket_name The bucket name of the URI.
+void
+parse_path_from_uri(std::string_view uri,
+                    std::string& bucket_name,
+                    std::string& path);
+
 /// @brief Check if a URI is an S3 URI.
 /// @param uri String to check.
 /// @return True if the URI is an S3 URI, false otherwise.
 bool
-is_s3_uri(const std::string& uri);
+is_web_uri(std::string_view uri);
 } // namespace acquire::sink::zarr::common
 } // namespace acquire::sink::zarr
 

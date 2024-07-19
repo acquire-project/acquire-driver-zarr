@@ -77,14 +77,14 @@ struct SinkCreator final
     /// @brief Check whether an S3 bucket exists.
     /// @param[in] bucket_name The name of the bucket to check.
     /// @return True iff the bucket exists.
-    bool bucket_exists_(const std::string& bucket_name);
+    bool bucket_exists_(std::string_view bucket_name);
 
     /// @brief Create a collection of S3 objects.
     /// @param[in] bucket_name The name of the bucket.
     /// @param[in,out] object_keys The keys of the objects to create.
     /// @param[out] sinks The sinks created.
     [[nodiscard]] bool make_s3_objects_(
-      const std::string& bucket_name,
+      std::string_view bucket_name,
       std::queue<std::string>& object_keys,
       std::vector<std::unique_ptr<Sink>>& sinks);
 };

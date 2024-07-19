@@ -63,7 +63,7 @@ validate_props(const StorageProperties* props)
 
     std::string uri{ props->uri.str, props->uri.nbytes - 1 };
 
-    if (common::is_s3_uri(uri)) {
+    if (common::is_web_uri(uri)) {
         std::vector<std::string> tokens = common::split_uri(uri);
         CHECK(tokens.size() > 2); // http://endpoint/bucket
     } else {
@@ -361,22 +361,20 @@ zarr::Zarr::set(const StorageProperties* props)
 
     std::string uri(props->uri.str, props->uri.nbytes - 1);
 
-    if (common::is_s3_uri(uri)) {
-        std::vector<std::string> tokens = common::split_uri(uri);
-        CHECK(tokens.size() > 2); // http://endpoint/bucket
+    if (common::is_web_uri(uri)) {
         dataset_root_ = uri;
     } else {
         dataset_root_ = as_path(*props).string();
     }
 
     if (props->access_key_id.str) {
-        access_key_id_ = std::string(props->access_key_id.str,
-                                     props->access_key_id.nbytes - 1);
+        s3_access_key_id_ = std::string(props->access_key_id.str,
+                                        props->access_key_id.nbytes - 1);
     }
 
     if (props->secret_access_key.str) {
-        secret_access_key_ = std::string(props->secret_access_key.str,
-                                         props->secret_access_key.nbytes - 1);
+        s3_secret_access_key_ = std::string(
+          props->secret_access_key.str, props->secret_access_key.nbytes - 1);
     }
 
     if (props->external_metadata_json.str) {
@@ -430,14 +428,15 @@ zarr::Zarr::get(StorageProperties* props) const
     // set access key and secret
     {
         const char* access_key_id =
-          access_key_id_.empty() ? nullptr : access_key_id_.c_str();
+          s3_access_key_id_.has_value() ? s3_access_key_id_->c_str() : nullptr;
         const size_t bytes_of_access_key_id =
-          access_key_id ? access_key_id_.size() + 1 : 0;
+          access_key_id ? s3_access_key_id_->size() + 1 : 0;
 
-        const char* secret_access_key =
-          secret_access_key_.empty() ? nullptr : secret_access_key_.c_str();
+        const char* secret_access_key = s3_secret_access_key_.has_value()
+                                          ? s3_secret_access_key_->c_str()
+                                          : nullptr;
         const size_t bytes_of_secret_access_key =
-          secret_access_key ? secret_access_key_.size() + 1 : 0;
+          secret_access_key ? s3_secret_access_key_->size() + 1 : 0;
 
         if (access_key_id && secret_access_key) {
             CHECK(storage_properties_set_access_key_and_secret(
@@ -484,12 +483,12 @@ zarr::Zarr::start()
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
 
-    if (common::is_s3_uri(dataset_root_)) {
+    if (common::is_web_uri(dataset_root_)) {
         std::vector<std::string> tokens = common::split_uri(dataset_root_);
         CHECK(tokens.size() > 1);
         const std::string endpoint = tokens[0] + "//" + tokens[1];
         connection_pool_ = std::make_shared<common::S3ConnectionPool>(
-          8, endpoint, access_key_id_, secret_access_key_);
+          8, endpoint, *s3_access_key_id_, *s3_secret_access_key_);
     } else {
         // remove the folder if it exists
         if (fs::exists(dataset_root_)) {

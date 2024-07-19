@@ -26,22 +26,11 @@ zarr::SinkCreator::make_data_sinks(
 {
     std::queue<std::string> paths;
 
-    bool is_s3 = common::is_s3_uri(base_uri);
+    bool is_s3 = common::is_web_uri(base_uri);
     std::string bucket_name;
     if (is_s3) {
-        auto tokens = common::split_uri(base_uri);
-        CHECK(tokens.size() > 2);
-        bucket_name = tokens.at(2);
-
-        CHECK(bucket_exists_(bucket_name));
-
         std::string base_dir;
-        for (auto i = 3; i < tokens.size() - 1; ++i) {
-            base_dir += tokens.at(i) + "/";
-        }
-        if (tokens.size() > 3) {
-            base_dir += tokens.at(tokens.size() - 1);
-        }
+        common::parse_path_from_uri(base_uri, bucket_name, base_dir);
 
         paths.push(base_dir);
     } else {
@@ -252,21 +241,12 @@ zarr::SinkCreator::make_metadata_sinks_(
   std::queue<std::string>& file_paths,
   std::vector<std::unique_ptr<Sink>>& metadata_sinks)
 {
-    bool is_s3 = common::is_s3_uri(base_uri);
+    bool is_s3 = common::is_web_uri(base_uri);
     std::string bucket_name;
     std::string base_dir;
 
     if (is_s3) {
-        auto tokens = common::split_uri(base_uri);
-        CHECK(tokens.size() > 2);
-        bucket_name = tokens.at(2);
-
-        for (auto i = 3; i < tokens.size() - 1; ++i) {
-            base_dir += tokens.at(i) + "/";
-        }
-        if (tokens.size() > 3) {
-            base_dir += tokens.at(tokens.size() - 1);
-        }
+        common::parse_path_from_uri(base_uri, bucket_name, base_dir);
 
         // create the bucket if it doesn't already exist
         if (!bucket_exists_(bucket_name)) {
@@ -310,7 +290,7 @@ zarr::SinkCreator::make_metadata_sinks_(
 }
 
 bool
-zarr::SinkCreator::bucket_exists_(const std::string& bucket_name)
+zarr::SinkCreator::bucket_exists_(std::string_view bucket_name)
 {
     CHECK(!bucket_name.empty());
     EXPECT(connection_pool_, "S3 connection pool not provided.");
@@ -324,69 +304,31 @@ zarr::SinkCreator::bucket_exists_(const std::string& bucket_name)
 }
 
 bool
-zarr::SinkCreator::make_s3_objects_(const std::string& bucket_name,
+zarr::SinkCreator::make_s3_objects_(std::string_view bucket_name,
                                     std::queue<std::string>& object_keys,
                                     std::vector<std::unique_ptr<Sink>>& sinks)
 {
     if (object_keys.empty()) {
         return true;
     }
+    if (bucket_name.empty()) {
+        LOGE("Bucket name not provided.");
+        return false;
+    }
     if (!connection_pool_) {
         LOGE("S3 connection pool not provided.");
         return false;
     }
 
-    std::atomic<bool> all_successful = true;
-
     const auto n_objects = object_keys.size();
     sinks.resize(n_objects);
-    std::fill(sinks.begin(), sinks.end(), nullptr);
-    std::latch latch(n_objects);
-
     for (auto i = 0; i < n_objects; ++i) {
-        const auto object_key = object_keys.front();
+        sinks[i] = std::make_unique<S3Sink>(
+          bucket_name, object_keys.front(), connection_pool_);
         object_keys.pop();
-
-        std::unique_ptr<Sink>* psink = sinks.data() + i;
-
-        thread_pool_->push_to_job_queue(
-          [this, bucket_name, object_key, psink, &latch, &all_successful](
-            std::string& err) -> bool {
-              bool success = false;
-
-              try {
-                  if (all_successful) {
-                      *psink = std::make_unique<S3Sink>(
-                        bucket_name, object_key, connection_pool_);
-                  }
-                  success = true;
-              } catch (const std::exception& exc) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create S3 object '%s': %s.",
-                           object_key.c_str(),
-                           exc.what());
-                  err = buf;
-              } catch (...) {
-                  char buf[128];
-                  snprintf(buf,
-                           sizeof(buf),
-                           "Failed to create S3 object '%s': (unknown).",
-                           object_key.c_str());
-                  err = buf;
-              }
-
-              latch.count_down();
-              all_successful = all_successful && success;
-
-              return success;
-          });
     }
 
-    latch.wait();
-
-    return all_successful;
+    return true;
 }
 
 #ifndef NO_UNIT_TESTS

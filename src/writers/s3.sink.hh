@@ -6,19 +6,22 @@
 
 #include <miniocpp/types.h>
 
-#include <future>
+#include <array>
 #include <string>
 
 namespace acquire::sink::zarr {
-struct S3Sink final : public Sink
+class S3Sink final : public Sink
 {
+  public:
     S3Sink() = delete;
-    S3Sink(const std::string& bucket_name,
-           const std::string& object_key,
+    S3Sink(std::string_view bucket_name,
+           std::string_view object_key,
            std::shared_ptr<common::S3ConnectionPool> connection_pool);
     ~S3Sink() override;
 
-    bool write(size_t offset, const uint8_t* buf, size_t bytes_of_buf) override;
+    bool write(size_t offset,
+               const uint8_t* data,
+               size_t bytes_of_data) override;
 
   private:
     std::string bucket_name_;
@@ -27,8 +30,8 @@ struct S3Sink final : public Sink
     std::shared_ptr<common::S3ConnectionPool> connection_pool_;
 
     // multipart upload
-    std::vector<uint8_t> buf_; // temporary 5MiB buffer for multipart upload
-    size_t buf_size_ = 0;
+    std::array<uint8_t, 5 << 20> part_buffer_;
+    size_t n_bytes_buffered_ = 0;
 
     std::string upload_id_;
     std::list<minio::s3::Part> parts_;
@@ -36,14 +39,17 @@ struct S3Sink final : public Sink
     // single-part upload
     /// @brief Upload the object to S3.
     /// @returns True if the object was successfully uploaded, otherwise false.
-    [[nodiscard]] bool put_object_() noexcept;
+    [[nodiscard]] bool put_object_();
 
     // multipart upload
+    bool is_multi_part_upload_() const;
+
     /// @brief Flush the current part to S3.
     /// @returns True if the part was successfully flushed, otherwise false.
-    [[nodiscard]] bool flush_part_() noexcept;
+    [[nodiscard]] bool flush_part_();
     /// @brief Finalize the multipart upload.
-    /// @returns True if a multipart upload was successfully finalized, otherwise false.
-    [[nodiscard]] bool finalize_multipart_upload_() noexcept;
+    /// @returns True if a multipart upload was successfully finalized,
+    /// otherwise false.
+    [[nodiscard]] bool finalize_multipart_upload_();
 };
 } // namespace acquire::sink::zarr

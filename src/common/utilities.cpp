@@ -197,30 +197,47 @@ common::split_uri(const std::string& uri)
 {
     const char delim = '/';
 
-    size_t begin = 0;
-    auto end = uri.find_first_of(delim);
-
     std::vector<std::string> out;
-    while (end <= std::string::npos) {
-        if (end > begin) {
-            std::string part = uri.substr(begin, end - begin);
-            if (!part.empty()) {
-                out.emplace_back(part);
-            }
-        }
+    size_t begin = 0, end = uri.find_first_of(delim);
 
-        if (end == std::string::npos) {
-            break;
-        }
+    while (end != std::string::npos) {
+        std::string part = uri.substr(begin, end - begin);
+        if (!part.empty())
+            out.push_back(part);
 
         begin = end + 1;
         end = uri.find_first_of(delim, begin);
     }
+
+    // Add the last segment of the URI (if any) after the last '/'
+    std::string last_part = uri.substr(begin);
+    if (!last_part.empty()) {
+        out.push_back(last_part);
+    }
+
     return out;
 }
 
+void
+common::parse_path_from_uri(std::string_view uri,
+                            std::string& bucket_name,
+                            std::string& path)
+{
+    auto parts = split_uri(uri.data());
+    EXPECT(parts.size() > 2, "Invalid URI: %s", uri.data());
+
+    bucket_name = parts[2];
+    path = "";
+    for (size_t i = 3; i < parts.size(); ++i) {
+        path += parts[i];
+        if (i < parts.size() - 1) {
+            path += "/";
+        }
+    }
+}
+
 bool
-common::is_s3_uri(const std::string& uri)
+common::is_web_uri(std::string_view uri)
 {
     return uri.starts_with("s3://") || uri.starts_with("http://") ||
            uri.starts_with("https://");
