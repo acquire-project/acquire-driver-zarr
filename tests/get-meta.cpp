@@ -86,6 +86,7 @@ main()
                 CHECK(Device_Ok == storage_get_meta(storage, &metadata));
 
                 CHECK(metadata.chunking_is_supported);
+                CHECK(metadata.s3_is_supported);
                 CHECK((bool)metadata.sharding_is_supported ==
                       name.starts_with("ZarrV3"));
                 CHECK((bool)metadata.multiscale_is_supported !=

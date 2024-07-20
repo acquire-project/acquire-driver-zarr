@@ -30,8 +30,7 @@ zarr::ZarrV3Writer::flush_impl_()
 {
     // create shard files if they don't exist
     const std::string data_root =
-      (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
-        .string();
+      data_root_ + "/c" + std::to_string(append_chunk_index_);
 
     {
         SinkCreator creator(thread_pool_, connection_pool_);

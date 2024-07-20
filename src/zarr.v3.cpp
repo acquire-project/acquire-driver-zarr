@@ -99,9 +99,10 @@ void
 zarr::ZarrV3::make_metadata_sinks_()
 {
     SinkCreator creator(thread_pool_, connection_pool_);
-    CHECK(creator.create_v3_metadata_sinks(
-      dataset_root_, writers_.size(), metadata_sinks_));
+    CHECK(creator.make_metadata_sinks(
+      ZarrVersion::V3, dataset_root_, writers_.size(), metadata_sinks_));
 }
+
 /// @brief Write the metadata for the dataset.
 void
 zarr::ZarrV3::write_base_metadata_() const

@@ -22,7 +22,7 @@ zarr::ZarrV2Writer::flush_impl_()
     // create chunk files
     CHECK(sinks_.empty());
     const std::string data_root =
-      (fs::path(data_root_) / std::to_string(append_chunk_index_)).string();
+      data_root_ + "/" + std::to_string(append_chunk_index_);
 
     {
         SinkCreator creator(thread_pool_, connection_pool_);

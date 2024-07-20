@@ -14,6 +14,8 @@ struct Sink
     /// @param buf The buffer to write to the sink.
     /// @param bytes_of_buf The number of bytes to write from @p buf.
     /// @return True if the write was successful, false otherwise.
+    /// @throws std::runtime_error if @p buf is nullptr, @p bytes_of_buf is 0,
+    ///         or the write fails.
     [[nodiscard]] virtual bool write(size_t offset,
                                      const uint8_t* buf,
                                      size_t bytes_of_buf) = 0;
