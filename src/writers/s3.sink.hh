@@ -30,7 +30,7 @@ class S3Sink final : public Sink
     std::shared_ptr<common::S3ConnectionPool> connection_pool_;
 
     // multipart upload
-    std::array<uint8_t, 5 << 20> part_buffer_;
+    std::array<uint8_t, 5 << 20> part_buffer_; /// temporary 5MiB buffer for multipart upload
     size_t n_bytes_buffered_ = 0;
 
     std::string upload_id_;
@@ -42,7 +42,12 @@ class S3Sink final : public Sink
     [[nodiscard]] bool put_object_();
 
     // multipart upload
-    bool is_multi_part_upload_() const;
+    bool is_multipart_upload_() const;
+
+    /// @brief Get the multipart upload ID, if it exists. Otherwise, create a new
+    /// multipart upload.
+    /// @returns The multipart upload ID.
+    std::string get_multipart_upload_id_();
 
     /// @brief Flush the current part to S3.
     /// @returns True if the part was successfully flushed, otherwise false.

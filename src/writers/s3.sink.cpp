@@ -21,11 +21,11 @@ zarr::S3Sink::S3Sink(std::string_view bucket_name,
 
 zarr::S3Sink::~S3Sink()
 {
-    if (!is_multi_part_upload_() && n_bytes_buffered_ > 0) {
+    if (!is_multipart_upload_() && n_bytes_buffered_ > 0) {
         if (!put_object_()) {
             LOGE("Failed to upload object: %s", object_key_.c_str());
         }
-    } else if (is_multi_part_upload_()) {
+    } else if (is_multipart_upload_()) {
         if (n_bytes_buffered_ > 0 && !flush_part_()) {
             LOGE("Failed to upload part %zu of object %s",
                  parts_.size() + 1,
@@ -39,7 +39,7 @@ zarr::S3Sink::~S3Sink()
 }
 
 bool
-zarr::S3Sink::write(size_t offset, const uint8_t* data, size_t bytes_of_data)
+zarr::S3Sink::write(size_t _, const uint8_t* data, size_t bytes_of_data)
 {
     CHECK(data);
     CHECK(bytes_of_data);
@@ -95,9 +95,21 @@ zarr::S3Sink::put_object_()
 }
 
 bool
-zarr::S3Sink::is_multi_part_upload_() const
+zarr::S3Sink::is_multipart_upload_() const
 {
     return !upload_id_.empty() && !parts_.empty();
+}
+
+std::string
+zarr::S3Sink::get_multipart_upload_id_()
+{
+    if (upload_id_.empty()) {
+        upload_id_ =
+          connection_pool_->get_connection()->create_multipart_object(
+            bucket_name_, object_key_);
+    }
+
+    return upload_id_;
 }
 
 bool
@@ -109,22 +121,18 @@ zarr::S3Sink::flush_part_()
 
     auto connection = connection_pool_->get_connection();
 
-    auto get_upload_id = [this, &connection]() -> std::string {
-        if (upload_id_.empty()) {
-            upload_id_ =
-              connection->create_multipart_object(bucket_name_, object_key_);
-        }
-        return upload_id_;
-    };
-
     bool retval = false;
     try {
         minio::s3::Part part;
         part.number = static_cast<unsigned int>(parts_.size()) + 1;
 
         std::span<uint8_t> data(part_buffer_.data(), n_bytes_buffered_);
-        part.etag = connection->upload_multipart_object_part(
-          bucket_name_, object_key_, get_upload_id(), data, part.number);
+        part.etag =
+          connection->upload_multipart_object_part(bucket_name_,
+                                                   object_key_,
+                                                   get_multipart_upload_id_(),
+                                                   data,
+                                                   part.number);
         EXPECT(!part.etag.empty(),
                "Failed to upload part %u of object %s",
                part.number,
@@ -147,7 +155,7 @@ zarr::S3Sink::flush_part_()
 bool
 zarr::S3Sink::finalize_multipart_upload_()
 {
-    if (!is_multi_part_upload_()) {
+    if (!is_multipart_upload_()) {
         return false;
     }
 
