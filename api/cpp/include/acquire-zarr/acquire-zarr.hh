@@ -13,14 +13,36 @@ enum class AcquireZarrCompressionCodec
 } ;
 
 
-
 class AcquireZarrWriter 
 {
   public:
     AcquireZarrWriter() { create_impl();}
     ~AcquireZarrWriter() = default;
 
+    /**
+     * @brief Start the Zarr writer.
+     * 
+     * This method must be called after all configuration has been set.  
+     * This validates configuration before opening files so they can be appended.
+     * 
+     */
     void start();
+
+    /**
+     * @brief Stop the Zarr writer.
+     * 
+     * This method must be called after all data has been appended.
+     * 
+     */
+    void stop();
+
+    /**
+     * @brief Append image data to the Zarr file.
+     * 
+     * @param image_data pointer to the image data
+     * @param image_size size of the image data in bytes
+     * 
+     */
     void append(uint8_t* image_data, size_t image_size);
 
 

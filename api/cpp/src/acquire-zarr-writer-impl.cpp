@@ -20,7 +20,6 @@ std::string get_from_acquire_string(const String& src)
 
 AcquireZarrWriter::Impl::Impl()
 {
-    //zarr_sink_ = std::make_shared<struct asz::Zarr>();
     memset(&storage_properties_, 0, sizeof(struct StorageProperties));
     memset(&shape_, 0, sizeof(struct ImageShape));
 
@@ -34,14 +33,34 @@ void AcquireZarrWriter::Impl::start()
     create_zarr_sink();
 
     zarr_sink_->set(&storage_properties_);
+
+    assert(storage_properties_.acquisition_dimensions.size > 0);
+    shape_.type = SampleType_u8;
+
+    shape_.dims.channels = storage_properties_.acquisition_dimensions.size - 1 ;  // one less than the size, since the last dimension is append
+    
+    shape_.dims.width =  storage_properties_.acquisition_dimensions.data[0].array_size_px;
+    shape_.dims.height = storage_properties_.acquisition_dimensions.data[1].array_size_px;
+    shape_.dims.planes = 
+        storage_properties_.acquisition_dimensions.data[2].array_size_px > 1 ? 
+        storage_properties_.acquisition_dimensions.data[2].array_size_px : 
+        1;
+
+     shape_.dims.channels = 
+        storage_properties_.acquisition_dimensions.data[3].array_size_px > 1 ? 
+        storage_properties_.acquisition_dimensions.data[3].array_size_px : 
+        1;   
+
+    zarr_sink_->reserve_image_shape(&shape_);
     zarr_sink_->start();
 }
+
 
 void AcquireZarrWriter::Impl::append(const uint8_t* image_data, size_t image_size)
 {
 
     // todo: check image size against expected size?
-    zarr_sink_->append_frame(image_data, image_size, shape_);
+    auto written = zarr_sink_->append_frame(image_data, image_size, shape_);
 }
 
 void AcquireZarrWriter::Impl::create_zarr_sink()

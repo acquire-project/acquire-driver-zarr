@@ -12,6 +12,11 @@ void AcquireZarrWriter::start()
     impl_->start();
 }
 
+void AcquireZarrWriter::stop()
+{
+    impl_->zarr_sink_->stop();
+}
+
 void AcquireZarrWriter::append(uint8_t* image_data, size_t image_size)
 {
     impl_->append(image_data, image_size);
