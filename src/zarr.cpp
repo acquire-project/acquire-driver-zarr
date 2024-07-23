@@ -756,7 +756,8 @@ zarr::Zarr::make_multiscale_metadata_() const
                     { "type", "scale" },
                     { "scale", scales },
                   },
-                } },
+                }
+              },
             },
         };
     } else {
@@ -777,7 +778,8 @@ zarr::Zarr::make_multiscale_metadata_() const
                     { "type", "scale" },
                     { "scale", scales },
                   },
-                } },
+                }
+              },
             });
         }
 
