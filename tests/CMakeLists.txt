@@ -34,11 +34,13 @@ else ()
             write-zarr-v2-raw-multiscale
             write-zarr-v2-raw-multiscale-with-trivial-tile-size
             write-zarr-v2-compressed-multiscale
+            write-zarr-v2-to-s3
             multiscales-metadata
             write-zarr-v3-raw
             write-zarr-v3-raw-with-ragged-sharding
             write-zarr-v3-raw-chunk-exceeds-array
             write-zarr-v3-compressed
+            write-zarr-v3-to-s3
     )
 
     foreach (name ${tests})
@@ -54,6 +56,7 @@ else ()
                 acquire-core-platform
                 acquire-video-runtime
                 nlohmann_json::nlohmann_json
+                miniocpp::miniocpp
         )
 
         add_test(NAME test-${tgt} COMMAND ${tgt})

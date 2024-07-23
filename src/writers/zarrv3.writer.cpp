@@ -9,8 +9,9 @@ namespace zarr = acquire::sink::zarr;
 
 zarr::ZarrV3Writer::ZarrV3Writer(
   const WriterConfig& array_spec,
-  std::shared_ptr<common::ThreadPool> thread_pool)
-  : Writer(array_spec, thread_pool)
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  std::shared_ptr<common::S3ConnectionPool> connection_pool)
+  : Writer(array_spec, thread_pool, connection_pool)
   , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
   , shard_tables_{ common::number_of_shards(array_spec.dimensions) }
 {
@@ -29,11 +30,10 @@ zarr::ZarrV3Writer::flush_impl_()
 {
     // create shard files if they don't exist
     const std::string data_root =
-      (fs::path(data_root_) / ("c" + std::to_string(append_chunk_index_)))
-        .string();
+      data_root_ + "/c" + std::to_string(append_chunk_index_);
 
     {
-        SinkCreator creator(thread_pool_);
+        SinkCreator creator(thread_pool_, connection_pool_);
         if (sinks_.empty() &&
             !creator.make_data_sinks(data_root,
                                      config_.dimensions,
@@ -243,7 +243,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(config, thread_pool);
+            zarr::ZarrV3Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
             std::vector<uint8_t> data(frame_size, 0);
@@ -391,7 +392,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(config, thread_pool);
+            zarr::ZarrV3Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
             std::vector<uint8_t> data(frame_size, 0);
@@ -531,7 +533,8 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(config, thread_pool);
+            zarr::ZarrV3Writer writer(
+              config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
             std::vector<uint8_t> data(frame_size, 0);

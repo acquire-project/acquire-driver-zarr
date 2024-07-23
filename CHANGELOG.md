@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+### Added
+
+- Support for writing to S3 buckets.
+
 ### Changed
 
 - Calling `acquire_get_configuration` with a Zarr storage device now returns a URI of the storage device, with file://

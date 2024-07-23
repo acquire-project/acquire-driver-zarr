@@ -13,6 +13,8 @@ add_library(${tgt}-obj OBJECT
         common/dimension.cpp
         common/thread.pool.hh
         common/thread.pool.cpp
+        common/s3.connection.hh
+        common/s3.connection.cpp
         common/utilities.hh
         common/utilities.cpp
         writers/sink.hh
@@ -20,6 +22,8 @@ add_library(${tgt}-obj OBJECT
         writers/sink.creator.cpp
         writers/file.sink.hh
         writers/file.sink.cpp
+        writers/s3.sink.hh
+        writers/s3.sink.cpp
         writers/writer.hh
         writers/writer.cpp
         writers/zarrv2.writer.hh
