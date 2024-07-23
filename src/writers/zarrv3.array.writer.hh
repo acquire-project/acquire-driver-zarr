@@ -1,7 +1,6 @@
-#ifndef H_ACQUIRE_ZARR_V3_WRITER_V0
-#define H_ACQUIRE_ZARR_V3_WRITER_V0
+#pragma once
 
-#include "writer.hh"
+#include "array.writer.hh"
 
 #include "platform.h"
 #include "device/props/components.h"
@@ -16,15 +15,16 @@
 namespace fs = std::filesystem;
 
 namespace acquire::sink::zarr {
-struct ZarrV3Writer final : public Writer
+struct ZarrV3ArrayWriter final : public ArrayWriter
 {
   public:
-    ZarrV3Writer() = delete;
-    ZarrV3Writer(const WriterConfig& array_spec,
-                 std::shared_ptr<common::ThreadPool> thread_pool,
-                 std::shared_ptr<common::S3ConnectionPool> connection_pool);
+    ZarrV3ArrayWriter() = delete;
+    ZarrV3ArrayWriter(
+      const WriterConfig& array_spec,
+      std::shared_ptr<common::ThreadPool> thread_pool,
+      std::shared_ptr<common::S3ConnectionPool> connection_pool);
 
-    ~ZarrV3Writer() override = default;
+    ~ZarrV3ArrayWriter() override = default;
 
   private:
     std::vector<size_t> shard_file_offsets_;
@@ -35,4 +35,3 @@ struct ZarrV3Writer final : public Writer
 };
 } // namespace acquire::sink::zarr
 
-#endif // H_ACQUIRE_ZARR_V3_WRITER_V0

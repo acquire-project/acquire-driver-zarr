@@ -1,5 +1,4 @@
-#ifndef H_ACQUIRE_ZARR_WRITER_V0
-#define H_ACQUIRE_ZARR_WRITER_V0
+#pragma once
 
 #include "platform.h"
 #include "device/props/components.h"
@@ -36,15 +35,15 @@ struct WriterConfig final
 [[nodiscard]] bool
 downsample(const WriterConfig& config, WriterConfig& downsampled_config);
 
-struct Writer
+struct ArrayWriter
 {
   public:
-    Writer() = delete;
-    Writer(const WriterConfig& config,
-           std::shared_ptr<common::ThreadPool> thread_pool,
-           std::shared_ptr<common::S3ConnectionPool> connection_pool);
+    ArrayWriter() = delete;
+    ArrayWriter(const WriterConfig& config,
+                std::shared_ptr<common::ThreadPool> thread_pool,
+                std::shared_ptr<common::S3ConnectionPool> connection_pool);
 
-    virtual ~Writer() noexcept = default;
+    virtual ~ArrayWriter() noexcept = default;
 
     [[nodiscard]] size_t write(const uint8_t* data, size_t bytes_of_frame);
     void finalize();
@@ -86,5 +85,3 @@ struct Writer
     void rollover_();
 };
 } // namespace acquire::sink::zarr
-
-#endif // H_ACQUIRE_ZARR_WRITER_V0

@@ -1,4 +1,4 @@
-#include "zarrv3.writer.hh"
+#include "zarrv3.array.writer.hh"
 #include "sink.creator.hh"
 #include "zarr.hh"
 
@@ -7,11 +7,11 @@
 
 namespace zarr = acquire::sink::zarr;
 
-zarr::ZarrV3Writer::ZarrV3Writer(
+zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
   const WriterConfig& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool,
   std::shared_ptr<common::S3ConnectionPool> connection_pool)
-  : Writer(array_spec, thread_pool, connection_pool)
+  : ArrayWriter(array_spec, thread_pool, connection_pool)
   , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
   , shard_tables_{ common::number_of_shards(array_spec.dimensions) }
 {
@@ -26,7 +26,7 @@ zarr::ZarrV3Writer::ZarrV3Writer(
 }
 
 bool
-zarr::ZarrV3Writer::flush_impl_()
+zarr::ZarrV3ArrayWriter::flush_impl_()
 {
     // create shard files if they don't exist
     const std::string data_root =
@@ -125,7 +125,7 @@ zarr::ZarrV3Writer::flush_impl_()
 }
 
 bool
-zarr::ZarrV3Writer::should_rollover_() const
+zarr::ZarrV3ArrayWriter::should_rollover_() const
 {
     const auto& dims = config_.dimensions;
     size_t frames_before_flush =
@@ -243,7 +243,7 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(
+            zarr::ZarrV3ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
@@ -392,7 +392,7 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(
+            zarr::ZarrV3ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
@@ -533,7 +533,7 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(
+            zarr::ZarrV3ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;

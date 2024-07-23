@@ -6,7 +6,7 @@
 #include "common/utilities.hh"
 #include "common/thread.pool.hh"
 #include "common/s3.connection.hh"
-#include "writers/writer.hh"
+#include "writers/array.writer.hh"
 #include "writers/blosc.compressor.hh"
 
 #include <filesystem>
@@ -57,7 +57,7 @@ struct Zarr : public Storage
     /// changes on reserve_image_shape
     struct ImageShape image_shape_;
     std::vector<Dimension> acquisition_dimensions_;
-    std::vector<std::shared_ptr<Writer>> writers_;
+    std::vector<std::shared_ptr<ArrayWriter>> writers_;
 
     /// changes on append
     // scaled frames, keyed by level-of-detail

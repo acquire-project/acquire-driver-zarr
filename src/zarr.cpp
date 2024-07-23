@@ -1,6 +1,6 @@
 #include "zarr.hh"
 
-#include "writers/zarrv2.writer.hh"
+#include "writers/zarrv2.array.writer.hh"
 #include "nlohmann/json.hpp"
 
 #include <tuple> // std::ignore

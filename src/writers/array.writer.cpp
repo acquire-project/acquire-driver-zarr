@@ -1,4 +1,4 @@
-#include "writer.hh"
+#include "array.writer.hh"
 #include "common/utilities.hh"
 
 #include <cmath>
@@ -176,7 +176,7 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 }
 
 /// Writer
-zarr::Writer::Writer(const WriterConfig& config,
+zarr::ArrayWriter::ArrayWriter(const WriterConfig& config,
                      std::shared_ptr<common::ThreadPool> thread_pool,
                      std::shared_ptr<common::S3ConnectionPool> connection_pool)
   : config_{ config }
@@ -191,7 +191,7 @@ zarr::Writer::Writer(const WriterConfig& config,
 }
 
 size_t
-zarr::Writer::write(const uint8_t* data, size_t bytes_of_frame)
+zarr::ArrayWriter::write(const uint8_t* data, size_t bytes_of_frame)
 {
     if (bytes_of_image(&config_.image_shape) != bytes_of_frame) {
         return 0;
@@ -214,7 +214,7 @@ zarr::Writer::write(const uint8_t* data, size_t bytes_of_frame)
 }
 
 void
-zarr::Writer::finalize()
+zarr::ArrayWriter::finalize()
 {
     is_finalizing_ = true;
     flush_();
@@ -223,19 +223,19 @@ zarr::Writer::finalize()
 }
 
 const zarr::WriterConfig&
-zarr::Writer::config() const noexcept
+zarr::ArrayWriter::config() const noexcept
 {
     return config_;
 }
 
 uint32_t
-zarr::Writer::frames_written() const noexcept
+zarr::ArrayWriter::frames_written() const noexcept
 {
     return frames_written_;
 }
 
 void
-zarr::Writer::make_buffers_() noexcept
+zarr::ArrayWriter::make_buffers_() noexcept
 {
     const size_t n_chunks =
       common::number_of_chunks_in_memory(config_.dimensions);
@@ -251,7 +251,7 @@ zarr::Writer::make_buffers_() noexcept
 }
 
 size_t
-zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
+zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
     // break the frame into tiles and write them to the chunk buffers
     const auto image_shape = config_.image_shape;
@@ -328,7 +328,7 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 }
 
 bool
-zarr::Writer::should_flush_() const
+zarr::ArrayWriter::should_flush_() const
 {
     const auto& dims = config_.dimensions;
     size_t frames_before_flush = dims.back().chunk_size_px;
@@ -341,7 +341,7 @@ zarr::Writer::should_flush_() const
 }
 
 void
-zarr::Writer::compress_buffers_() noexcept
+zarr::ArrayWriter::compress_buffers_() noexcept
 {
     if (!config_.compression_params.has_value()) {
         return;
@@ -402,7 +402,7 @@ zarr::Writer::compress_buffers_() noexcept
 }
 
 void
-zarr::Writer::flush_()
+zarr::ArrayWriter::flush_()
 {
     if (bytes_to_flush_ == 0) {
         return;
@@ -424,13 +424,13 @@ zarr::Writer::flush_()
 }
 
 void
-zarr::Writer::close_sinks_()
+zarr::ArrayWriter::close_sinks_()
 {
     sinks_.clear();
 }
 
 void
-zarr::Writer::rollover_()
+zarr::ArrayWriter::rollover_()
 {
     TRACE("Rolling over");
 
@@ -447,12 +447,12 @@ zarr::Writer::rollover_()
 
 namespace common = zarr::common;
 
-class TestWriter : public zarr::Writer
+class TestWriter : public zarr::ArrayWriter
 {
   public:
     TestWriter(const zarr::WriterConfig& array_spec,
                std::shared_ptr<common::ThreadPool> thread_pool)
-      : zarr::Writer(array_spec, thread_pool, nullptr)
+      : zarr::ArrayWriter(array_spec, thread_pool, nullptr)
     {
     }
 

@@ -1,4 +1,4 @@
-#include "zarrv2.writer.hh"
+#include "zarrv2.array.writer.hh"
 #include "sink.creator.hh"
 #include "zarr.hh"
 
@@ -8,16 +8,16 @@
 
 namespace zarr = acquire::sink::zarr;
 
-zarr::ZarrV2Writer::ZarrV2Writer(
+zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
   const WriterConfig& config,
   std::shared_ptr<common::ThreadPool> thread_pool,
   std::shared_ptr<common::S3ConnectionPool> connection_pool)
-  : Writer(config, thread_pool, connection_pool)
+  : ArrayWriter(config, thread_pool, connection_pool)
 {
 }
 
 bool
-zarr::ZarrV2Writer::flush_impl_()
+zarr::ZarrV2ArrayWriter::flush_impl_()
 {
     // create chunk files
     CHECK(sinks_.empty());
@@ -69,7 +69,7 @@ zarr::ZarrV2Writer::flush_impl_()
 }
 
 bool
-zarr::ZarrV2Writer::should_rollover_() const
+zarr::ZarrV2ArrayWriter::should_rollover_() const
 {
     return true;
 }
@@ -152,7 +152,7 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(
+            zarr::ZarrV2ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
@@ -278,7 +278,7 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(
+            zarr::ZarrV2ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
@@ -391,7 +391,7 @@ extern "C"
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV2Writer writer(
+            zarr::ZarrV2ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;

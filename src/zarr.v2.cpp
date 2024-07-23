@@ -1,5 +1,5 @@
 #include "zarr.v2.hh"
-#include "writers/zarrv2.writer.hh"
+#include "writers/zarrv2.array.writer.hh"
 #include "writers/sink.creator.hh"
 
 #include "nlohmann/json.hpp"
@@ -80,7 +80,7 @@ zarr::ZarrV2::allocate_writers_()
     };
 
     writers_.push_back(
-      std::make_shared<ZarrV2Writer>(config, thread_pool_, connection_pool_));
+      std::make_shared<ZarrV2ArrayWriter>(config, thread_pool_, connection_pool_));
 
     if (enable_multiscale_) {
         WriterConfig downsampled_config;
@@ -89,7 +89,7 @@ zarr::ZarrV2::allocate_writers_()
         int level = 1;
         while (do_downsample) {
             do_downsample = downsample(config, downsampled_config);
-            writers_.push_back(std::make_shared<ZarrV2Writer>(
+            writers_.push_back(std::make_shared<ZarrV2ArrayWriter>(
               downsampled_config, thread_pool_, connection_pool_));
             scaled_frames_.emplace(level++, std::nullopt);
 
