@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## [0.1.12](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.11..v0.1.12) - 2024-07-25
 
 ### Added
 
@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Calling `acquire_get_configuration` with a Zarr storage device now returns a URI of the storage device, with file://
   scheme indicator and absolute path, assuming localhost.
-- Array metadata is updated every time data is flushed to disk. 
+- Array metadata is updated every time data is flushed to disk.
 
 ### Added
 
