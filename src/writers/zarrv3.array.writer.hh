@@ -20,7 +20,7 @@ struct ZarrV3ArrayWriter final : public ArrayWriter
   public:
     ZarrV3ArrayWriter() = delete;
     ZarrV3ArrayWriter(
-      const WriterConfig& array_spec,
+      const ArrayWriterConfig& array_spec,
       std::shared_ptr<common::ThreadPool> thread_pool,
       std::shared_ptr<common::S3ConnectionPool> connection_pool);
 
@@ -30,8 +30,8 @@ struct ZarrV3ArrayWriter final : public ArrayWriter
     std::vector<size_t> shard_file_offsets_;
     std::vector<std::vector<uint64_t>> shard_tables_;
 
-    [[nodiscard]] bool flush_impl_() override;
+    bool flush_impl_() override;
+    bool write_array_metadata_() override;
     bool should_rollover_() const override;
 };
 } // namespace acquire::sink::zarr
-

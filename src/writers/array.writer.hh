@@ -17,29 +17,31 @@ namespace fs = std::filesystem;
 namespace acquire::sink::zarr {
 struct Zarr;
 
-struct WriterConfig final
+struct ArrayWriterConfig final
 {
     ImageShape image_shape;
     std::vector<Dimension> dimensions;
-    std::string data_root;
+    int level_of_detail;
+    std::string dataset_root;
     std::optional<BloscCompressionParams> compression_params;
 };
 
-/// @brief Downsample the writer configuration to a lower resolution.
-/// @param[in] config The original writer configuration.
-/// @param[out] downsampled_config The downsampled writer configuration.
+/// @brief Downsample the array writer configuration to a lower resolution.
+/// @param[in] config The original array writer configuration.
+/// @param[out] downsampled_config The downsampled array writer configuration.
 /// @return True if @p downsampled_config can be downsampled further.
 /// This is determined by the chunk size in @p config. This function will return
 /// false if and only if downsampling brings one or more dimensions lower than
 /// the chunk size along that dimension.
 [[nodiscard]] bool
-downsample(const WriterConfig& config, WriterConfig& downsampled_config);
+downsample(const ArrayWriterConfig& config,
+           ArrayWriterConfig& downsampled_config);
 
 struct ArrayWriter
 {
   public:
     ArrayWriter() = delete;
-    ArrayWriter(const WriterConfig& config,
+    ArrayWriter(const ArrayWriterConfig& config,
                 std::shared_ptr<common::ThreadPool> thread_pool,
                 std::shared_ptr<common::S3ConnectionPool> connection_pool);
 
@@ -48,19 +50,17 @@ struct ArrayWriter
     [[nodiscard]] size_t write(const uint8_t* data, size_t bytes_of_frame);
     void finalize();
 
-    const WriterConfig& config() const noexcept;
-
-    uint32_t frames_written() const noexcept;
-
   protected:
-    WriterConfig config_;
+    ArrayWriterConfig config_;
 
     /// Chunking
     std::vector<std::vector<uint8_t>> chunk_buffers_;
 
     /// Filesystem
     std::string data_root_;
-    std::vector<std::unique_ptr<Sink>> sinks_;
+    std::string meta_root_;
+    std::vector<std::unique_ptr<Sink>> data_sinks_;
+    std::unique_ptr<Sink> metadata_sink_;
 
     /// Multithreading
     std::shared_ptr<common::ThreadPool> thread_pool_;
@@ -80,6 +80,7 @@ struct ArrayWriter
     void compress_buffers_() noexcept;
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
+    [[nodiscard]] virtual bool write_array_metadata_() = 0;
     virtual bool should_rollover_() const = 0;
     void close_sinks_();
     void rollover_();

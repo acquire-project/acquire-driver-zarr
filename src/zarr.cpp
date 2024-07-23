@@ -523,7 +523,7 @@ zarr::Zarr::stop() noexcept
 
         try {
             // must precede close of chunk file
-            write_mutable_metadata_();
+            write_group_metadata_();
             metadata_sinks_.clear();
 
             for (auto& writer : writers_) {
@@ -698,15 +698,6 @@ zarr::Zarr::write_fixed_metadata_() const
 {
     write_base_metadata_();
     write_external_metadata_();
-}
-
-void
-zarr::Zarr::write_mutable_metadata_() const
-{
-    write_group_metadata_();
-    for (auto i = 0; i < writers_.size(); ++i) {
-        write_array_metadata_(i);
-    }
 }
 
 void

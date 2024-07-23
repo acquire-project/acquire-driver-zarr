@@ -66,9 +66,7 @@ struct Zarr : public Storage
     /// changes on start
     std::shared_ptr<common::ThreadPool> thread_pool_;
     std::shared_ptr<common::S3ConnectionPool> connection_pool_;
-
-    /// changes on flush
-    std::vector<std::unique_ptr<Sink>> metadata_sinks_;
+    std::unordered_map<std::string, std::unique_ptr<Sink>> metadata_sinks_;
 
     /// Multithreading
     mutable std::mutex mutex_; // for error_ / error_msg_
@@ -90,9 +88,7 @@ struct Zarr : public Storage
     virtual void write_external_metadata_() const = 0;
 
     // mutable metadata, changes on flush
-    void write_mutable_metadata_() const;
     virtual void write_group_metadata_() const = 0;
-    virtual void write_array_metadata_(size_t level) const = 0;
 
     /// Multiscale
     void write_multiscale_frames_(const uint8_t* data_,

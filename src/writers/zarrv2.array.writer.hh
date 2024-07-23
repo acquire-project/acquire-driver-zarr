@@ -20,14 +20,15 @@ struct ZarrV2ArrayWriter final : public ArrayWriter
   public:
     ZarrV2ArrayWriter() = delete;
     ZarrV2ArrayWriter(
-      const WriterConfig& config,
+      const ArrayWriterConfig& config,
       std::shared_ptr<common::ThreadPool> thread_pool,
       std::shared_ptr<common::S3ConnectionPool> connection_pool);
 
     ~ZarrV2ArrayWriter() override = default;
 
   private:
-    [[nodiscard]] bool flush_impl_() override;
+    bool flush_impl_() override;
+    bool write_array_metadata_() override;
     bool should_rollover_() const override;
 };
 } // namespace acquire::sink::zarr

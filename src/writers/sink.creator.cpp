@@ -17,6 +17,54 @@ zarr::SinkCreator::SinkCreator(
 {
 }
 
+std::unique_ptr<zarr::Sink>
+zarr::SinkCreator::make_sink(std::string_view base_uri, std::string_view path)
+{
+    bool is_s3 = common::is_web_uri(base_uri);
+    std::string bucket_name;
+    std::string base_dir;
+
+    if (is_s3) {
+        common::parse_path_from_uri(base_uri, bucket_name, base_dir);
+
+        // create the bucket if it doesn't already exist
+        if (!bucket_exists_(bucket_name)) {
+            return nullptr;
+        }
+    } else {
+        base_dir = base_uri;
+        if (base_uri.starts_with("file://")) {
+            base_dir = base_uri.substr(7);
+        }
+
+        // remove trailing slashes
+        if (base_uri.ends_with("/") || base_uri.ends_with("\\")) {
+            base_dir = base_dir.substr(0, base_dir.size() - 1);
+        }
+
+        // create the parent directory if it doesn't already exist
+        auto parent_path =
+          fs::path(base_dir + "/" + std::string(path)).parent_path();
+
+        if (!fs::is_directory(parent_path) &&
+            !fs::create_directories(parent_path)) {
+            return nullptr;
+        }
+    }
+
+    const std::string full_path = base_dir + "/" + std::string(path);
+
+    std::unique_ptr<Sink> sink;
+    if (is_s3) {
+        sink =
+          std::make_unique<S3Sink>(bucket_name, full_path, connection_pool_);
+    } else {
+        sink = std::make_unique<FileSink>(full_path);
+    }
+
+    return sink;
+}
+
 bool
 zarr::SinkCreator::make_data_sinks(
   const std::string& base_uri,
@@ -92,43 +140,74 @@ bool
 zarr::SinkCreator::make_metadata_sinks(
   acquire::sink::zarr::ZarrVersion version,
   const std::string& base_uri,
-  size_t n_arrays,
-  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
+  std::unordered_map<std::string, std::unique_ptr<Sink>>& metadata_sinks)
 {
     EXPECT(!base_uri.empty(), "URI must not be empty.");
 
-    std::queue<std::string> dir_paths, file_paths;
+    std::vector<std::string> dir_paths, file_paths;
 
     switch (version) {
         case ZarrVersion::V2:
-            file_paths.emplace(".metadata"); // base metadata
-            file_paths.emplace("0/.zattrs"); // external metadata
-            file_paths.emplace(".zattrs");   // group metadata
+            dir_paths.emplace_back("0");
 
-            for (auto i = 0; i < n_arrays; ++i) {
-                const auto idx_string = std::to_string(i);
-                dir_paths.push(idx_string);
-                file_paths.push(idx_string + "/.zarray"); // array metadata
-            }
+            file_paths.emplace_back(".metadata"); // base metadata
+            file_paths.emplace_back("0/.zattrs"); // external metadata
+            file_paths.emplace_back(".zattrs");   // group metadata
             break;
         case ZarrVersion::V3:
-            dir_paths.emplace("meta");
-            dir_paths.emplace("meta/root");
+            dir_paths.emplace_back("meta");
+            dir_paths.emplace_back("meta/root");
 
-            file_paths.emplace("zarr.json");
-            file_paths.emplace("meta/root.group.json");
-            for (auto i = 0; i < n_arrays; ++i) {
-                file_paths.push("meta/root/" + std::to_string(i) +
-                                ".array.json");
-            }
+            file_paths.emplace_back("zarr.json");
+            file_paths.emplace_back("meta/root.group.json");
             break;
         default:
             throw std::runtime_error("Invalid Zarr version " +
                                      std::to_string(static_cast<int>(version)));
     }
 
-    return make_metadata_sinks_(
-      base_uri, dir_paths, file_paths, metadata_sinks);
+    bool is_s3 = common::is_web_uri(base_uri);
+    std::string bucket_name;
+    std::string base_dir;
+
+    if (is_s3) {
+        common::parse_path_from_uri(base_uri, bucket_name, base_dir);
+
+        // create the bucket if it doesn't already exist
+        if (!bucket_exists_(bucket_name)) {
+            return false;
+        }
+    } else {
+        base_dir = base_uri;
+        if (base_uri.starts_with("file://")) {
+            base_dir = base_uri.substr(7);
+        }
+
+        // remove trailing slashes
+        if (base_uri.ends_with("/") || base_uri.ends_with("\\")) {
+            base_dir = base_dir.substr(0, base_dir.size() - 1);
+        }
+
+        // create the base directories if they don't already exist
+        // we create them in serial because
+        // 1. there are only a few of them; and
+        // 2. they may be nested
+        if (!base_dir.empty() && !fs::is_directory(base_dir) &&
+            !fs::create_directories(base_dir)) {
+            return false;
+        }
+
+        const std::string prefix = base_dir.empty() ? "" : base_dir + "/";
+        for (const auto& dir_path : dir_paths) {
+            const auto dir = prefix + dir_path;
+            if (!fs::is_directory(dir) && !fs::create_directories(dir)) {
+                return false;
+            }
+        }
+    }
+
+    return is_s3 ? make_s3_objects_(bucket_name, file_paths, metadata_sinks)
+                 : make_files_(base_dir, file_paths, metadata_sinks);
 }
 
 bool
@@ -235,58 +314,55 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
 }
 
 bool
-zarr::SinkCreator::make_metadata_sinks_(
-  const std::string& base_uri,
-  std::queue<std::string>& dir_paths,
-  std::queue<std::string>& file_paths,
-  std::vector<std::unique_ptr<Sink>>& metadata_sinks)
+zarr::SinkCreator::make_files_(
+  const std::string& base_dir,
+  const std::vector<std::string>& file_paths,
+  std::unordered_map<std::string, std::unique_ptr<Sink>>& sinks)
 {
-    bool is_s3 = common::is_web_uri(base_uri);
-    std::string bucket_name;
-    std::string base_dir;
-
-    if (is_s3) {
-        common::parse_path_from_uri(base_uri, bucket_name, base_dir);
-
-        // create the bucket if it doesn't already exist
-        if (!bucket_exists_(bucket_name)) {
-            return false;
-        }
-    } else {
-        base_dir = base_uri;
-        if (base_uri.starts_with("file://")) {
-            base_dir = base_uri.substr(7);
-        }
-
-        // remove trailing slashes
-        if (base_uri.ends_with("/") || base_uri.ends_with("\\")) {
-            base_dir = base_dir.substr(0, base_dir.size() - 1);
-        }
-
-        // create the base directories if they don't already exist
-        // we create them in serial because
-        // 1. there are only a few of them; and
-        // 2. they may be nested
-        while (!dir_paths.empty()) {
-            const auto dir = base_dir + "/" + dir_paths.front();
-            dir_paths.pop();
-            if (!fs::is_directory(dir) && !fs::create_directories(dir)) {
-                return false;
-            }
-        }
+    if (file_paths.empty()) {
+        return true;
     }
 
-    // make files
-    size_t n_paths = file_paths.size();
-    const std::string prefix = base_dir.empty() ? "" : base_dir + "/";
-    for (auto i = 0; i < n_paths; ++i) {
-        const auto path = prefix + file_paths.front();
-        file_paths.pop();
-        file_paths.push(path);
+    std::atomic<char> all_successful = 1;
+
+    const auto n_files = file_paths.size();
+    std::latch latch(n_files);
+
+    sinks.clear();
+    for (const auto& filename : file_paths) {
+        sinks[filename] = nullptr;
+        std::unique_ptr<Sink>* psink = &sinks[filename];
+
+        const std::string prefix = base_dir.empty() ? "" : base_dir + "/";
+        const auto file_path = prefix + filename;
+
+        thread_pool_->push_to_job_queue(
+          [filename = file_path, psink, &latch, &all_successful](
+            std::string& err) -> bool {
+              bool success = false;
+
+              try {
+                  if (all_successful) {
+                      *psink = std::make_unique<FileSink>(filename);
+                  }
+                  success = true;
+              } catch (const std::exception& exc) {
+                  err =
+                    "Failed to create file '" + filename + "': " + exc.what();
+              } catch (...) {
+                  err = "Failed to create file '" + filename + "': (unknown).";
+              }
+
+              latch.count_down();
+              all_successful.fetch_and((char)success);
+
+              return success;
+          });
     }
 
-    return is_s3 ? make_s3_objects_(bucket_name, file_paths, metadata_sinks)
-                 : make_files_(file_paths, metadata_sinks);
+    latch.wait();
+
+    return (bool)all_successful;
 }
 
 bool
@@ -326,6 +402,33 @@ zarr::SinkCreator::make_s3_objects_(std::string_view bucket_name,
         sinks[i] = std::make_unique<S3Sink>(
           bucket_name, object_keys.front(), connection_pool_);
         object_keys.pop();
+    }
+
+    return true;
+}
+
+bool
+zarr::SinkCreator::make_s3_objects_(
+  std::string_view bucket_name,
+  std::vector<std::string>& object_keys,
+  std::unordered_map<std::string, std::unique_ptr<Sink>>& sinks)
+{
+    if (object_keys.empty()) {
+        return true;
+    }
+    if (bucket_name.empty()) {
+        LOGE("Bucket name not provided.");
+        return false;
+    }
+    if (!connection_pool_) {
+        LOGE("S3 connection pool not provided.");
+        return false;
+    }
+
+    sinks.clear();
+    for (const auto& key : object_keys) {
+        sinks[key] =
+          std::make_unique<S3Sink>(bucket_name, key, connection_pool_);
     }
 
     return true;

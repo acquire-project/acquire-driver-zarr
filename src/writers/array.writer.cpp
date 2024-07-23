@@ -104,7 +104,8 @@ chunk_internal_offset(size_t frame_id,
 } // end ::{anonymous} namespace
 
 bool
-zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
+zarr::downsample(const ArrayWriterConfig& config,
+                 ArrayWriterConfig& downsampled_config)
 {
     // downsample dimensions
     downsampled_config.dimensions.clear();
@@ -151,12 +152,8 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
       downsampled_config.image_shape.dims.width *
       downsampled_config.image_shape.dims.height;
 
-    // data root needs updated
-    fs::path downsampled_data_root = config.data_root;
-    // increment the array number in the group
-    downsampled_data_root.replace_filename(
-      std::to_string(std::stoi(downsampled_data_root.filename()) + 1));
-    downsampled_config.data_root = downsampled_data_root.string();
+    downsampled_config.level_of_detail = config.level_of_detail + 1;
+    downsampled_config.dataset_root = config.dataset_root;
 
     // copy the Blosc compression parameters
     downsampled_config.compression_params = config.compression_params;
@@ -176,9 +173,10 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 }
 
 /// Writer
-zarr::ArrayWriter::ArrayWriter(const WriterConfig& config,
-                     std::shared_ptr<common::ThreadPool> thread_pool,
-                     std::shared_ptr<common::S3ConnectionPool> connection_pool)
+zarr::ArrayWriter::ArrayWriter(
+  const ArrayWriterConfig& config,
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  std::shared_ptr<common::S3ConnectionPool> connection_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
   , connection_pool_{ connection_pool }
@@ -187,7 +185,6 @@ zarr::ArrayWriter::ArrayWriter(const WriterConfig& config,
   , append_chunk_index_{ 0 }
   , is_finalizing_{ false }
 {
-    data_root_ = config_.data_root;
 }
 
 size_t
@@ -220,18 +217,6 @@ zarr::ArrayWriter::finalize()
     flush_();
     close_sinks_();
     is_finalizing_ = false;
-}
-
-const zarr::WriterConfig&
-zarr::ArrayWriter::config() const noexcept
-{
-    return config_;
-}
-
-uint32_t
-zarr::ArrayWriter::frames_written() const noexcept
-{
-    return frames_written_;
 }
 
 void
@@ -412,8 +397,13 @@ zarr::ArrayWriter::flush_()
     compress_buffers_();
     CHECK(flush_impl_());
 
-    if (should_rollover_()) {
+    const auto should_rollover = should_rollover_();
+    if (should_rollover) {
         rollover_();
+    }
+
+    if (should_rollover || is_finalizing_) {
+        CHECK(write_array_metadata_());
     }
 
     // reset buffers
@@ -426,7 +416,7 @@ zarr::ArrayWriter::flush_()
 void
 zarr::ArrayWriter::close_sinks_()
 {
-    sinks_.clear();
+    data_sinks_.clear();
 }
 
 void
@@ -450,7 +440,7 @@ namespace common = zarr::common;
 class TestWriter : public zarr::ArrayWriter
 {
   public:
-    TestWriter(const zarr::WriterConfig& array_spec,
+    TestWriter(const zarr::ArrayWriterConfig& array_spec,
                std::shared_ptr<common::ThreadPool> thread_pool)
       : zarr::ArrayWriter(array_spec, thread_pool, nullptr)
     {
@@ -459,6 +449,7 @@ class TestWriter : public zarr::ArrayWriter
   private:
     bool should_rollover_() const override { return false; }
     bool flush_impl_() override { return true; }
+    bool write_array_metadata_() override { return true; }
 };
 
 extern "C"
@@ -795,10 +786,10 @@ extern "C"
             dims.emplace_back(
               "t", DimensionType_Time, array_timepoints, chunk_timepoints, 0);
 
-            zarr::WriterConfig config = {
+            zarr::ArrayWriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
-                .data_root = base_dir.string(),
+                .dataset_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
@@ -831,7 +822,7 @@ extern "C"
         try {
             const fs::path base_dir = "acquire";
 
-            zarr::WriterConfig config {
+            zarr::ArrayWriterConfig config {
                 .image_shape = {
                     .dims = {
                       .channels = 1,
@@ -848,7 +839,8 @@ extern "C"
                     .type = SampleType_u8
                 },
                 .dimensions = {},
-                .data_root = (base_dir / "data" / "root" / "0").string(),
+                .level_of_detail = 0,
+                .dataset_root = base_dir.string(),
                 .compression_params = std::nullopt
             };
 
@@ -866,7 +858,7 @@ extern "C"
                                            5,
                                            1); // 5 timepoints / chunk, 1 shard
 
-            zarr::WriterConfig downsampled_config;
+            zarr::ArrayWriterConfig downsampled_config;
             CHECK(zarr::downsample(config, downsampled_config));
 
             // check dimensions
@@ -908,9 +900,11 @@ extern "C"
             CHECK(downsampled_config.image_shape.strides.height == 32);
             CHECK(downsampled_config.image_shape.strides.planes == 32 * 24);
 
-            // check data root
-            CHECK(downsampled_config.data_root ==
-                  (base_dir / "data" / "root" / "1").string());
+            // check level of detail
+            CHECK(downsampled_config.level_of_detail == 1);
+
+            // check dataset root
+            CHECK(downsampled_config.dataset_root == config.dataset_root);
 
             // check compression params
             CHECK(!downsampled_config.compression_params.has_value());
@@ -960,9 +954,11 @@ extern "C"
             CHECK(downsampled_config.image_shape.strides.height == 16);
             CHECK(downsampled_config.image_shape.strides.planes == 16 * 12);
 
+            // check level of detail
+            CHECK(downsampled_config.level_of_detail == 2);
+
             // check data root
-            CHECK(downsampled_config.data_root ==
-                  (base_dir / "data" / "root" / "2").string());
+            CHECK(downsampled_config.dataset_root == config.dataset_root);
 
             // check compression params
             CHECK(!downsampled_config.compression_params.has_value());
