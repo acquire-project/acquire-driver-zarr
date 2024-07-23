@@ -87,6 +87,7 @@ main()
 
                 CHECK(metadata.chunking_is_supported);
                 CHECK(metadata.multiscale_is_supported);
+                CHECK(metadata.s3_is_supported);
                 CHECK((bool)metadata.sharding_is_supported ==
                       name.starts_with("ZarrV3"));
 

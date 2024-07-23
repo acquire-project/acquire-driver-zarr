@@ -62,10 +62,11 @@ validate_props(const StorageProperties* props)
                   props->external_metadata_json.nbytes);
 
     std::string uri{ props->uri.str, props->uri.nbytes - 1 };
-    EXPECT(!uri.starts_with("s3://"), "S3 URIs are not yet supported.");
 
-    // check that the URI value points to a writable directory
-    {
+    if (common::is_web_uri(uri)) {
+        std::vector<std::string> tokens = common::split_uri(uri);
+        CHECK(tokens.size() > 2); // http://endpoint/bucket
+    } else {
         const fs::path path = as_path(*props);
         fs::path parent_path = path.parent_path().string();
         if (parent_path.empty())
@@ -128,36 +129,50 @@ is_multiscale_supported(const std::vector<zarr::Dimension>& dims)
 
 template<typename T>
 VideoFrame*
-scale_image(const VideoFrame* src)
+scale_image(const uint8_t* const data,
+            size_t bytes_of_data,
+            const struct ImageShape& shape)
 {
-    CHECK(src);
+    CHECK(data);
+    CHECK(bytes_of_data);
+
     const int downscale = 2;
     constexpr size_t bytes_of_type = sizeof(T);
     const auto factor = 0.25f;
 
-    const auto width = src->shape.dims.width;
+    const auto width = shape.dims.width;
     const auto w_pad = width + (width % downscale);
 
-    const auto height = src->shape.dims.height;
+    const auto height = shape.dims.height;
     const auto h_pad = height + (height % downscale);
 
-    const size_t bytes_of_frame = common::align_up(
-      sizeof(VideoFrame) + w_pad * h_pad * factor * bytes_of_type, 8);
+    const auto size_of_image =
+      static_cast<uint32_t>(w_pad * h_pad * factor * bytes_of_type);
+
+    const size_t bytes_of_frame =
+      common::align_up(sizeof(VideoFrame) + size_of_image, 8);
+
     auto* dst = (VideoFrame*)malloc(bytes_of_frame);
-    memcpy(dst, src, sizeof(VideoFrame));
-
-    dst->shape.dims.width = w_pad / downscale;
-    dst->shape.dims.height = h_pad / downscale;
-    dst->shape.strides.height =
-      dst->shape.strides.width * dst->shape.dims.width;
-    dst->shape.strides.planes =
-      dst->shape.strides.height * dst->shape.dims.height;
-
+    CHECK(dst);
     dst->bytes_of_frame = bytes_of_frame;
 
-    const auto* src_img = (T*)src->data;
+    {
+        dst->shape = shape;
+        dst->shape.dims = {
+            .width = w_pad / downscale,
+            .height = h_pad / downscale,
+        };
+        dst->shape.strides = {
+            .height = dst->shape.dims.width,
+            .planes = dst->shape.dims.width * dst->shape.dims.height,
+        };
+
+        CHECK(bytes_of_image(&dst->shape) == size_of_image);
+    }
+
+    const auto* src_img = (T*)data;
     auto* dst_img = (T*)dst->data;
-    memset(dst_img, 0, bytes_of_image(&dst->shape));
+    memset(dst_img, 0, size_of_image);
 
     size_t dst_idx = 0;
     for (auto row = 0; row < height; row += downscale) {
@@ -340,12 +355,29 @@ zarr::Zarr::set(const StorageProperties* props)
 
     // checks the directory exists and is writable
     validate_props(props);
-    // TODO (aliddell): we will eventually support S3 URIs,
-    //  dataset_root_ should be a string
-    dataset_root_ = as_path(*props).string();
+
+    std::string uri(props->uri.str, props->uri.nbytes - 1);
+
+    if (common::is_web_uri(uri)) {
+        dataset_root_ = uri;
+    } else {
+        dataset_root_ = as_path(*props).string();
+    }
+
+    if (props->access_key_id.str) {
+        s3_access_key_id_ = std::string(props->access_key_id.str,
+                                        props->access_key_id.nbytes - 1);
+    }
+
+    if (props->secret_access_key.str) {
+        s3_secret_access_key_ = std::string(
+          props->secret_access_key.str, props->secret_access_key.nbytes - 1);
+    }
 
     if (props->external_metadata_json.str) {
-        external_metadata_json_ = props->external_metadata_json.str;
+        external_metadata_json_ =
+          std::string(props->external_metadata_json.str,
+                      props->external_metadata_json.nbytes - 1);
     }
 
     pixel_scale_um_ = props->pixel_scale_um;
@@ -383,6 +415,29 @@ zarr::Zarr::get(StorageProperties* props) const
                                   pixel_scale_um_,
                                   acquisition_dimensions_.size()));
 
+    // set access key and secret
+    {
+        const char* access_key_id =
+          s3_access_key_id_.has_value() ? s3_access_key_id_->c_str() : nullptr;
+        const size_t bytes_of_access_key_id =
+          access_key_id ? s3_access_key_id_->size() + 1 : 0;
+
+        const char* secret_access_key = s3_secret_access_key_.has_value()
+                                          ? s3_secret_access_key_->c_str()
+                                          : nullptr;
+        const size_t bytes_of_secret_access_key =
+          secret_access_key ? s3_secret_access_key_->size() + 1 : 0;
+
+        if (access_key_id && secret_access_key) {
+            CHECK(storage_properties_set_access_key_and_secret(
+              props,
+              access_key_id,
+              bytes_of_access_key_id,
+              secret_access_key,
+              bytes_of_secret_access_key));
+        }
+    }
+
     for (auto i = 0; i < acquisition_dimensions_.size(); ++i) {
         const auto dim = acquisition_dimensions_.at(i);
         CHECK(storage_properties_set_dimension(props,
@@ -407,6 +462,7 @@ zarr::Zarr::get_meta(StoragePropertyMetadata* meta) const
 
     meta->chunking_is_supported = 1;
     meta->multiscale_is_supported = 1;
+    meta->s3_is_supported = 1;
 }
 
 void
@@ -414,18 +470,29 @@ zarr::Zarr::start()
 {
     error_ = true;
 
-    if (fs::exists(dataset_root_)) {
-        std::error_code ec;
-        EXPECT(fs::remove_all(dataset_root_, ec),
-               R"(Failed to remove folder for "%s": %s)",
-               dataset_root_.c_str(),
-               ec.message().c_str());
-    }
-    fs::create_directories(dataset_root_);
-
     thread_pool_ = std::make_shared<common::ThreadPool>(
       std::thread::hardware_concurrency(),
       [this](const std::string& err) { this->set_error(err); });
+
+    if (common::is_web_uri(dataset_root_)) {
+        std::vector<std::string> tokens = common::split_uri(dataset_root_);
+        CHECK(tokens.size() > 1);
+        const std::string endpoint = tokens[0] + "//" + tokens[1];
+        connection_pool_ = std::make_shared<common::S3ConnectionPool>(
+          8, endpoint, *s3_access_key_id_, *s3_secret_access_key_);
+    } else {
+        // remove the folder if it exists
+        if (fs::exists(dataset_root_)) {
+            std::error_code ec;
+            EXPECT(fs::remove_all(dataset_root_, ec),
+                   R"(Failed to remove folder for "%s": %s)",
+                   dataset_root_.c_str(),
+                   ec.message().c_str());
+        }
+
+        // create the dataset folder
+        fs::create_directories(dataset_root_);
+    }
 
     allocate_writers_();
 
@@ -458,6 +525,8 @@ zarr::Zarr::stop() noexcept
             // finish
             thread_pool_->await_stop();
             thread_pool_ = nullptr;
+
+            connection_pool_ = nullptr;
 
             // don't clear before all working threads have shut down
             writers_.clear();
@@ -502,14 +571,42 @@ zarr::Zarr::append(const VideoFrame* frames, size_t nbytes)
     };
 
     for (cur = frames; cur < end; cur = next()) {
-        EXPECT(writers_.at(0)->write(cur), "%s", error_msg_.c_str());
-
-        // multiscale
-        if (writers_.size() > 1) {
-            write_multiscale_frames_(cur);
-        }
+        const size_t bytes_of_frame = bytes_of_image(&cur->shape);
+        const size_t bytes_written = append_frame(
+          const_cast<uint8_t*>(cur->data), bytes_of_frame, cur->shape);
+        EXPECT(bytes_written == bytes_of_frame,
+               "Expected to write %zu bytes, but wrote %zu.",
+               bytes_of_frame,
+               bytes_written);
     }
+
     return nbytes;
+}
+
+size_t
+zarr::Zarr::append_frame(const uint8_t* const data,
+                         size_t bytes_of_data,
+                         const ImageShape& shape)
+{
+    CHECK(DeviceState_Running == state);
+    EXPECT(!error_, "%s", error_msg_.c_str());
+
+    if (!data || !bytes_of_data) {
+        return 0;
+    }
+
+    const size_t bytes_written = writers_.at(0)->write(data, bytes_of_data);
+    if (bytes_written != bytes_of_data) {
+        set_error("Failed to write frame.");
+        return bytes_written;
+    }
+
+    // multiscale
+    if (writers_.size() > 1) {
+        write_multiscale_frames_(data, bytes_written, shape);
+    }
+
+    return bytes_written;
 }
 
 void
@@ -702,14 +799,17 @@ zarr::Zarr::make_multiscale_metadata_() const
 }
 
 void
-zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
+zarr::Zarr::write_multiscale_frames_(const uint8_t* const data_,
+                                     size_t bytes_of_data,
+                                     const ImageShape& shape_)
 {
-    const VideoFrame* src = frame;
-    VideoFrame* dst;
+    auto* data = const_cast<uint8_t*>(data_);
+    ImageShape shape = shape_;
+    struct VideoFrame* dst;
 
-    std::function<VideoFrame*(const VideoFrame*)> scale;
+    std::function<VideoFrame*(const uint8_t*, size_t, const ImageShape&)> scale;
     std::function<void(VideoFrame*, const VideoFrame*)> average2;
-    switch (frame->shape.type) {
+    switch (shape.type) {
         case SampleType_u10:
         case SampleType_u12:
         case SampleType_u14:
@@ -738,17 +838,19 @@ zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
             snprintf(err_msg,
                      sizeof(err_msg),
                      "Unsupported pixel type: %s",
-                     common::sample_type_to_string(frame->shape.type));
+                     common::sample_type_to_string(shape.type));
             throw std::runtime_error(err_msg);
     }
 
     for (auto i = 1; i < writers_.size(); ++i) {
-        dst = scale(src);
+        dst = scale(data, bytes_of_data, shape);
         if (scaled_frames_.at(i).has_value()) {
             // average
             average2(dst, scaled_frames_.at(i).value());
 
-            CHECK(writers_.at(i)->write(dst));
+            // write the downsampled frame
+            const size_t bytes_of_frame = bytes_of_image(&dst->shape);
+            CHECK(writers_.at(i)->write(dst->data, bytes_of_frame));
 
             // clean up this level of detail
             free(scaled_frames_.at(i).value());
@@ -756,9 +858,12 @@ zarr::Zarr::write_multiscale_frames_(const VideoFrame* frame)
 
             // setup for next iteration
             if (i + 1 < writers_.size()) {
-                src = dst;
+                data = dst->data;
+                shape = dst->shape;
+                bytes_of_data = bytes_of_image(&shape);
             } else {
-                free(dst); // FIXME (aliddell): find a way to reuse
+                // no longer needed
+                free(dst);
             }
         } else {
             scaled_frames_.at(i) = dst;
@@ -805,7 +910,8 @@ test_average_frame_inner(const SampleType& stype)
         ((T*)src->data)[i] = (T)(i + 1);
     }
 
-    auto dst = scale_image<T>(src);
+    auto dst =
+      scale_image<T>(src->data, bytes_of_image(&src->shape), src->shape);
     CHECK(((T*)dst->data)[0] == (T)3);
     CHECK(((T*)dst->data)[1] == (T)4.5);
     CHECK(((T*)dst->data)[2] == (T)7.5);

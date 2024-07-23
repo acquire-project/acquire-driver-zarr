@@ -16,9 +16,8 @@ zarr::FileSink::FileSink(const std::string& uri)
 bool
 zarr::FileSink::write(size_t offset, const uint8_t* buf, size_t bytes_of_buf)
 {
-    if (!file_) {
-        return false;
-    }
+    CHECK(buf);
+    CHECK(bytes_of_buf);
 
     return file_write(file_.get(), offset, buf, buf + bytes_of_buf);
 }

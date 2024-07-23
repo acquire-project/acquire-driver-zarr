@@ -5,6 +5,7 @@
 
 #include "common/utilities.hh"
 #include "common/thread.pool.hh"
+#include "common/s3.connection.hh"
 #include "writers/writer.hh"
 #include "writers/blosc.compressor.hh"
 
@@ -35,6 +36,9 @@ struct Zarr : public Storage
     void start();
     int stop() noexcept;
     size_t append(const VideoFrame* frames, size_t nbytes);
+    size_t append_frame(const uint8_t* data,
+                        size_t bytes_of_data,
+                        const ImageShape& shape);
     void reserve_image_shape(const ImageShape* shape);
 
     /// Error state
@@ -46,6 +50,8 @@ struct Zarr : public Storage
 
     /// changes on set
     std::string dataset_root_;
+    std::optional<std::string> s3_access_key_id_;
+    std::optional<std::string> s3_secret_access_key_;
     std::string external_metadata_json_;
     PixelScale pixel_scale_um_;
     bool enable_multiscale_;
@@ -59,11 +65,14 @@ struct Zarr : public Storage
     // scaled frames, keyed by level-of-detail
     std::unordered_map<int, std::optional<VideoFrame*>> scaled_frames_;
 
-    // changes on flush
+    /// changes on start
+    std::shared_ptr<common::ThreadPool> thread_pool_;
+    std::shared_ptr<common::S3ConnectionPool> connection_pool_;
+
+    /// changes on flush
     std::vector<std::unique_ptr<Sink>> metadata_sinks_;
 
     /// Multithreading
-    std::shared_ptr<common::ThreadPool> thread_pool_;
     mutable std::mutex mutex_; // for error_ / error_msg_
 
     /// Error state
@@ -89,7 +98,9 @@ struct Zarr : public Storage
 
     /// Multiscale
     json make_multiscale_metadata_() const;
-    void write_multiscale_frames_(const VideoFrame* frame);
+    void write_multiscale_frames_(const uint8_t* data_,
+                                  size_t bytes_of_data,
+                                  const ImageShape& shape_);
 };
 
 } // namespace acquire::sink::zarr
