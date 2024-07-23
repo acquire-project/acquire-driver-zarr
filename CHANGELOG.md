@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   scheme indicator and absolute path, assuming localhost.
 - Array metadata is updated every time data is flushed to disk. 
 
+### Added
+
+- Support for multiscale in Zarr V3 stores.
+
 ## [0.1.11](https://github.com/acquire-project/acquire-driver-zarr/compare/v0.1.10..v0.1.11) - 2024-04-22
 
 ### Fixed

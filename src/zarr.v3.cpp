@@ -69,7 +69,6 @@ zarr::ZarrV3::get_meta(StoragePropertyMetadata* meta) const
 {
     Zarr::get_meta(meta);
     meta->sharding_is_supported = 1;
-    meta->multiscale_is_supported = 0;
 }
 
 void
@@ -85,7 +84,6 @@ void
 zarr::ZarrV3::write_base_metadata_() const
 {
     namespace fs = std::filesystem;
-    using json = nlohmann::json;
 
     json metadata;
     metadata["extensions"] = json::array();
@@ -117,7 +115,6 @@ void
 zarr::ZarrV3::write_group_metadata_() const
 {
     namespace fs = std::filesystem;
-    using json = nlohmann::json;
 
     json metadata;
     metadata["attributes"]["acquire"] =
@@ -127,6 +124,7 @@ zarr::ZarrV3::write_group_metadata_() const
                                                     true,    // allow exceptions
                                                     true     // ignore comments
                                         );
+    metadata["attributes"]["multiscales"] = make_multiscale_metadata_();
 
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
