@@ -150,9 +150,9 @@ zarr::SinkCreator::make_metadata_sinks(
         case ZarrVersion::V2:
             dir_paths.emplace_back("0");
 
-            file_paths.emplace_back(".metadata"); // base metadata
-            file_paths.emplace_back("0/.zattrs"); // external metadata
-            file_paths.emplace_back(".zattrs");   // group metadata
+            file_paths.emplace_back(".zattrs");
+            file_paths.emplace_back(".zgroup");
+            file_paths.emplace_back("0/.zattrs");
             break;
         case ZarrVersion::V3:
             dir_paths.emplace_back("meta");

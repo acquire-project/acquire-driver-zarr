@@ -85,10 +85,12 @@ zarr::ZarrV2::write_base_metadata_() const
 {
     namespace fs = std::filesystem;
 
-    const json metadata = { { "zarr_format", 2 } };
+    json metadata;
+    metadata["multiscales"] = make_multiscale_metadata_();
+
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(".metadata");
+    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(".zattrs");
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
@@ -117,12 +119,10 @@ zarr::ZarrV2::write_group_metadata_() const
 {
     namespace fs = std::filesystem;
 
-    json metadata;
-    metadata["multiscales"] = make_multiscale_metadata_();
-
+    const json metadata = { { "zarr_format", 2 } };
     const std::string metadata_str = metadata.dump(4);
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(".zattrs");
+    const std::unique_ptr<Sink>& sink = metadata_sinks_.at(".zgroup");
     CHECK(sink);
     CHECK(sink->write(0, metadata_bytes, metadata_str.size()));
 }
