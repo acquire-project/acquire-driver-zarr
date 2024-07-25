@@ -32,6 +32,7 @@ class SinkCreator final
     /// @param[in] parts_along_dimension Function for computing the number of
     ///            parts (either chunk or shard) along each dimension.
     /// @param[out] part_sinks The sinks created.
+    /// @return True iff all data sinks were created successfully.
     /// @throws std::runtime_error if @p base_uri is not valid, if the number of
     ///         parts along a dimension cannot be computed, or if, for S3 sinks,
     ///         the bucket does not exist.
@@ -74,6 +75,7 @@ class SinkCreator final
     /// @param[in] base_dir The base directory for the files.
     /// @param[in] file_paths Paths to the files to create, relative to @p base_dir.
     /// @param[out] sinks The sinks created, keyed by path.
+    /// @return True iff all files were created successfully.
     [[nodiscard]] bool make_files_(
       const std::string& base_dir,
       const std::vector<std::string>& file_paths,
@@ -88,11 +90,17 @@ class SinkCreator final
     /// @param[in] bucket_name The name of the bucket.
     /// @param[in,out] object_keys The keys of the objects to create.
     /// @param[out] sinks The sinks created.
+    /// @return True iff all S3 objects were created successfully.
     [[nodiscard]] bool make_s3_objects_(
       std::string_view bucket_name,
       std::queue<std::string>& object_keys,
       std::vector<std::unique_ptr<Sink>>& sinks);
 
+    /// @brief Create a collection of S3 objects, keyed by object key.
+    /// @param[in] bucket_name The name of the bucket.
+    /// @param[in] object_keys The keys of the objects to create.
+    /// @param[out] sinks The sinks created, keyed by object key.
+    /// @return True iff all S3 objects were created successfully.
     [[nodiscard]] bool make_s3_objects_(
       std::string_view bucket_name,
       std::vector<std::string>& object_keys,
