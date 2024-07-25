@@ -69,6 +69,7 @@ target_include_directories(${tgt}-obj
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-core-platform/${my_platform}
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-device-kit
         ${CMAKE_CURRENT_LIST_DIR}/../acquire-common/acquire-core-libs/src/acquire-device-properties 
+        ${miniocpp_SOURCE_DIR}/inc
         PRIVATE
         $<TARGET_PROPERTY:blosc_static,INTERFACE_INCLUDE_DIRECTORIES>
 )

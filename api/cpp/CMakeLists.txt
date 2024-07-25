@@ -27,6 +27,7 @@ target_link_libraries(${tgt} PRIVATE
         acquire-driver-zarr-obj
         blosc_static
         nlohmann_json::nlohmann_json
+        miniocpp::miniocpp
 )
 
 set_target_properties(${tgt} PROPERTIES

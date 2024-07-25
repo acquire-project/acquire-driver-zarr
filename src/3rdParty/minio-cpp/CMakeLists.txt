@@ -1,3 +1,4 @@
+project(miniocpp LANGUAGES CXX)
 set(pwd ${CMAKE_CURRENT_LIST_DIR})
 
 set(lib "unknown-minio-cpp-lib")
