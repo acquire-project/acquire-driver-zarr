@@ -16,10 +16,12 @@
 #include <utility> // std::pair
 #include <vector>
 
+#include <nlohmann/json.hpp>
+
 namespace fs = std::filesystem;
+using json = nlohmann::json;
 
 namespace acquire::sink::zarr {
-
 struct Zarr : public Storage
 {
   public:
@@ -95,6 +97,7 @@ struct Zarr : public Storage
     virtual void write_array_metadata_(size_t level) const = 0;
 
     /// Multiscale
+    json make_multiscale_metadata_() const;
     void write_multiscale_frames_(const uint8_t* data_,
                                   size_t bytes_of_data,
                                   const ImageShape& shape_);
