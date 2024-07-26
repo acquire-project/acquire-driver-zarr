@@ -2,6 +2,7 @@
 #define ACQUIRE_ZARR_HH
 
 #include <memory>
+#include <string>
 #include <vector>
 
 
