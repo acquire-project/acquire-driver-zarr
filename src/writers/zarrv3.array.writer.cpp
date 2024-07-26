@@ -1,4 +1,4 @@
-#include "zarrv3.writer.hh"
+#include "zarrv3.array.writer.hh"
 #include "sink.creator.hh"
 #include "zarr.hh"
 
@@ -7,11 +7,37 @@
 
 namespace zarr = acquire::sink::zarr;
 
-zarr::ZarrV3Writer::ZarrV3Writer(
-  const WriterConfig& array_spec,
+namespace {
+std::string
+sample_type_to_dtype(SampleType t)
+
+{
+    switch (t) {
+        case SampleType_u8:
+            return "uint8";
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            return "uint16";
+        case SampleType_i8:
+            return "int8";
+        case SampleType_i16:
+            return "int16";
+        case SampleType_f32:
+            return "float32";
+        default:
+            throw std::runtime_error("Invalid SampleType: " +
+                                     std::to_string(static_cast<int>(t)));
+    }
+}
+} // end ::{anonymous} namespace
+
+zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
+  const ArrayWriterConfig& array_spec,
   std::shared_ptr<common::ThreadPool> thread_pool,
   std::shared_ptr<common::S3ConnectionPool> connection_pool)
-  : Writer(array_spec, thread_pool, connection_pool)
+  : ArrayWriter(array_spec, thread_pool, connection_pool)
   , shard_file_offsets_(common::number_of_shards(array_spec.dimensions), 0)
   , shard_tables_{ common::number_of_shards(array_spec.dimensions) }
 {
@@ -23,10 +49,14 @@ zarr::ZarrV3Writer::ZarrV3Writer(
         std::fill_n(
           table.begin(), table.size(), std::numeric_limits<uint64_t>::max());
     }
+
+    data_root_ = config_.dataset_root + "/data/root/" +
+                 std::to_string(config_.level_of_detail);
+    meta_root_ = config_.dataset_root + "/meta/root";
 }
 
 bool
-zarr::ZarrV3Writer::flush_impl_()
+zarr::ZarrV3ArrayWriter::flush_impl_()
 {
     // create shard files if they don't exist
     const std::string data_root =
@@ -34,17 +64,17 @@ zarr::ZarrV3Writer::flush_impl_()
 
     {
         SinkCreator creator(thread_pool_, connection_pool_);
-        if (sinks_.empty() &&
+        if (data_sinks_.empty() &&
             !creator.make_data_sinks(data_root,
                                      config_.dimensions,
                                      common::shards_along_dimension,
-                                     sinks_)) {
+                                     data_sinks_)) {
             return false;
         }
     }
 
     const auto n_shards = common::number_of_shards(config_.dimensions);
-    CHECK(sinks_.size() == n_shards);
+    CHECK(data_sinks_.size() == n_shards);
 
     // get shard indices for each chunk
     std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
@@ -61,7 +91,7 @@ zarr::ZarrV3Writer::flush_impl_()
         auto& chunk_table = shard_tables_.at(i);
         size_t* file_offset = &shard_file_offsets_.at(i);
 
-        thread_pool_->push_to_job_queue([&sink = sinks_.at(i),
+        thread_pool_->push_to_job_queue([&sink = data_sinks_.at(i),
                                          &chunks,
                                          &chunk_table,
                                          file_offset,
@@ -125,7 +155,88 @@ zarr::ZarrV3Writer::flush_impl_()
 }
 
 bool
-zarr::ZarrV3Writer::should_rollover_() const
+zarr::ZarrV3ArrayWriter::write_array_metadata_()
+{
+    if (!metadata_sink_) {
+        const std::string metadata_path =
+          std::to_string(config_.level_of_detail) + ".array.json";
+        SinkCreator creator(thread_pool_, connection_pool_);
+        if (!(metadata_sink_ = creator.make_sink(meta_root_, metadata_path))) {
+            LOGE("Failed to create metadata sink: %s/%s",
+                 meta_root_.c_str(),
+                 metadata_path.c_str());
+            return false;
+        }
+    }
+
+    namespace fs = std::filesystem;
+    using json = nlohmann::json;
+
+    const auto& image_shape = config_.image_shape;
+
+    std::vector<size_t> array_shape, chunk_shape, shard_shape;
+
+    array_shape.push_back(frames_written_);
+    chunk_shape.push_back(config_.dimensions.back().chunk_size_px);
+    shard_shape.push_back(config_.dimensions.back().shard_size_chunks);
+    for (auto dim = config_.dimensions.rbegin() + 1;
+         dim != config_.dimensions.rend();
+         ++dim) {
+        array_shape.push_back(dim->array_size_px);
+        chunk_shape.push_back(dim->chunk_size_px);
+        shard_shape.push_back(dim->shard_size_chunks);
+    }
+
+    json metadata;
+    metadata["attributes"] = json::object();
+    metadata["chunk_grid"] = json::object({
+      { "chunk_shape", chunk_shape },
+      { "separator", "/" },
+      { "type", "regular" },
+    });
+
+    metadata["chunk_memory_layout"] = "C";
+    metadata["data_type"] = sample_type_to_dtype(image_shape.type);
+    metadata["extensions"] = json::array();
+    metadata["fill_value"] = 0;
+    metadata["shape"] = array_shape;
+
+    if (config_.compression_params) {
+        const auto params = *config_.compression_params;
+        metadata["compressor"] = json::object({
+          { "codec", "https://purl.org/zarr/spec/codec/blosc/1.0" },
+          { "configuration",
+            json::object({
+              { "blocksize", 0 },
+              { "clevel", params.clevel },
+              { "cname", params.codec_id },
+              { "shuffle", params.shuffle },
+            }) },
+        });
+    }
+
+    // sharding storage transformer
+    // TODO (aliddell):
+    // https://github.com/zarr-developers/zarr-python/issues/877
+    metadata["storage_transformers"] = json::array();
+    metadata["storage_transformers"][0] = json::object({
+      { "type", "indexed" },
+      { "extension",
+        "https://purl.org/zarr/spec/storage_transformers/sharding/1.0" },
+      { "configuration",
+        json::object({
+          { "chunks_per_shard", shard_shape },
+        }) },
+    });
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+
+    return metadata_sink_->write(0, metadata_bytes, metadata_str.size());
+}
+
+bool
+zarr::ZarrV3ArrayWriter::should_rollover_() const
 {
     const auto& dims = config_.dimensions;
     size_t frames_before_flush =
@@ -236,14 +347,15 @@ extern "C"
                               chunk_timepoints,
                               shard_timepoints);
 
-            zarr::WriterConfig config = {
+            zarr::ArrayWriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
-                .data_root = base_dir.string(),
+                .level_of_detail = 3,
+                .dataset_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(
+            zarr::ZarrV3ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
@@ -265,9 +377,11 @@ extern "C"
                                               shard_timepoints * chunk_size +
                                             index_size;
 
-            CHECK(fs::is_directory(base_dir));
+            const fs::path data_root =
+              base_dir / "data/root" / std::to_string(config.level_of_detail);
+            CHECK(fs::is_directory(data_root));
             for (auto t = 0; t < shards_in_t; ++t) {
-                const auto t_dir = base_dir / ("c" + std::to_string(t));
+                const auto t_dir = data_root / ("c" + std::to_string(t));
                 CHECK(fs::is_directory(t_dir));
 
                 for (auto c = 0; c < shards_in_c; ++c) {
@@ -385,14 +499,15 @@ extern "C"
                               chunk_planes,
                               shard_planes);
 
-            zarr::WriterConfig config = {
+            zarr::ArrayWriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
-                .data_root = base_dir.string(),
+                .level_of_detail = 4,
+                .dataset_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(
+            zarr::ZarrV3ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
@@ -412,9 +527,11 @@ extern "C"
               shard_width * shard_height * shard_planes * chunk_size +
               index_size;
 
-            CHECK(fs::is_directory(base_dir));
+            const fs::path data_root =
+              base_dir / "data/root" / std::to_string(config.level_of_detail);
+            CHECK(fs::is_directory(data_root));
             for (auto z = 0; z < shards_in_z; ++z) {
-                const auto z_dir = base_dir / ("c" + std::to_string(z));
+                const auto z_dir = data_root / ("c" + std::to_string(z));
                 CHECK(fs::is_directory(z_dir));
 
                 for (auto y = 0; y < shards_in_y; ++y) {
@@ -526,14 +643,15 @@ extern "C"
                               chunk_timepoints,
                               shard_timepoints);
 
-            zarr::WriterConfig config = {
+            zarr::ArrayWriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
-                .data_root = base_dir.string(),
+                .level_of_detail = 5,
+                .dataset_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
-            zarr::ZarrV3Writer writer(
+            zarr::ZarrV3ArrayWriter writer(
               config, thread_pool, std::shared_ptr<common::S3ConnectionPool>());
 
             const size_t frame_size = array_width * array_height * nbytes_px;
@@ -554,9 +672,11 @@ extern "C"
                                               chunk_size +
                                             index_size;
 
-            CHECK(fs::is_directory(base_dir));
+            const fs::path data_root =
+              base_dir / "data/root" / std::to_string(config.level_of_detail);
+            CHECK(fs::is_directory(data_root));
             for (auto t = 0; t < shards_in_t; ++t) {
-                const auto t_dir = base_dir / ("c" + std::to_string(t));
+                const auto t_dir = data_root / ("c" + std::to_string(t));
                 CHECK(fs::is_directory(t_dir));
 
                 for (auto z = 0; z < shards_in_z; ++z) {
