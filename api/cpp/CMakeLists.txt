@@ -37,6 +37,6 @@ set_target_properties(${tgt} PROPERTIES
 
 install(TARGETS ${tgt} 
         LIBRARY DESTINATION api/lib
-        PUBLIC_HEADER DESTINATION api/include/aqcuire-zarr
+        PUBLIC_HEADER DESTINATION api/include/acquire-zarr
 )
 
