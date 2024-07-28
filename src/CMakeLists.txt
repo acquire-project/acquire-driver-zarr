@@ -24,12 +24,12 @@ add_library(${tgt}-obj OBJECT
         writers/file.sink.cpp
         writers/s3.sink.hh
         writers/s3.sink.cpp
-        writers/writer.hh
-        writers/writer.cpp
-        writers/zarrv2.writer.hh
-        writers/zarrv2.writer.cpp
-        writers/zarrv3.writer.hh
-        writers/zarrv3.writer.cpp
+        writers/array.writer.hh
+        writers/array.writer.cpp
+        writers/zarrv2.array.writer.hh
+        writers/zarrv2.array.writer.cpp
+        writers/zarrv3.array.writer.hh
+        writers/zarrv3.array.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
         zarr.hh
