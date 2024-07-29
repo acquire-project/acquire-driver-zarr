@@ -1,4 +1,4 @@
-#include "writer.hh"
+#include "array.writer.hh"
 #include "common/utilities.hh"
 
 #include <cmath>
@@ -104,7 +104,8 @@ chunk_internal_offset(size_t frame_id,
 } // end ::{anonymous} namespace
 
 bool
-zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
+zarr::downsample(const ArrayWriterConfig& config,
+                 ArrayWriterConfig& downsampled_config)
 {
     // downsample dimensions
     downsampled_config.dimensions.clear();
@@ -151,12 +152,8 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
       downsampled_config.image_shape.dims.width *
       downsampled_config.image_shape.dims.height;
 
-    // data root needs updated
-    fs::path downsampled_data_root = config.data_root;
-    // increment the array number in the group
-    downsampled_data_root.replace_filename(
-      std::to_string(std::stoi(downsampled_data_root.filename()) + 1));
-    downsampled_config.data_root = downsampled_data_root.string();
+    downsampled_config.level_of_detail = config.level_of_detail + 1;
+    downsampled_config.dataset_root = config.dataset_root;
 
     // copy the Blosc compression parameters
     downsampled_config.compression_params = config.compression_params;
@@ -176,9 +173,10 @@ zarr::downsample(const WriterConfig& config, WriterConfig& downsampled_config)
 }
 
 /// Writer
-zarr::Writer::Writer(const WriterConfig& config,
-                     std::shared_ptr<common::ThreadPool> thread_pool,
-                     std::shared_ptr<common::S3ConnectionPool> connection_pool)
+zarr::ArrayWriter::ArrayWriter(
+  const ArrayWriterConfig& config,
+  std::shared_ptr<common::ThreadPool> thread_pool,
+  std::shared_ptr<common::S3ConnectionPool> connection_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
   , connection_pool_{ connection_pool }
@@ -187,11 +185,10 @@ zarr::Writer::Writer(const WriterConfig& config,
   , append_chunk_index_{ 0 }
   , is_finalizing_{ false }
 {
-    data_root_ = config_.data_root;
 }
 
 size_t
-zarr::Writer::write(const uint8_t* data, size_t bytes_of_frame)
+zarr::ArrayWriter::write(const uint8_t* data, size_t bytes_of_frame)
 {
     if (bytes_of_image(&config_.image_shape) != bytes_of_frame) {
         return 0;
@@ -214,7 +211,7 @@ zarr::Writer::write(const uint8_t* data, size_t bytes_of_frame)
 }
 
 void
-zarr::Writer::finalize()
+zarr::ArrayWriter::finalize()
 {
     is_finalizing_ = true;
     flush_();
@@ -222,20 +219,8 @@ zarr::Writer::finalize()
     is_finalizing_ = false;
 }
 
-const zarr::WriterConfig&
-zarr::Writer::config() const noexcept
-{
-    return config_;
-}
-
-uint32_t
-zarr::Writer::frames_written() const noexcept
-{
-    return frames_written_;
-}
-
 void
-zarr::Writer::make_buffers_() noexcept
+zarr::ArrayWriter::make_buffers_() noexcept
 {
     const size_t n_chunks =
       common::number_of_chunks_in_memory(config_.dimensions);
@@ -251,7 +236,7 @@ zarr::Writer::make_buffers_() noexcept
 }
 
 size_t
-zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
+zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
     // break the frame into tiles and write them to the chunk buffers
     const auto image_shape = config_.image_shape;
@@ -328,7 +313,7 @@ zarr::Writer::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 }
 
 bool
-zarr::Writer::should_flush_() const
+zarr::ArrayWriter::should_flush_() const
 {
     const auto& dims = config_.dimensions;
     size_t frames_before_flush = dims.back().chunk_size_px;
@@ -341,7 +326,7 @@ zarr::Writer::should_flush_() const
 }
 
 void
-zarr::Writer::compress_buffers_() noexcept
+zarr::ArrayWriter::compress_buffers_() noexcept
 {
     if (!config_.compression_params.has_value()) {
         return;
@@ -402,7 +387,7 @@ zarr::Writer::compress_buffers_() noexcept
 }
 
 void
-zarr::Writer::flush_()
+zarr::ArrayWriter::flush_()
 {
     if (bytes_to_flush_ == 0) {
         return;
@@ -412,8 +397,13 @@ zarr::Writer::flush_()
     compress_buffers_();
     CHECK(flush_impl_());
 
-    if (should_rollover_()) {
+    const auto should_rollover = should_rollover_();
+    if (should_rollover) {
         rollover_();
+    }
+
+    if (should_rollover || is_finalizing_) {
+        CHECK(write_array_metadata_());
     }
 
     // reset buffers
@@ -424,13 +414,13 @@ zarr::Writer::flush_()
 }
 
 void
-zarr::Writer::close_sinks_()
+zarr::ArrayWriter::close_sinks_()
 {
-    sinks_.clear();
+    data_sinks_.clear();
 }
 
 void
-zarr::Writer::rollover_()
+zarr::ArrayWriter::rollover_()
 {
     TRACE("Rolling over");
 
@@ -447,18 +437,19 @@ zarr::Writer::rollover_()
 
 namespace common = zarr::common;
 
-class TestWriter : public zarr::Writer
+class TestWriter : public zarr::ArrayWriter
 {
   public:
-    TestWriter(const zarr::WriterConfig& array_spec,
+    TestWriter(const zarr::ArrayWriterConfig& array_spec,
                std::shared_ptr<common::ThreadPool> thread_pool)
-      : zarr::Writer(array_spec, thread_pool, nullptr)
+      : zarr::ArrayWriter(array_spec, thread_pool, nullptr)
     {
     }
 
   private:
     bool should_rollover_() const override { return false; }
     bool flush_impl_() override { return true; }
+    bool write_array_metadata_() override { return true; }
 };
 
 extern "C"
@@ -795,10 +786,10 @@ extern "C"
             dims.emplace_back(
               "t", DimensionType_Time, array_timepoints, chunk_timepoints, 0);
 
-            zarr::WriterConfig config = {
+            zarr::ArrayWriterConfig config = {
                 .image_shape = shape,
                 .dimensions = dims,
-                .data_root = base_dir.string(),
+                .dataset_root = base_dir.string(),
                 .compression_params = std::nullopt,
             };
 
@@ -831,7 +822,7 @@ extern "C"
         try {
             const fs::path base_dir = "acquire";
 
-            zarr::WriterConfig config {
+            zarr::ArrayWriterConfig config {
                 .image_shape = {
                     .dims = {
                       .channels = 1,
@@ -848,7 +839,8 @@ extern "C"
                     .type = SampleType_u8
                 },
                 .dimensions = {},
-                .data_root = (base_dir / "data" / "root" / "0").string(),
+                .level_of_detail = 0,
+                .dataset_root = base_dir.string(),
                 .compression_params = std::nullopt
             };
 
@@ -866,7 +858,7 @@ extern "C"
                                            5,
                                            1); // 5 timepoints / chunk, 1 shard
 
-            zarr::WriterConfig downsampled_config;
+            zarr::ArrayWriterConfig downsampled_config;
             CHECK(zarr::downsample(config, downsampled_config));
 
             // check dimensions
@@ -908,9 +900,11 @@ extern "C"
             CHECK(downsampled_config.image_shape.strides.height == 32);
             CHECK(downsampled_config.image_shape.strides.planes == 32 * 24);
 
-            // check data root
-            CHECK(downsampled_config.data_root ==
-                  (base_dir / "data" / "root" / "1").string());
+            // check level of detail
+            CHECK(downsampled_config.level_of_detail == 1);
+
+            // check dataset root
+            CHECK(downsampled_config.dataset_root == config.dataset_root);
 
             // check compression params
             CHECK(!downsampled_config.compression_params.has_value());
@@ -960,9 +954,11 @@ extern "C"
             CHECK(downsampled_config.image_shape.strides.height == 16);
             CHECK(downsampled_config.image_shape.strides.planes == 16 * 12);
 
+            // check level of detail
+            CHECK(downsampled_config.level_of_detail == 2);
+
             // check data root
-            CHECK(downsampled_config.data_root ==
-                  (base_dir / "data" / "root" / "2").string());
+            CHECK(downsampled_config.dataset_root == config.dataset_root);
 
             // check compression params
             CHECK(!downsampled_config.compression_params.has_value());

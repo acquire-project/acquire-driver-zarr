@@ -27,7 +27,6 @@ struct ZarrV2 final : public Zarr
 
     // mutable metadata, changes on flush
     void write_group_metadata_() const override;
-    void write_array_metadata_(size_t level) const override;
 };
 } // namespace acquire::sink::zarr
 

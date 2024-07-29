@@ -6,7 +6,7 @@
 #include "common/utilities.hh"
 #include "common/thread.pool.hh"
 #include "common/s3.connection.hh"
-#include "writers/writer.hh"
+#include "writers/array.writer.hh"
 #include "writers/blosc.compressor.hh"
 
 #include <filesystem>
@@ -59,7 +59,7 @@ struct Zarr : public Storage
     /// changes on reserve_image_shape
     struct ImageShape image_shape_;
     std::vector<Dimension> acquisition_dimensions_;
-    std::vector<std::shared_ptr<Writer>> writers_;
+    std::vector<std::shared_ptr<ArrayWriter>> writers_;
 
     /// changes on append
     // scaled frames, keyed by level-of-detail
@@ -68,9 +68,7 @@ struct Zarr : public Storage
     /// changes on start
     std::shared_ptr<common::ThreadPool> thread_pool_;
     std::shared_ptr<common::S3ConnectionPool> connection_pool_;
-
-    /// changes on flush
-    std::vector<std::unique_ptr<Sink>> metadata_sinks_;
+    std::unordered_map<std::string, std::unique_ptr<Sink>> metadata_sinks_;
 
     /// Multithreading
     mutable std::mutex mutex_; // for error_ / error_msg_
@@ -92,9 +90,7 @@ struct Zarr : public Storage
     virtual void write_external_metadata_() const = 0;
 
     // mutable metadata, changes on flush
-    void write_mutable_metadata_() const;
     virtual void write_group_metadata_() const = 0;
-    virtual void write_array_metadata_(size_t level) const = 0;
 
     /// Multiscale
     json make_multiscale_metadata_() const;

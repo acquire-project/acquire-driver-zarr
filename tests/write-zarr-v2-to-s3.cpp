@@ -304,7 +304,7 @@ void
 validate_and_cleanup(AcquireRuntime* runtime)
 {
     std::vector<std::string> paths{
-        ".metadata",
+        ".zgroup",
         ".zattrs",
         "0/.zarray",
         "0/.zattrs",
