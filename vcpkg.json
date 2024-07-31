@@ -8,7 +8,6 @@
         "name": "nlohmann-json",
         "version>=": "3.11.3"
     },
-    {"name": "pybind11"},
     { "name": "curlpp" },
     { "name": "inih", "features": ["cpp"] },
     { "name": "openssl" },
