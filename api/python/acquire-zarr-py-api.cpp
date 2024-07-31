@@ -5,8 +5,6 @@
 #include "acquire-zarr/acquire-zarr.hh"
 #include <iostream>
 
-#define STRINGIFY(x) #x
-#define MACRO_STRINGIFY(x) STRINGIFY(x)
 namespace py = pybind11;
 
 
@@ -73,9 +71,5 @@ PYBIND11_MODULE(acquire_zarr, m) {
         .def_property("compression_level", &PyAcquireZarrWriter::get_compression_level, &PyAcquireZarrWriter::set_compression_level)
         .def_property("compression_shuffle", &PyAcquireZarrWriter::get_compression_shuffle, &PyAcquireZarrWriter::set_compression_shuffle)
         ;
-#ifdef VERSION_INFO
-    m.attr("__version__") = MACRO_STRINGIFY(VERSION_INFO);
-#else
-    m.attr("__version__") = "dev";
-#endif
+
 }
