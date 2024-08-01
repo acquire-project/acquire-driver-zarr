@@ -12,7 +12,7 @@ if(pybind11_NOT_FOUND)
     message(WARNING "pybind11 not found in the current environment. Please install pybind11 via pip.")
 else()
     LIST(APPEND CMAKE_MODULE_PATH ${pybind11_DIR})
-    cmake_path(CONVERT CMAKE_MODULE_PATH TO_CMAKE_PATH_LIST CMAKE_MODULE_LIST)
+    cmake_path(CONVERT CMAKE_MODULE_PATH TO_CMAKE_PATH_LIST CMAKE_MODULE_PATH)
 endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter Development)
