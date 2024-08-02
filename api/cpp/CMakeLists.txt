@@ -33,6 +33,7 @@ target_link_libraries(${tgt} PRIVATE
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
         PUBLIC_HEADER ${ACQUIRE_API_INCLUDE_FILE}
+        POSITION_INDEPENDENT_CODE ON
 )
 
 install(TARGETS ${tgt} 
