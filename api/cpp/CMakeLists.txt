@@ -40,3 +40,7 @@ install(TARGETS ${tgt}
         PUBLIC_HEADER DESTINATION api/include/acquire-zarr
 )
 
+option(ACQUIRE_BUILD_API_CPP_EXAMPLES "Build C++ API examples" OFF)
+if(ACQUIRE_BUILD_API_CPP_EXAMPLES)
+    add_subdirectory(examples)
+endif()
