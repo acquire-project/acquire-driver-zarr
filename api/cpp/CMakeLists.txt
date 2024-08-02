@@ -3,7 +3,7 @@ project(acquire-zarr-cpp-api)
 set(tgt acquire-zarr-cpp)
 set(ACQUIRE_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/acquire-zarr/acquire-zarr.hh)
 
-add_library(${tgt} SHARED
+add_library(${tgt}
         ${ACQUIRE_API_INCLUDE_FILE}
         src/acquire-zarr-writer.cpp
         src/acquire-zarr-writer-impl.hh
