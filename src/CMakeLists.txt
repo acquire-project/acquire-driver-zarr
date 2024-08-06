@@ -1,4 +1,3 @@
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 add_subdirectory(3rdParty)
 
 if (NOT TARGET acquire-core-logger)
@@ -83,6 +82,11 @@ target_link_libraries(${tgt} PRIVATE
 
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+)
+
+set_target_properties(${tgt}-obj PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        POSITION_INDEPENDENT_CODE ON
 )
 
 install(TARGETS ${tgt} LIBRARY DESTINATION lib)

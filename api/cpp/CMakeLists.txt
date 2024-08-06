@@ -3,7 +3,7 @@ project(acquire-zarr-cpp-api)
 set(tgt acquire-zarr-cpp)
 set(ACQUIRE_API_INCLUDE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/include/acquire-zarr/acquire-zarr.hh)
 
-add_library(${tgt} SHARED
+add_library(${tgt}
         ${ACQUIRE_API_INCLUDE_FILE}
         src/acquire-zarr-writer.cpp
         src/acquire-zarr-writer-impl.hh
@@ -33,10 +33,15 @@ target_link_libraries(${tgt} PRIVATE
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
         PUBLIC_HEADER ${ACQUIRE_API_INCLUDE_FILE}
+        POSITION_INDEPENDENT_CODE ON
 )
 
 install(TARGETS ${tgt} 
         LIBRARY DESTINATION api/lib
-        PUBLIC_HEADER DESTINATION api/include/aqcuire-zarr
+        PUBLIC_HEADER DESTINATION api/include/acquire-zarr
 )
 
+option(ACQUIRE_BUILD_API_CPP_EXAMPLES "Build C++ API examples" OFF)
+if(ACQUIRE_BUILD_API_CPP_EXAMPLES)
+    add_subdirectory(examples)
+endif()
