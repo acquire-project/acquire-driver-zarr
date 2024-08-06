@@ -9,6 +9,7 @@ int main() {
     writer.set_use_v3(false);
     writer.set_dimensions({"x","y","t"});
     writer.set_dimension_sizes({64,64,0});
+    writer.set_shape({1,64,64,1});
     writer.set_chunk_sizes({64,64,1});
     writer.set_shard_sizes({64,64,1});
     writer.set_enable_multiscale(false);
@@ -19,8 +20,10 @@ int main() {
     writer.set_first_frame_id(0);
     //writer.setExternalMetadata("{metadata}");
 
+    auto image_data = std::array<uint8_t, 64*64>{0};
     writer.start();
 
+    writer.append(image_data.data(), 64*64);
     writer.stop();
 
   return 0;
