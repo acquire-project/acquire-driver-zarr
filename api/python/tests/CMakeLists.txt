@@ -8,7 +8,7 @@ add_test(
 
 set_tests_properties(python_api_test 
     PROPERTIES 
-        LABELS "python_api" 
+        LABELS "acquire-zarr-python-api" 
         ENVIRONMENT "PYTHONPATH=${acquire-zarr-py_BINARY_DIR};"
         DEPENDS acquire_zarr)
 
