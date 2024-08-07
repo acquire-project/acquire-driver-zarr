@@ -28,3 +28,5 @@ set_target_properties(acquire_zarr PROPERTIES
 )
 
 install(TARGETS acquire_zarr LIBRARY DESTINATION acquire_zarr)
+
+add_subdirectory(tests)
