@@ -76,6 +76,9 @@ jobs:
         working-directory: ${{github.workspace}}/build
         run: ctest -C ${{env.BUILD_TYPE}} -L acquire-driver-zarr --output-on-failure
 
-      - name: Test Python API
+      - name: Test Python API          python -m pip install -U pybind11 libpython pytest
+
         working-directory: ${{github.workspace}}/build
-        run: ctest -C ${{env.BUILD_TYPE}} -L acquire-zarr-python-api --output-on-failure
+        run: |
+          python -m pip install -U numpy pytest
+          ctest -C ${{env.BUILD_TYPE}} -L acquire-zarr-python-api --output-on-failure
