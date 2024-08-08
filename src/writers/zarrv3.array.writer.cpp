@@ -180,7 +180,7 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
     for (auto i = 2; i < config_.dimensions.size() - 1; ++i) {
         const auto& dim = config_.dimensions[i];
         CHECK(dim.array_size_px);
-        append_size /= dim.array_size_px;
+        append_size = (append_size + dim.array_size_px - 1) / dim.array_size_px;
     }
     array_shape.push_back(append_size);
 

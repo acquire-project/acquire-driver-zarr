@@ -91,8 +91,8 @@ const static uint32_t chunk_width = 960;
 const static uint32_t array_height = 1080;
 const static uint32_t chunk_height = 540;
 
-const static uint32_t array_planes = 10;
-const static uint32_t chunk_planes = 5;
+const static uint32_t array_planes = 8;
+const static uint32_t chunk_planes = 4;
 
 const static uint32_t array_channels = 3;
 const static uint32_t chunk_channels = 1;
@@ -196,7 +196,7 @@ configure(AcquireRuntime* runtime)
 
     // acquisition
     props.video[0].max_frame_count =
-      array_planes * array_channels * chunk_timepoints;
+      array_planes * array_channels * chunk_timepoints + 1;
     props.video[1].max_frame_count = props.video[0].max_frame_count;
 
     OK(acquire_configure(runtime, &props));
@@ -247,7 +247,7 @@ validate_ome_metadata(const json& j)
 void
 validate_array_v2(const json& j)
 {
-    const uint32_t array_timepoints = chunk_timepoints;
+    const uint32_t array_timepoints = chunk_timepoints + 1;
 
     ASSERT_EQ(int, "%d", 5, j["shape"].size());
     ASSERT_EQ(int, "%d", array_timepoints, j["shape"][0]);
@@ -267,7 +267,7 @@ validate_array_v2(const json& j)
 void
 validate_array_v3(const json& j)
 {
-    const uint32_t array_timepoints = chunk_timepoints;
+    const uint32_t array_timepoints = chunk_timepoints + 1;
 
     ASSERT_EQ(int, "%d", 5, j["shape"].size());
     ASSERT_EQ(int, "%d", array_timepoints, j["shape"][0]);
