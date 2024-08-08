@@ -5,7 +5,9 @@ if (NOT TARGET acquire-core-logger)
 endif ()
 
 set(tgt acquire-driver-zarr)
-add_library(${tgt} MODULE
+
+#COMPILE SOURCES AS AN OBJECT LIBRARY
+add_library(${tgt}-obj OBJECT 
         common/dimension.hh
         common/dimension.cpp
         common/thread.pool.hh
@@ -38,12 +40,8 @@ add_library(${tgt} MODULE
         zarr.driver.c
 )
 
-target_include_directories(${tgt} PRIVATE
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
-)
-
-target_enable_simd(${tgt})
-target_link_libraries(${tgt} PRIVATE
+# establish a list of dependencies (which importantly are CMake projects)
+set(${tgt}_deps
         acquire-core-logger
         acquire-core-platform
         acquire-device-kit
@@ -52,8 +50,43 @@ target_link_libraries(${tgt} PRIVATE
         nlohmann_json::nlohmann_json
         miniocpp::miniocpp
 )
+
+# get the platform
+if(WIN32)
+    set(my_platform win32)
+elseif(APPLE)
+        set(my_platform osx)
+elseif(LINUX)
+        set(my_platform linux)
+endif()
+
+target_include_directories(${tgt}-obj 
+        PUBLIC
+        ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/writers
+        ${CMAKE_SOURCE_DIR}/acquire-common/acquire-core-libs/src/acquire-core-logger
+        ${CMAKE_SOURCE_DIR}/acquire-common/acquire-core-libs/src/acquire-core-platform/${my_platform}
+        ${CMAKE_SOURCE_DIR}/acquire-common/acquire-core-libs/src/acquire-device-kit
+        ${CMAKE_SOURCE_DIR}/acquire-common/acquire-core-libs/src/acquire-device-properties 
+        ${miniocpp_SOURCE_DIR}/inc
+        PRIVATE
+        $<TARGET_PROPERTY:blosc_static,INTERFACE_INCLUDE_DIRECTORIES>
+)
+
+add_library(${tgt} MODULE $<TARGET_OBJECTS:${tgt}-obj>)
+
+target_enable_simd(${tgt})
+target_link_libraries(${tgt} PRIVATE
+        ${${tgt}_deps}
+)
+
 set_target_properties(${tgt} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+)
+
+set_target_properties(${tgt}-obj PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+        POSITION_INDEPENDENT_CODE ON
 )
 
 install(TARGETS ${tgt} LIBRARY DESTINATION lib)
