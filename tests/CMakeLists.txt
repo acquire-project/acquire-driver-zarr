@@ -22,6 +22,7 @@ else ()
             external-metadata-with-whitespace-ok
             restart-stopped-zarr-resets-threadpool
             repeat-start
+            metadata-dimension-sizes
             write-zarr-v2-raw
             write-zarr-v2-raw-chunk-size-larger-than-frame-size
             write-zarr-v2-raw-with-even-chunking

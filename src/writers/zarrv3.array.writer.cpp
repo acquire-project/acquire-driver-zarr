@@ -176,7 +176,14 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
 
     std::vector<size_t> array_shape, chunk_shape, shard_shape;
 
-    array_shape.push_back(frames_written_);
+    size_t append_size = frames_written_;
+    for (auto i = 2; i < config_.dimensions.size() - 1; ++i) {
+        const auto& dim = config_.dimensions[i];
+        CHECK(dim.array_size_px);
+        append_size /= dim.array_size_px;
+    }
+    array_shape.push_back(append_size);
+
     chunk_shape.push_back(config_.dimensions.back().chunk_size_px);
     shard_shape.push_back(config_.dimensions.back().shard_size_chunks);
     for (auto dim = config_.dimensions.rbegin() + 1;
