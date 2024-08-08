@@ -6,9 +6,15 @@ add_test(
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
 )
 
-set_tests_properties(python_api_test 
-    PROPERTIES 
-        LABELS "acquire-zarr-python-api" 
-        ENVIRONMENT "PYTHONPATH=${acquire-zarr-py_BINARY_DIR};"
-        DEPENDS acquire_zarr)
+if (WIN32)
+    set(PYTHONPATH "${acquire-zarr-py_BINARY_DIR}/${CMAKE_BUILD_TYPE}")
+    message(STATUS "WINDOWS PYTHONPATH: ${PYTHONPATH}")
+else ()
+    set(PYTHONPATH "${acquire-zarr-py_BINARY_DIR}")
+endif ()
 
+set_tests_properties(python_api_test 
+    PROPERTIES
+        LABELS "acquire-zarr-python-api"
+        ENVIRONMENT "PYTHONPATH=${PYTHONPATH};"
+        DEPENDS acquire_zarr)
