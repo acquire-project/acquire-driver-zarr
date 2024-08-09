@@ -122,7 +122,15 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
 
     std::vector<size_t> array_shape, chunk_shape;
 
-    array_shape.push_back(frames_written_);
+    size_t append_size = frames_written_;
+    for (auto dim = config_.dimensions.begin() + 2;
+         dim < config_.dimensions.end() - 1;
+         ++dim) {
+        CHECK(dim->array_size_px);
+        append_size = (append_size + dim->array_size_px - 1) / dim->array_size_px;
+    }
+    array_shape.push_back(append_size);
+
     chunk_shape.push_back(config_.dimensions.back().chunk_size_px);
     for (auto dim = config_.dimensions.rbegin() + 1;
          dim != config_.dimensions.rend();
