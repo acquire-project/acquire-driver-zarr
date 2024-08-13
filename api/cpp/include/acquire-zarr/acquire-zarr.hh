@@ -13,6 +13,16 @@ enum class AcquireZarrCompressionCodec
     COMPRESSION_BLOSC_ZSTD,
 } ;
 
+enum class AcquireZarrDtype
+{
+    DTYPE_UNKNOWN,
+    DTYPE_UINT8,
+    DTYPE_UINT16,
+    DTYPE_INT8,
+    DTYPE_INT16,
+    DTYPE_FLOAT32,
+    DTYPE_UNIMPLEMENTED
+} ;
 
 class AcquireZarrWriter 
 {
@@ -78,6 +88,20 @@ class AcquireZarrWriter
      * @param shape array corresponding to the shape of the image data (channels, width, height, planes)
      */
     void set_shape(const std::vector<uint32_t>& shape);
+
+    /**
+     * Get the data type of the Zarr file.
+     * 
+     * @returns the data type of the Zarr file
+     */
+    AcquireZarrDtype get_dtype() const;
+
+    /**
+     * Set the data type of the Zarr file.
+     * 
+     * @param dtype the data type of the Zarr file
+     */
+    void set_dtype(AcquireZarrDtype dtype);
 
     /**
      * Get the URI of the Zarr file.

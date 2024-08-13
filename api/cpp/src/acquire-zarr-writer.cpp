@@ -50,9 +50,54 @@ void AcquireZarrWriter::set_shape(const std::vector<uint32_t>& shape)
     impl_->shape_.strides.width = impl_->shape_.dims.channels ;
     impl_->shape_.strides.height = impl_->shape_.dims.width * impl_->shape_.strides.width;
     impl_->shape_.strides.planes = impl_->shape_.dims.height * impl_->shape_.strides.height;
-    impl_->shape_.type = SampleType_u8;  
 }
 
+AcquireZarrDtype AcquireZarrWriter::get_dtype() const
+{
+    switch(impl_->shape_.type)
+    {
+        case SampleType_u8:
+            return AcquireZarrDtype::DTYPE_UINT8;
+        case SampleType_u10:
+        case SampleType_u12:
+        case SampleType_u14:
+        case SampleType_u16:
+            return AcquireZarrDtype::DTYPE_UINT16;
+        case SampleType_i8:
+            return AcquireZarrDtype::DTYPE_INT8;
+        case SampleType_i16:
+            return AcquireZarrDtype::DTYPE_INT16;
+        case SampleType_f32:
+            return AcquireZarrDtype::DTYPE_FLOAT32;
+        default:
+            return AcquireZarrDtype::DTYPE_UNKNOWN;
+    }
+}
+
+void AcquireZarrWriter::set_dtype(AcquireZarrDtype dtype)
+{
+    switch(dtype)
+    {
+        case AcquireZarrDtype::DTYPE_UINT8:
+            impl_->shape_.type = SampleType_u8;
+            break;
+        case AcquireZarrDtype::DTYPE_UINT16:
+            impl_->shape_.type = SampleType_u16;
+            break;
+        case AcquireZarrDtype::DTYPE_INT8:
+            impl_->shape_.type = SampleType_i8;
+            break;
+        case AcquireZarrDtype::DTYPE_INT16:
+            impl_->shape_.type = SampleType_i16;
+            break;
+        case AcquireZarrDtype::DTYPE_FLOAT32:
+            impl_->shape_.type = SampleType_f32;
+            break;
+        default:
+            impl_->shape_.type = SampleType_Unknown;
+            throw std::runtime_error("Unknown data type");
+    }
+}
 
 void AcquireZarrWriter::set_uri(const std::string& uri)
 {

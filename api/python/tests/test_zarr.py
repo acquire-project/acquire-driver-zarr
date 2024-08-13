@@ -21,7 +21,7 @@ def check_zarr(v3: bool, uri: str) -> None:
     zarr.dimension_sizes = [64, 64, 0]
     zarr.chunk_sizes = [64, 64, 1]
     zarr.shape = [1,64,64,1]
-
+    zarr.dtype = acquire_zarr.DType.DTYPE_UINT16
     zarr.chunk_sizes[-1] = 1
     zarr.compression_codec = acquire_zarr.CompressionCodec.COMPRESSION_NONE
 

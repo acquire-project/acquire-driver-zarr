@@ -50,6 +50,14 @@ PYBIND11_MODULE(acquire_zarr, m) {
         .value("COMPRESSION_BLOSC_ZSTD", AcquireZarrCompressionCodec::COMPRESSION_BLOSC_ZSTD)
         .export_values();
 
+    py::enum_<AcquireZarrDtype>(m, "DType")
+        .value("DTYPE_UINT8", AcquireZarrDtype::DTYPE_UINT8)
+        .value("DTYPE_UINT16", AcquireZarrDtype::DTYPE_UINT16)
+        .value("DTYPE_INT8", AcquireZarrDtype::DTYPE_INT8)
+        .value("DTYPE_INT16", AcquireZarrDtype::DTYPE_INT16)
+        .value("DTYPE_FLOAT32", AcquireZarrDtype::DTYPE_FLOAT32)
+        .export_values();
+        
     py::class_<PyAcquireZarrWriter>(m, "AcquireZarrWriter")
         .def(py::init<>())
         .def("append", &PyAcquireZarrWriter::append)
@@ -57,6 +65,7 @@ PYBIND11_MODULE(acquire_zarr, m) {
         .def("stop", &PyAcquireZarrWriter::stop)
         .def_property("use_v3", &PyAcquireZarrWriter::get_use_v3, &PyAcquireZarrWriter::set_use_v3)
         .def_property("shape", &PyAcquireZarrWriter::get_shape, &PyAcquireZarrWriter::set_shape)
+        .def_property("dtype", &PyAcquireZarrWriter::get_dtype, &PyAcquireZarrWriter::set_dtype)
         .def_property("uri", &PyAcquireZarrWriter::get_uri, &PyAcquireZarrWriter::set_uri)
         .def_property("external_json_metadata", &PyAcquireZarrWriter::get_metadata, &PyAcquireZarrWriter::setExternalMetadata)
         .def_property("pixel_scale_x", &PyAcquireZarrWriter::get_pixel_scale_x, &PyAcquireZarrWriter::set_pixel_scale_x)
