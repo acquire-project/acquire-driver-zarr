@@ -392,10 +392,13 @@ zarr::Zarr::get(StorageProperties* props) const
     storage_properties_destroy(props);
 
     std::string uri;
-    if (!dataset_root_.empty()) {
+    if (common::is_web_uri(dataset_root_)) {
+        uri = dataset_root_;
+    } else if (!dataset_root_.empty()) {
         fs::path dataset_root_abs = fs::absolute(dataset_root_);
         uri = "file://" + dataset_root_abs.string();
     }
+
     const size_t bytes_of_filename = uri.empty() ? 0 : uri.size() + 1;
 
     const char* metadata = external_metadata_json_.empty()
