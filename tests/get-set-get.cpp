@@ -1,5 +1,6 @@
 /// @file get-set-get.cpp
-/// @brief Test that successive calls to Zarr::get() return the same value.
+/// @brief Test that getting and resetting storage properties will not render
+/// any properties invalid.
 
 #include "platform.h"
 #include "logger.h"
