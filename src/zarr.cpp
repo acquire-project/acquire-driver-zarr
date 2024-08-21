@@ -70,6 +70,7 @@ validate_props(const StorageProperties* props)
         CHECK(tokens.size() > 2); // http://endpoint/bucket
     } else {
         const fs::path path = as_path(*props);
+        LOG("path: '%s'", path.string().c_str());
         fs::path parent_path = path.parent_path();
         if (parent_path.empty())
             parent_path = ".";
