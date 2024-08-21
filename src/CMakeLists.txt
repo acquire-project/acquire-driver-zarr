@@ -29,13 +29,13 @@ add_library(${tgt} MODULE
         writers/zarrv3.array.writer.cpp
         writers/blosc.compressor.hh
         writers/blosc.compressor.cpp
-        zarr.hh
-        zarr.cpp
-        zarr.v2.hh
-        zarr.v2.cpp
-        zarr.v3.hh
-        zarr.v3.cpp
-        zarr.driver.c
+        driver/zarr.hh
+        driver/zarr.cpp
+        driver/zarr.v2.hh
+        driver/zarr.v2.cpp
+        driver/zarr.v3.hh
+        driver/zarr.v3.cpp
+        driver/zarr.driver.c
 )
 
 target_include_directories(${tgt} PRIVATE

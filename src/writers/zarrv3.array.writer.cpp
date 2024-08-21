@@ -1,6 +1,6 @@
 #include "zarrv3.array.writer.hh"
 #include "sink.creator.hh"
-#include "zarr.hh"
+#include "driver/zarr.hh"
 
 #include <latch>
 #include <stdexcept>
