@@ -26,7 +26,7 @@ as_path(const StorageProperties& props)
         return uri;
     }
 
-    return uri.substr(7);
+    return uri.substr(7); // strlen("file://") == 7
 }
 
 /// \brief Check that the JSON string is valid. (Valid can mean empty.)
@@ -70,7 +70,6 @@ validate_props(const StorageProperties* props)
         CHECK(tokens.size() > 2); // http://endpoint/bucket
     } else {
         const fs::path path = as_path(*props);
-        LOG("path: '%s'", path.string().c_str());
         fs::path parent_path = path.parent_path();
         if (parent_path.empty())
             parent_path = ".";
