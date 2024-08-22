@@ -123,6 +123,9 @@ extern "C"
       ZarrStreamSettings* settings,
       ZarrCompressionCodec codec);
 
+    ZarrError ZarrStreamSettings_reserve_dimensions(
+      ZarrStreamSettings* settings,
+      size_t count);
     ZarrError ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
                                                size_t index,
                                                const char* name,

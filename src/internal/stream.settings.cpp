@@ -1,18 +1,17 @@
-#include <stddef.h> // size_t
-#include <stdlib.h> // malloc, free
-#include <string.h> // memcpy
+#include <cstring> // memcpy
 
 #include "stream.settings.hh"
 #include "zarr.h"
 
+#define ZARR_DIMENSION_MIN 3
+#define ZARR_DIMENSION_MAX 32
+
 #define ZARR_STREAM_SET_STRING(stream, member, bytes_of_member)                \
     do {                                                                       \
-        if (!stream || !member)                                                \
+        if (!(stream) || !(member))                                            \
             return ZarrError_InvalidArgument;                                  \
-        size_t nbytes = strnlen(member, bytes_of_member) + 1;                  \
-        if (nbytes >= sizeof(stream->member))                                  \
-            return ZarrError_Overflow;                                         \
-        memcpy(stream->member, member, nbytes);                                \
+        size_t nbytes = strnlen(member, bytes_of_member);                      \
+        stream->member = { member, nbytes };                                   \
         return ZarrError_Success;                                              \
     } while (0)
 
@@ -20,34 +19,20 @@
     do {                                                                       \
         if (!stream)                                                           \
             return nullptr;                                                    \
-        return stream->member;                                                 \
+        return stream->member.c_str();                                         \
     } while (0)
-
-namespace {
-bool
-is_valid_dimension(ZarrStreamSettings* stream, size_t index)
-{
-    if (!stream || index >= sizeof(stream->dimensions.data) /
-                              sizeof(stream->dimensions.data[0]))
-        return false;
-
-    return stream->dimensions.data[index].name[0] != '\0';
-}
-} // namespace
 
 /* Create and destroy */
 ZarrStreamSettings*
 ZarrStreamSettings_create()
 {
-    auto* stream = new ZarrStreamSettings();
-    memset(stream, 0, sizeof(*stream));
-    return stream;
+    return new ZarrStreamSettings();
 }
 
 void
 ZarrStreamSettings_destroy(ZarrStreamSettings* settings)
 {
-    free(settings);
+    delete settings;
 }
 
 /* Setters */
@@ -120,6 +105,17 @@ ZarrStreamSettings_set_compression_codec(ZarrStreamSettings* settings,
 }
 
 ZarrError
+ZarrStreamSettings_reserve_dimensions(ZarrStreamSettings* settings,
+                                      size_t count)
+{
+    if (!settings || count < ZARR_DIMENSION_MIN || count > ZARR_DIMENSION_MAX)
+        return ZarrError_InvalidArgument;
+
+    settings->dimensions.resize(count);
+    return ZarrError_Success;
+}
+
+ZarrError
 ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
                                  size_t index,
                                  const char* name,
@@ -129,12 +125,11 @@ ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
                                  size_t chunk_size_px,
                                  size_t shard_size_chunks)
 {
-    if (!settings || !name || name[0] == '\0')
+    if (!settings || !name || strnlen(name, bytes_of_name) == 0)
         return ZarrError_InvalidArgument;
 
     // Check that the index is within bounds
-    if (index >= sizeof(settings->dimensions.data) /
-                   sizeof(settings->dimensions.data[0]))
+    if (index >= settings->dimensions.size())
         return ZarrError_InvalidIndex;
 
     // Check that the dimension type is valid
@@ -145,17 +140,14 @@ ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
     if (chunk_size_px == 0)
         return ZarrError_InvalidArgument;
 
-    struct ZarrDimension_s* dim = &settings->dimensions.data[index];
+    struct ZarrDimension_s* dim = &settings->dimensions[index];
 
-    if (bytes_of_name >= sizeof(dim->name))
-        return ZarrError_Overflow;
-
-    memcpy(dim->name, name, bytes_of_name);
+    dim->name = { name, strnlen(name, bytes_of_name) };
     dim->kind = kind;
     dim->array_size_px = array_size_px;
     dim->chunk_size_px = chunk_size_px;
     dim->shard_size_chunks = shard_size_chunks;
-    ++settings->dimensions.count;
+
     return ZarrError_Success;
 }
 
@@ -222,7 +214,7 @@ ZarrStreamSettings_get_dimension_count(ZarrStreamSettings* settings)
 {
     if (!settings)
         return 0;
-    return settings->dimensions.count;
+    return settings->dimensions.size();
 }
 
 ZarrError
@@ -239,15 +231,15 @@ ZarrStreamSettings_get_dimension(ZarrStreamSettings* settings,
         !shard_size_chunks)
         return ZarrError_InvalidArgument;
 
-    if (!is_valid_dimension(settings, index))
+    if (index >= settings->dimensions.size())
         return ZarrError_InvalidIndex;
 
-    struct ZarrDimension_s* dim = &settings->dimensions.data[index];
+    struct ZarrDimension_s* dim = &settings->dimensions[index];
 
-    if (bytes_of_name < strnlen(dim->name, sizeof(dim->name)) + 1)
+    if (bytes_of_name < dim->name.length() + 1)
         return ZarrError_Overflow;
 
-    memcpy(name, dim->name, strnlen(dim->name, sizeof(dim->name)) + 1);
+    memcpy(name, dim->name.c_str(), dim->name.length() + 1);
     *kind = static_cast<ZarrDimensionType>(dim->kind);
     *array_size_px = dim->array_size_px;
     *chunk_size_px = dim->chunk_size_px;
@@ -266,20 +258,9 @@ ZarrStreamSettings_get_multiscale(ZarrStreamSettings* settings)
 
 /* Internal functions */
 
-uint8_t
-validate_dimension(const struct ZarrDimension_s* dimension)
+bool
+validate_dimension(const struct ZarrDimension_s& dimension)
 {
-    if (!dimension)
-        return 0;
-
-    if (dimension->name[0] == '\0')
-        return 0;
-
-    if (dimension->kind >= ZarrDimensionTypeCount)
-        return 0;
-
-    if (dimension->chunk_size_px == 0)
-        return 0;
-
-    return 1;
+    return !dimension.name.empty() && dimension.kind < ZarrDimensionTypeCount &&
+           dimension.chunk_size_px > 0;
 }

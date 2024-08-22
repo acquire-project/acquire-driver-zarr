@@ -1,5 +1,4 @@
-#ifndef H_ZARR_STREAM
-#define H_ZARR_STREAM
+#pragma once
 
 #include <cstddef> // size_t
 
@@ -10,5 +9,3 @@ struct ZarrStream_s
     struct ZarrStreamSettings_s* settings;
     size_t version;
 };
-
-#endif // H_ZARR_STREAM

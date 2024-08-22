@@ -111,6 +111,8 @@ set_and_get_parameters(ZarrStreamSettings* stream)
              ZarrError_Success);
 
     /* Set and get some dimensions */
+    CHECK_EQ(ZarrStreamSettings_reserve_dimensions(stream, 5),
+             ZarrError_Success);
     CHECK_EQ(ZarrStreamSettings_set_dimension(
                stream, 4, SIZED("x"), ZarrDimensionType_Space, 10, 5, 2),
              ZarrError_Success);
