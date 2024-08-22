@@ -30,7 +30,7 @@ struct ZarrStreamSettings_s
 
     std::vector<ZarrDimension_s> dimensions;
 
-    uint8_t multiscale;
+    bool multiscale;
 };
 
 bool

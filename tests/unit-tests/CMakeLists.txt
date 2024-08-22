@@ -1,6 +1,7 @@
 set(project acquire-zarr)
 
 set(tests
+        thread-pool-push-to-job-queue
         validate-dimension
 )
 

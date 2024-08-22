@@ -1,5 +1,4 @@
-#ifndef H_ACQUIRE_STORAGE_ZARR_THREAD_POOL_V0
-#define H_ACQUIRE_STORAGE_ZARR_THREAD_POOL_V0
+#pragma once
 
 #include <condition_variable>
 #include <functional>
@@ -9,8 +8,8 @@
 #include <string>
 #include <thread>
 
-namespace acquire::sink::zarr::common {
-struct ThreadPool final
+namespace zarr {
+class ThreadPool
 {
   public:
     using JobT = std::function<bool(std::string&)>;
@@ -20,10 +19,18 @@ struct ThreadPool final
     // std::string& argument to the error handler is a diagnostic message from
     // the failing job and is logged to the error stream by the Zarr driver when
     // the next call to `append()` is made.
-    ThreadPool(unsigned int n_threads, std::function<void(const std::string&)> err);
+    ThreadPool(unsigned int n_threads,
+               std::function<void(const std::string&)> err);
     ~ThreadPool() noexcept;
 
-    void push_to_job_queue(JobT&& job);
+    /**
+     * @brief Push a job onto the job queue.
+     *
+     * @param job The job to push onto the queue.
+     * @return true if the job was successfully pushed onto the queue, false
+     * otherwise.
+     */
+    [[nodiscard]] bool push_to_job_queue(JobT&& job);
 
     /**
      * @brief Block until all jobs on the queue have processed, then spin down
@@ -46,5 +53,4 @@ struct ThreadPool final
     [[nodiscard]] bool should_stop_() const noexcept;
     void thread_worker_();
 };
-}
-#endif // H_ACQUIRE_STORAGE_ZARR_THREAD_POOL_V0
+} // zarr

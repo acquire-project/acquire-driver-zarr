@@ -4,7 +4,7 @@
 #include "device/kit/storage.h"
 
 #include "common/utilities.hh"
-#include "common/thread.pool.hh"
+#include "internal/thread.pool.hh"
 #include "common/s3.connection.hh"
 #include "writers/array.writer.hh"
 #include "writers/blosc.compressor.hh"

@@ -253,7 +253,7 @@ ZarrStreamSettings_get_multiscale(ZarrStreamSettings* settings)
 {
     if (!settings)
         return 0;
-    return settings->multiscale;
+    return static_cast<uint8_t>(settings->multiscale);
 }
 
 /* Internal functions */

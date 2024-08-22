@@ -76,7 +76,7 @@ main()
         stream = ZarrStream_create(settings, ZarrVersion_2);
         CHECK(!stream);
 
-        ZarrStream_destroy(stream); // also frees settings
+        ZarrStream_destroy(stream);
     }
 
     // test with valid settings
@@ -94,7 +94,7 @@ main()
         stream = ZarrStream_create(settings, ZarrVersion_2);
         CHECK(stream);
 
-        ZarrStream_destroy(stream); // also frees settings
+        ZarrStream_destroy(stream);
     }
 
 Finalize:

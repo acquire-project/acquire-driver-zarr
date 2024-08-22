@@ -1,4 +1,3 @@
-#include <cstring>
 #include <filesystem>
 #include <string_view>
 
@@ -79,11 +78,9 @@ ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
     if (!validate_settings(settings, version))
         return nullptr;
 
-    auto* stream = new struct ZarrStream_s;
-
-    memset(stream, 0, sizeof(*stream));
-    stream->settings = settings;
-    stream->version = version;
+    // initialize the stream
+    auto* stream = new struct ZarrStream_s(settings, version);
+    ZarrStreamSettings_destroy(settings);
 
     return stream;
 }
@@ -91,9 +88,30 @@ ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
 void
 ZarrStream_destroy(ZarrStream* stream)
 {
-    if (!stream)
-        return;
-
-    ZarrStreamSettings_destroy(stream->settings);
     delete stream;
+}
+
+ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, size_t version)
+  : settings_(*settings)
+  , version_(version)
+{
+    settings_.dimensions = std::move(settings->dimensions);
+
+    // spin up thread pool
+    thread_pool_ = std::make_unique<zarr::ThreadPool>(
+      std::thread::hardware_concurrency(),
+      [this](const std::string& err) { this->set_error_(err); });
+
+    // create the store if it doesn't exist
+}
+
+ZarrStream_s::~ZarrStream_s()
+{
+    thread_pool_->await_stop();
+}
+
+void
+ZarrStream_s::set_error_(const std::string& msg)
+{
+    error_ = msg;
 }
