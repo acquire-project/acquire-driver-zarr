@@ -26,7 +26,11 @@
 ZarrStreamSettings*
 ZarrStreamSettings_create()
 {
-    return new ZarrStreamSettings();
+    try {
+        return new ZarrStreamSettings();
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    }
 }
 
 void

@@ -79,7 +79,16 @@ ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
         return nullptr;
 
     // initialize the stream
-    auto* stream = new struct ZarrStream_s(settings, version);
+    ZarrStream_s* stream;
+
+    try {
+        stream = new ZarrStream(settings, version);
+    } catch (const std::bad_alloc&) {
+        return nullptr;
+    } catch (const std::exception& e) {
+        fprintf(stderr, "Error creating Zarr stream: %s\n", e.what());
+        return nullptr;
+    }
     ZarrStreamSettings_destroy(settings);
 
     return stream;
@@ -91,9 +100,12 @@ ZarrStream_destroy(ZarrStream* stream)
     delete stream;
 }
 
+/** ZarrStream_s implementation **/
+
 ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, size_t version)
   : settings_(*settings)
   , version_(version)
+  , error_()
 {
     settings_.dimensions = std::move(settings->dimensions);
 
@@ -103,6 +115,10 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, size_t version)
       [this](const std::string& err) { this->set_error_(err); });
 
     // create the store if it doesn't exist
+    create_store_();
+
+    if (!error_.empty())
+        throw std::runtime_error("Error creating Zarr stream: " + error_);
 }
 
 ZarrStream_s::~ZarrStream_s()
@@ -114,4 +130,29 @@ void
 ZarrStream_s::set_error_(const std::string& msg)
 {
     error_ = msg;
+}
+
+void
+ZarrStream_s::create_store_()
+{
+    // if the store path is empty, we're using S3
+    if (settings_.store_path.empty()) {
+        // create the S3 store
+        // ...
+    } else {
+        if (fs::exists(settings_.store_path)) {
+            // remove everything inside the store path
+            std::error_code ec;
+            fs::remove_all(settings_.store_path, ec);
+
+            if (ec) {
+                set_error_("Failed to remove existing store path '" +
+                           settings_.store_path + "': " + ec.message());
+                return;
+            }
+        }
+
+        // create the store path
+        fs::create_directories(settings_.store_path);
+    }
 }

@@ -193,6 +193,46 @@ extern "C"
                                   ZarrVersion version);
     void ZarrStream_destroy(ZarrStream* stream);
 
+    /***************************************************************************
+     * Functions for getting parameters on the Zarr stream.
+     *
+     * These functions return the value of the specified parameter.
+     * If the Zarr stream is NULL, the functions return NULL or 0.
+     **************************************************************************/
+    const char* ZarrStream_get_store_path(ZarrStream* stream);
+    const char* ZarrStream_get_s3_endpoint(ZarrStream* stream);
+    const char* ZarrStream_get_s3_bucket_name(ZarrStream* stream);
+    const char* ZarrStream_get_s3_access_key_id(ZarrStream* stream);
+    const char* ZarrStream_get_s3_secret_access_key(ZarrStream* stream);
+
+    ZarrCompressor ZarrStream_get_compressor(ZarrStream* stream);
+    ZarrCompressionCodec ZarrStream_get_compression_codec(ZarrStream* stream);
+
+    size_t ZarrStream_get_dimension_count(ZarrStream* stream);
+    ZarrError ZarrStream_get_dimension(ZarrStream* stream,
+                                       size_t index,
+                                       char* name,
+                                       size_t bytes_of_name,
+                                       ZarrDimensionType* kind,
+                                       size_t* array_size_px,
+                                       size_t* chunk_size_px,
+                                       size_t* shard_size_chunks);
+
+    uint8_t ZarrStream_get_multiscale(ZarrStream* stream);
+
+    /***************************************************************************
+     * Writing data to the Zarr stream.
+     *
+     * This function writes data to the Zarr stream. It returns a ZarrError to
+     * indicate success or failure, which can be converted to a human-readable
+     * error message using Zarr_get_error_message().
+     **************************************************************************/
+
+    ZarrError ZarrStream_append(ZarrStream* stream,
+                                size_t first_frame_index,
+                                const void* data,
+                                size_t bytes_of_data);
+
 #ifdef __cplusplus
 }
 #endif

@@ -18,7 +18,13 @@ struct ZarrStream_s
 
     std::unique_ptr<zarr::ThreadPool> thread_pool_;
 
-    std::string error_;
+    std::string error_; // error message. If nonempty, an error occurred.
 
+    /**
+     * @brief Set an error message.
+     * @param msg The error message to set.
+     */
     void set_error_(const std::string& msg);
+
+    void create_store_();
 };
