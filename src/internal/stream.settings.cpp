@@ -2,30 +2,44 @@
 #include <stdlib.h> // malloc, free
 #include <string.h> // memcpy
 
-#include "stream.settings.h"
+#include "stream.settings.hh"
 #include "zarr.h"
 
 #define ZARR_STREAM_SET_STRING(stream, member, bytes_of_member)                \
-    if (!stream || !member)                                                    \
-        return ZarrError_InvalidArgument;                                      \
-    size_t nbytes = strnlen(member, bytes_of_member) + 1;                      \
-    if (nbytes >= sizeof(stream->member))                                      \
-        return ZarrError_Overflow;                                             \
-    memcpy(stream->member, member, nbytes);                                    \
-    return ZarrError_Success;
+    do {                                                                       \
+        if (!stream || !member)                                                \
+            return ZarrError_InvalidArgument;                                  \
+        size_t nbytes = strnlen(member, bytes_of_member) + 1;                  \
+        if (nbytes >= sizeof(stream->member))                                  \
+            return ZarrError_Overflow;                                         \
+        memcpy(stream->member, member, nbytes);                                \
+        return ZarrError_Success;                                              \
+    } while (0)
 
 #define ZARR_STREAM_GET_STRING(stream, member)                                 \
-    if (!stream)                                                               \
-        return 0;                                                              \
-    return stream->member;
+    do {                                                                       \
+        if (!stream)                                                           \
+            return nullptr;                                                    \
+        return stream->member;                                                 \
+    } while (0)
+
+namespace {
+bool
+is_valid_dimension(ZarrStreamSettings* stream, size_t index)
+{
+    if (!stream || index >= sizeof(stream->dimensions.data) /
+                              sizeof(stream->dimensions.data[0]))
+        return false;
+
+    return stream->dimensions.data[index].name[0] != '\0';
+}
+} // namespace
 
 /* Create and destroy */
 ZarrStreamSettings*
 ZarrStreamSettings_create()
 {
-    ZarrStreamSettings* stream = malloc(sizeof(ZarrStreamSettings));
-    if (!stream)
-        return 0;
+    auto* stream = new ZarrStreamSettings();
     memset(stream, 0, sizeof(*stream));
     return stream;
 }
@@ -192,7 +206,7 @@ ZarrStreamSettings_get_compressor(ZarrStreamSettings* settings)
 {
     if (!settings)
         return ZarrCompressor_None;
-    return settings->compressor;
+    return static_cast<ZarrCompressor>(settings->compressor);
 }
 
 ZarrCompressionCodec
@@ -200,7 +214,7 @@ ZarrStreamSettings_get_compression_codec(ZarrStreamSettings* settings)
 {
     if (!settings)
         return ZarrCompressionCodec_None;
-    return settings->codec;
+    return static_cast<ZarrCompressionCodec>(settings->codec);
 }
 
 size_t
@@ -209,16 +223,6 @@ ZarrStreamSettings_get_dimension_count(ZarrStreamSettings* settings)
     if (!settings)
         return 0;
     return settings->dimensions.count;
-}
-
-static int
-is_valid_dimension(ZarrStreamSettings* stream, size_t index)
-{
-    if (!stream || index >= sizeof(stream->dimensions.data) /
-                              sizeof(stream->dimensions.data[0]))
-        return 0;
-
-    return stream->dimensions.data[index].name[0] != '\0';
 }
 
 ZarrError
@@ -244,7 +248,7 @@ ZarrStreamSettings_get_dimension(ZarrStreamSettings* settings,
         return ZarrError_Overflow;
 
     memcpy(name, dim->name, strnlen(dim->name, sizeof(dim->name)) + 1);
-    *kind = dim->kind;
+    *kind = static_cast<ZarrDimensionType>(dim->kind);
     *array_size_px = dim->array_size_px;
     *chunk_size_px = dim->chunk_size_px;
     *shard_size_chunks = dim->shard_size_chunks;

@@ -1,6 +1,7 @@
 #include "zarr.h"
 
 #include <cstdio>
+#include <string>
 
 // to be used in functions returning bool
 #define CHECK(cond)                                                            \
@@ -60,7 +61,7 @@ main()
     ZarrStreamSettings* settings;
     ZarrStream* stream;
 
-    // test with invalid dimensions
+    // test with invalid settings
     {
         settings = ZarrStreamSettings_create();
         CHECK(settings);
@@ -68,19 +69,27 @@ main()
         CHECK(set_invalid_dimensions(settings));
 
         stream = ZarrStream_create(settings, ZarrVersion_2);
+        CHECK(!stream);
 
-        ZarrStreamSettings_destroy(settings);
-        ZarrStream_destroy(stream);
+        ZarrStream_destroy(stream); // also frees settings
     }
 
-    // test with valid dimensions
+    // test with valid settings
     {
+        settings = ZarrStreamSettings_create();
+        CHECK(settings);
+
         CHECK(set_valid_dimensions(settings));
+
+        const std::string store_path = TEST ".zarr";
+        CHECK_EQ(ZarrStreamSettings_set_store_path(
+                   settings, store_path.c_str(), store_path.size()),
+                 ZarrError_Success);
 
         stream = ZarrStream_create(settings, ZarrVersion_2);
         CHECK(stream);
 
-        ZarrStream_destroy(stream);
+        ZarrStream_destroy(stream); // also frees settings
     }
 
 Finalize:

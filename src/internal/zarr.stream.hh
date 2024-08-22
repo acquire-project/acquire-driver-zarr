@@ -1,9 +1,9 @@
 #ifndef H_ZARR_STREAM
 #define H_ZARR_STREAM
 
-#include <stddef.h> // size_t
+#include <cstddef> // size_t
 
-#include "stream.settings.h"
+#include "stream.settings.hh"
 
 struct ZarrStream_s
 {

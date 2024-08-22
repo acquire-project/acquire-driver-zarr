@@ -1,4 +1,4 @@
-#include "stream.settings.h"
+#include "stream.settings.hh"
 #include "zarr.h"
 
 #include <cstdio>

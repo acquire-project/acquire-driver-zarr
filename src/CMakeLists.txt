@@ -9,10 +9,10 @@ add_library(${tgt-lib} STATIC
         include/zarr.h
         include/zarr_errors.h
         internal/zarr.common.c
-        internal/stream.settings.h
-        internal/stream.settings.c
-        internal/zarr.stream.h
-        internal/zarr.stream.c
+        internal/stream.settings.hh
+        internal/stream.settings.cpp
+        internal/zarr.stream.hh
+        internal/zarr.stream.cpp
 )
 
 target_include_directories(${tgt-lib}

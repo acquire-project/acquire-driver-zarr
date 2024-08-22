@@ -7,6 +7,7 @@ set(tests
 foreach (name ${tests})
     set(tgt "${project}-unit-test-${name}")
     add_executable(${tgt} ${name}.cpp)
+    target_compile_definitions(${tgt} PUBLIC "TEST=\"${tgt}\"")
     target_include_directories(${tgt} PRIVATE
             ${CMAKE_SOURCE_DIR}/src/include
             ${CMAKE_SOURCE_DIR}/src/internal)
