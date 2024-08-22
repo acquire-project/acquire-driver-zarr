@@ -6,15 +6,20 @@ endif ()
 
 set(tgt-lib acquire-zarr)
 add_library(${tgt-lib} STATIC
-        zarr.h
-        zarr_errors.h
-        internal/zarr_internal.h
-        internal/zarr_internal.c
-        internal/zarr_common.c
+        include/zarr.h
+        include/zarr_errors.h
+        internal/zarr.common.c
+        internal/stream.settings.h
+        internal/stream.settings.c
+        internal/zarr.stream.h
+        internal/zarr.stream.c
 )
 
-target_include_directories(${tgt-lib} PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+target_include_directories(${tgt-lib}
+        PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>
 )
 
 set(tgt acquire-driver-zarr)
@@ -52,7 +57,7 @@ add_library(${tgt} MODULE
 )
 
 target_include_directories(${tgt} PRIVATE
-  $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
 )
 
 target_enable_simd(${tgt})

@@ -2,6 +2,7 @@
 #define H_ACQUIRE_ZARR_V0
 
 #include <stddef.h> // size_t
+#include <stdint.h> // uint8_t
 
 #include "zarr_errors.h"
 
@@ -85,7 +86,7 @@ extern "C"
      **************************************************************************/
 
     ZarrStreamSettings* ZarrStreamSettings_create();
-    void ZarrStreamSettings_destroy(ZarrStreamSettings* stream);
+    void ZarrStreamSettings_destroy(ZarrStreamSettings* settings);
 
     /***************************************************************************
      * Functions for setting parameters for a Zarr stream.
@@ -97,62 +98,67 @@ extern "C"
      * not modified.
      **************************************************************************/
 
-    ZarrError ZarrStreamSettings_set_store_path(ZarrStreamSettings* stream,
+    ZarrError ZarrStreamSettings_set_store_path(ZarrStreamSettings* settings,
                                                 const char* store_path,
                                                 size_t bytes_of_store_path);
-    ZarrError ZarrStreamSettings_set_s3_endpoint(ZarrStreamSettings* stream,
+    ZarrError ZarrStreamSettings_set_s3_endpoint(ZarrStreamSettings* settings,
                                                  const char* s3_endpoint,
                                                  size_t bytes_of_s3_endpoint);
     ZarrError ZarrStreamSettings_set_s3_bucket_name(
-      ZarrStreamSettings* stream,
+      ZarrStreamSettings* settings,
       const char* s3_bucket_name,
       size_t bytes_of_s3_bucket_name);
     ZarrError ZarrStreamSettings_set_s3_access_key_id(
-      ZarrStreamSettings* stream,
+      ZarrStreamSettings* settings,
       const char* s3_access_key_id,
       size_t bytes_of_s3_access_key_id);
     ZarrError ZarrStreamSettings_set_s3_secret_access_key(
-      ZarrStreamSettings* stream,
+      ZarrStreamSettings* settings,
       const char* s3_secret_access_key,
       size_t bytes_of_s3_secret_access_key);
 
-    ZarrError ZarrStreamSettings_set_compressor(ZarrStreamSettings* stream,
+    ZarrError ZarrStreamSettings_set_compressor(ZarrStreamSettings* settings,
                                                 ZarrCompressor compressor);
     ZarrError ZarrStreamSettings_set_compression_codec(
-      ZarrStreamSettings* stream,
+      ZarrStreamSettings* settings,
       ZarrCompressionCodec codec);
 
-    ZarrError ZarrStreamSettings_set_dimension(ZarrStreamSettings* stream,
+    ZarrError ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
                                                size_t index,
                                                const char* name,
+                                               size_t bytes_of_name,
                                                ZarrDimensionType kind,
                                                size_t array_size_px,
                                                size_t chunk_size_px,
                                                size_t shard_size_chunks);
 
+    ZarrError ZarrStreamSettings_set_multiscale(ZarrStreamSettings* settings,
+                                                uint8_t multiscale);
+
     /***************************************************************************
-     * Functions for getting parameters on the Zarr stream.
+     * Functions for getting parameters on the Zarr stream settings struct.
      *
      * These functions return the value of the specified parameter.
-     * If the Zarr stream is NULL, the functions return NULL or 0.
+     * If the struct is NULL, the functions return NULL or 0.
      **************************************************************************/
 
-    const char* ZarrStreamSettings_get_store_path(ZarrStreamSettings* stream);
-    const char* ZarrStreamSettings_get_s3_endpoint(ZarrStreamSettings* stream);
+    const char* ZarrStreamSettings_get_store_path(ZarrStreamSettings* settings);
+    const char* ZarrStreamSettings_get_s3_endpoint(
+      ZarrStreamSettings* settings);
     const char* ZarrStreamSettings_get_s3_bucket_name(
-      ZarrStreamSettings* stream);
+      ZarrStreamSettings* settings);
     const char* ZarrStreamSettings_get_s3_access_key_id(
-      ZarrStreamSettings* stream);
+      ZarrStreamSettings* settings);
     const char* ZarrStreamSettings_get_s3_secret_access_key(
-      ZarrStreamSettings* stream);
+      ZarrStreamSettings* settings);
 
     ZarrCompressor ZarrStreamSettings_get_compressor(
-      ZarrStreamSettings* stream);
+      ZarrStreamSettings* settings);
     ZarrCompressionCodec ZarrStreamSettings_get_compression_codec(
-      ZarrStreamSettings* stream);
+      ZarrStreamSettings* settings);
 
-    size_t ZarrStreamSettings_get_dimension_count(ZarrStreamSettings* stream);
-    ZarrError ZarrStreamSettings_get_dimension(ZarrStreamSettings* stream,
+    size_t ZarrStreamSettings_get_dimension_count(ZarrStreamSettings* settings);
+    ZarrError ZarrStreamSettings_get_dimension(ZarrStreamSettings* settings,
                                                size_t index,
                                                char* name,
                                                size_t bytes_of_name,
@@ -160,6 +166,29 @@ extern "C"
                                                size_t* array_size_px,
                                                size_t* chunk_size_px,
                                                size_t* shard_size_chunks);
+
+    uint8_t ZarrStreamSettings_get_multiscale(ZarrStreamSettings* settings);
+
+    /***************************************************************************
+     * Zarr stream
+     *
+     * The Zarr stream struct is created using ZarrStream_create and destroyed
+     * using ZarrStream_destroy. If the struct fails to be created,
+     * ZarrStream_create returns NULL.
+     **************************************************************************/
+
+    typedef enum
+    {
+        ZarrVersion_2 = 2,
+        ZarrVersion_3,
+        ZarrVersionCount
+    } ZarrVersion;
+
+    typedef struct ZarrStream_s ZarrStream;
+
+    ZarrStream* ZarrStream_create(ZarrStreamSettings* settings,
+                                  ZarrVersion version);
+    void ZarrStream_destroy(ZarrStream* stream);
 
 #ifdef __cplusplus
 }

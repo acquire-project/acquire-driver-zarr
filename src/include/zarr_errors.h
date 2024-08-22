@@ -13,6 +13,7 @@ extern "C"
         ZarrError_Overflow,
         ZarrError_InvalidIndex,
         ZarrError_NotYetImplemented,
+        ZarrError_Failure,
         ZarrErrorCount,
     } ZarrError;
 

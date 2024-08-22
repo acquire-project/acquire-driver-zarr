@@ -6,8 +6,8 @@
 #define CHECK(cond)                                                            \
     do {                                                                       \
         if (!(cond)) {                                                         \
-            fprintf(stderr, "Check failed: %s\n", #cond);                      \
-            return false;                                                      \
+            fprintf(stderr, "Assertion failed: %s\n", #cond);                  \
+            goto Error;                                                        \
         }                                                                      \
     } while (0)
 
@@ -26,6 +26,8 @@
             return false;                                                      \
         }                                                                      \
     } while (0)
+
+#define SIZED(name) name, sizeof(name)
 
 bool
 check_preconditions(ZarrStreamSettings* stream)
@@ -54,7 +56,12 @@ check_preconditions(ZarrStreamSettings* stream)
 
     CHECK_EQ(ZarrStreamSettings_get_dimension_count(stream), 0);
 
+    CHECK_EQ(ZarrStreamSettings_get_multiscale(stream), 0);
+
     return true;
+
+Error:
+    return false;
 }
 
 bool
@@ -65,27 +72,27 @@ set_and_get_parameters(ZarrStreamSettings* stream)
     /* Set and get store path */
     TRY_SET_STRING(stream, store_path, "store_path");
     str_param_value = ZarrStreamSettings_get_store_path(stream);
-    CHECK(str_param_value == "store_path");
+    CHECK_EQ(str_param_value, "store_path");
 
     /* Set and get S3 endpoint */
     TRY_SET_STRING(stream, s3_endpoint, "s3_endpoint");
     str_param_value = ZarrStreamSettings_get_s3_endpoint(stream);
-    CHECK(str_param_value == "s3_endpoint");
+    CHECK_EQ(str_param_value, "s3_endpoint");
 
     /* Set and get S3 bucket name */
     TRY_SET_STRING(stream, s3_bucket_name, "s3_bucket_name");
     str_param_value = ZarrStreamSettings_get_s3_bucket_name(stream);
-    CHECK(str_param_value == "s3_bucket_name");
+    CHECK_EQ(str_param_value, "s3_bucket_name");
 
     /* Set and get S3 access key ID */
     TRY_SET_STRING(stream, s3_access_key_id, "s3_access_key_id");
     str_param_value = ZarrStreamSettings_get_s3_access_key_id(stream);
-    CHECK(str_param_value == "s3_access_key_id");
+    CHECK_EQ(str_param_value, "s3_access_key_id");
 
     /* Set and get S3 secret access key */
     TRY_SET_STRING(stream, s3_secret_access_key, "s3_secret_access_key");
     str_param_value = ZarrStreamSettings_get_s3_secret_access_key(stream);
-    CHECK(str_param_value == "s3_secret_access_key");
+    CHECK_EQ(str_param_value, "s3_secret_access_key");
 
     /* Set and get compressor */
     CHECK_EQ(ZarrStreamSettings_set_compressor(stream, ZarrCompressor_Blosc1),
@@ -105,19 +112,19 @@ set_and_get_parameters(ZarrStreamSettings* stream)
 
     /* Set and get some dimensions */
     CHECK_EQ(ZarrStreamSettings_set_dimension(
-               stream, 4, "x", ZarrDimensionType_Space, 10, 5, 2),
+               stream, 4, SIZED("x"), ZarrDimensionType_Space, 10, 5, 2),
              ZarrError_Success);
     CHECK_EQ(ZarrStreamSettings_set_dimension(
-               stream, 3, "y", ZarrDimensionType_Space, 20, 10, 3),
+               stream, 3, SIZED("y"), ZarrDimensionType_Space, 20, 10, 3),
              ZarrError_Success);
     CHECK_EQ(ZarrStreamSettings_set_dimension(
-               stream, 2, "z", ZarrDimensionType_Space, 30, 15, 4),
+               stream, 2, SIZED("z"), ZarrDimensionType_Space, 30, 15, 4),
              ZarrError_Success);
     CHECK_EQ(ZarrStreamSettings_set_dimension(
-               stream, 1, "c", ZarrDimensionType_Channel, 40, 20, 5),
+               stream, 1, SIZED("c"), ZarrDimensionType_Channel, 40, 20, 5),
              ZarrError_Success);
     CHECK_EQ(ZarrStreamSettings_set_dimension(
-               stream, 0, "t", ZarrDimensionType_Time, 50, 25, 6),
+               stream, 0, SIZED("t"), ZarrDimensionType_Time, 50, 25, 6),
              ZarrError_Success);
 
     CHECK_EQ(ZarrStreamSettings_get_dimension_count(stream), 5);
@@ -203,7 +210,14 @@ set_and_get_parameters(ZarrStreamSettings* stream)
     CHECK_EQ(chunk_size_px, 5);
     CHECK_EQ(shard_size_chunks, 2);
 
+    /* Set and get multiscale */
+    CHECK_EQ(ZarrStreamSettings_set_multiscale(stream, 10), ZarrError_Success);
+    CHECK_EQ(ZarrStreamSettings_get_multiscale(stream), 1); // normalized to 1
+
     return true;
+
+Error:
+    return false;
 }
 
 int
@@ -217,11 +231,8 @@ main()
 
     int retval = 0;
 
-    if (!check_preconditions(stream))
-        goto Error;
-
-    if (!set_and_get_parameters(stream))
-        goto Error;
+    CHECK(check_preconditions(stream));
+    CHECK(set_and_get_parameters(stream));
 
 Finalize:
     ZarrStreamSettings_destroy(stream);
