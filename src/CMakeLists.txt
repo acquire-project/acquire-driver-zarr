@@ -4,6 +4,19 @@ if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
+set(tgt-lib acquire-zarr)
+add_library(${tgt-lib} STATIC
+        zarr.h
+        zarr_errors.h
+        internal/zarr_internal.h
+        internal/zarr_internal.c
+        internal/zarr_common.c
+)
+
+target_include_directories(${tgt-lib} PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+)
+
 set(tgt acquire-driver-zarr)
 add_library(${tgt} MODULE
         common/dimension.hh
