@@ -1,5 +1,5 @@
 #include "s3.connection.hh"
-#include "utilities.hh"
+#include "logger.hh"
 
 #include <miniocpp/utils.h>
 
@@ -7,12 +7,9 @@
 #include <sstream>
 #include <string_view>
 
-namespace zarr = acquire::sink::zarr;
-namespace common = zarr::common;
-
-common::S3Connection::S3Connection(const std::string& endpoint,
-                                   const std::string& access_key_id,
-                                   const std::string& secret_access_key)
+zarr::S3Connection::S3Connection(const std::string& endpoint,
+                                 const std::string& access_key_id,
+                                 const std::string& secret_access_key)
 {
     minio::s3::BaseUrl url(endpoint);
     url.https = endpoint.starts_with("https");
@@ -20,17 +17,18 @@ common::S3Connection::S3Connection(const std::string& endpoint,
     provider_ = std::make_unique<minio::creds::StaticProvider>(
       access_key_id, secret_access_key);
     client_ = std::make_unique<minio::s3::Client>(url, provider_.get());
+
     CHECK(client_);
 }
 
 bool
-common::S3Connection::check_connection()
+zarr::S3Connection::check_connection()
 {
     return static_cast<bool>(client_->ListBuckets());
 }
 
 bool
-common::S3Connection::bucket_exists(std::string_view bucket_name)
+zarr::S3Connection::bucket_exists(std::string_view bucket_name)
 {
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
 
@@ -42,8 +40,8 @@ common::S3Connection::bucket_exists(std::string_view bucket_name)
 }
 
 bool
-common::S3Connection::object_exists(std::string_view bucket_name,
-                                    std::string_view object_name)
+zarr::S3Connection::object_exists(std::string_view bucket_name,
+                                  std::string_view object_name)
 {
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
     EXPECT(!object_name.empty(), "Object name must not be empty.");
@@ -58,9 +56,9 @@ common::S3Connection::object_exists(std::string_view bucket_name,
 }
 
 std::string
-common::S3Connection::put_object(std::string_view bucket_name,
-                                 std::string_view object_name,
-                                 std::span<uint8_t> data)
+zarr::S3Connection::put_object(std::string_view bucket_name,
+                               std::string_view object_name,
+                               std::span<uint8_t> data)
 {
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
     EXPECT(!object_name.empty(), "Object name must not be empty.");
@@ -70,7 +68,7 @@ common::S3Connection::put_object(std::string_view bucket_name,
                                     data.size());
     std::basic_istream stream(&buffer);
 
-    TRACE(
+    LOG_DEBUG(
       "Putting object %s in bucket %s", object_name.data(), bucket_name.data());
     minio::s3::PutObjectArgs args(stream, (long)data.size(), 0);
     args.bucket = bucket_name;
@@ -78,10 +76,10 @@ common::S3Connection::put_object(std::string_view bucket_name,
 
     auto response = client_->PutObject(args);
     if (!response) {
-        LOGE("Failed to put object %s in bucket %s: %s",
-             object_name.data(),
-             bucket_name.data(),
-             response.Error().String().c_str());
+        LOG_ERROR("Failed to put object %s in bucket %s: %s",
+                  object_name.data(),
+                  bucket_name.data(),
+                  response.Error().String().c_str());
         return {};
     }
 
@@ -89,25 +87,25 @@ common::S3Connection::put_object(std::string_view bucket_name,
 }
 
 bool
-common::S3Connection::delete_object(std::string_view bucket_name,
-                                    std::string_view object_name)
+zarr::S3Connection::delete_object(std::string_view bucket_name,
+                                  std::string_view object_name)
 {
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
     EXPECT(!object_name.empty(), "Object name must not be empty.");
 
-    TRACE("Deleting object %s from bucket %s",
-          object_name.data(),
-          bucket_name.data());
+    LOG_DEBUG("Deleting object %s from bucket %s",
+              object_name.data(),
+              bucket_name.data());
     minio::s3::RemoveObjectArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
 
     auto response = client_->RemoveObject(args);
     if (!response) {
-        LOGE("Failed to delete object %s from bucket %s: %s",
-             object_name.data(),
-             bucket_name.data(),
-             response.Error().String().c_str());
+        LOG_ERROR("Failed to delete object %s from bucket %s: %s",
+                  object_name.data(),
+                  bucket_name.data(),
+                  response.Error().String().c_str());
         return false;
     }
 
@@ -115,15 +113,15 @@ common::S3Connection::delete_object(std::string_view bucket_name,
 }
 
 std::string
-common::S3Connection::create_multipart_object(std::string_view bucket_name,
-                                              std::string_view object_name)
+zarr::S3Connection::create_multipart_object(std::string_view bucket_name,
+                                            std::string_view object_name)
 {
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
     EXPECT(!object_name.empty(), "Object name must not be empty.");
 
-    TRACE("Creating multipart object %s in bucket %s",
-          object_name.data(),
-          bucket_name.data());
+    LOG_DEBUG("Creating multipart object %s in bucket %s",
+              object_name.data(),
+              bucket_name.data());
     minio::s3::CreateMultipartUploadArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
@@ -135,21 +133,21 @@ common::S3Connection::create_multipart_object(std::string_view bucket_name,
 }
 
 std::string
-common::S3Connection::upload_multipart_object_part(std::string_view bucket_name,
-                                                   std::string_view object_name,
-                                                   std::string_view upload_id,
-                                                   std::span<uint8_t> data,
-                                                   unsigned int part_number)
+zarr::S3Connection::upload_multipart_object_part(std::string_view bucket_name,
+                                                 std::string_view object_name,
+                                                 std::string_view upload_id,
+                                                 std::span<uint8_t> data,
+                                                 unsigned int part_number)
 {
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
     EXPECT(!object_name.empty(), "Object name must not be empty.");
     EXPECT(!data.empty(), "Number of bytes must be positive.");
     EXPECT(part_number, "Part number must be positive.");
 
-    TRACE("Uploading multipart object part %zu for object %s in bucket %s",
-          part_number,
-          object_name.data(),
-          bucket_name.data());
+    LOG_DEBUG("Uploading multipart object part %zu for object %s in bucket %s",
+              part_number,
+              object_name.data(),
+              bucket_name.data());
 
     std::string_view sv(reinterpret_cast<const char*>(data.data()),
                         data.size());
@@ -163,11 +161,11 @@ common::S3Connection::upload_multipart_object_part(std::string_view bucket_name,
 
     auto response = client_->UploadPart(args);
     if (!response) {
-        LOGE("Failed to upload part %zu for object %s in bucket %s: %s",
-             part_number,
-             object_name.data(),
-             bucket_name.data(),
-             response.Error().String().c_str());
+        LOG_ERROR("Failed to upload part %zu for object %s in bucket %s: %s",
+                  part_number,
+                  object_name.data(),
+                  bucket_name.data(),
+                  response.Error().String().c_str());
         return {};
     }
 
@@ -175,7 +173,7 @@ common::S3Connection::upload_multipart_object_part(std::string_view bucket_name,
 }
 
 bool
-common::S3Connection::complete_multipart_object(
+zarr::S3Connection::complete_multipart_object(
   std::string_view bucket_name,
   std::string_view object_name,
   std::string_view upload_id,
@@ -186,9 +184,9 @@ common::S3Connection::complete_multipart_object(
     EXPECT(!upload_id.empty(), "Upload id must not be empty.");
     EXPECT(!parts.empty(), "Parts list must not be empty.");
 
-    TRACE("Completing multipart object %s in bucket %s",
-          object_name.data(),
-          bucket_name.data());
+    LOG_DEBUG("Completing multipart object %s in bucket %s",
+              object_name.data(),
+              bucket_name.data());
     minio::s3::CompleteMultipartUploadArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
@@ -197,20 +195,20 @@ common::S3Connection::complete_multipart_object(
 
     auto response = client_->CompleteMultipartUpload(args);
     if (!response) {
-        LOGE("Failed to complete multipart object %s in bucket %s: %s",
-             object_name.data(),
-             bucket_name.data(),
-             response.Error().String().c_str());
+        LOG_ERROR("Failed to complete multipart object %s in bucket %s: %s",
+                  object_name.data(),
+                  bucket_name.data(),
+                  response.Error().String().c_str());
         return false;
     }
 
     return true;
 }
 
-common::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
-                                           const std::string& endpoint,
-                                           const std::string& access_key_id,
-                                           const std::string& secret_access_key)
+zarr::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
+                                         const std::string& endpoint,
+                                         const std::string& access_key_id,
+                                         const std::string& secret_access_key)
   : is_accepting_connections_{ true }
 {
     for (auto i = 0; i < n_connections; ++i) {
@@ -226,14 +224,14 @@ common::S3ConnectionPool::S3ConnectionPool(size_t n_connections,
     CHECK(!connections_.empty());
 }
 
-common::S3ConnectionPool::~S3ConnectionPool() noexcept
+zarr::S3ConnectionPool::~S3ConnectionPool() noexcept
 {
     is_accepting_connections_ = false;
     cv_.notify_all();
 }
 
-std::unique_ptr<common::S3Connection>
-common::S3ConnectionPool::get_connection()
+std::unique_ptr<zarr::S3Connection>
+zarr::S3ConnectionPool::get_connection()
 {
     std::unique_lock lock(connections_mutex_);
     cv_.wait(lock, [this] { return !connections_.empty(); });
@@ -248,8 +246,7 @@ common::S3ConnectionPool::get_connection()
 }
 
 void
-common::S3ConnectionPool::return_connection(
-  std::unique_ptr<S3Connection>&& conn)
+zarr::S3ConnectionPool::return_connection(std::unique_ptr<S3Connection>&& conn)
 {
     std::scoped_lock lock(connections_mutex_);
     connections_.push_back(std::move(conn));
@@ -274,25 +271,25 @@ get_credentials(std::string& endpoint,
 {
     char* env = nullptr;
     if (!(env = std::getenv("ZARR_S3_ENDPOINT"))) {
-        LOGE("ZARR_S3_ENDPOINT not set.");
+        LOG_ERROR("ZARR_S3_ENDPOINT not set.");
         return false;
     }
     endpoint = env;
 
     if (!(env = std::getenv("ZARR_S3_BUCKET_NAME"))) {
-        LOGE("ZARR_S3_BUCKET_NAME not set.");
+        LOG_ERROR("ZARR_S3_BUCKET_NAME not set.");
         return false;
     }
     bucket_name = env;
 
     if (!(env = std::getenv("ZARR_S3_ACCESS_KEY_ID"))) {
-        LOGE("ZARR_S3_ACCESS_KEY_ID not set.");
+        LOG_ERROR("ZARR_S3_ACCESS_KEY_ID not set.");
         return false;
     }
     access_key_id = env;
 
     if (!(env = std::getenv("ZARR_S3_SECRET_ACCESS_KEY"))) {
-        LOGE("ZARR_S3_SECRET_ACCESS_KEY not set.");
+        LOG_ERROR("ZARR_S3_SECRET_ACCESS_KEY not set.");
         return false;
     }
     secret_access_key = env;
@@ -326,7 +323,7 @@ extern "C"
         int retval = 0;
 
         try {
-            common::S3Connection conn(
+            zarr::S3Connection conn(
               s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
             CHECK(conn.bucket_exists(bucket_name));
@@ -349,9 +346,9 @@ extern "C"
 
             retval = 1;
         } catch (const std::exception& e) {
-            LOGE("Failed to create S3 connection: %s", e.what());
+            LOG_ERROR("Failed to create S3 connection: %s", e.what());
         } catch (...) {
-            LOGE("Failed to create S3 connection: unknown error");
+            LOG_ERROR("Failed to create S3 connection: unknown error");
         }
 
         return retval;
@@ -380,7 +377,7 @@ extern "C"
         int retval = 0;
 
         try {
-            common::S3Connection conn(
+            zarr::S3Connection conn(
               s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
             CHECK(conn.bucket_exists(bucket_name));
@@ -445,9 +442,9 @@ extern "C"
 
             retval = 1;
         } catch (const std::exception& e) {
-            LOGE("Failed to create S3 connection: %s", e.what());
+            LOG_ERROR("Failed to create S3 connection: %s", e.what());
         } catch (...) {
-            LOGE("Failed to create S3 connection: unknown error");
+            LOG_ERROR("Failed to create S3 connection: unknown error");
         }
 
         return retval;

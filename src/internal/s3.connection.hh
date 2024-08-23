@@ -1,5 +1,7 @@
 #pragma once
 
+#include <miniocpp/client.h>
+
 #include <condition_variable>
 #include <list>
 #include <memory>
@@ -8,61 +10,72 @@
 #include <span>
 #include <vector>
 
-#include <miniocpp/client.h>
-
-namespace acquire::sink::zarr::common {
-struct S3Connection final
+namespace zarr {
+class S3Connection
 {
-    S3Connection() = delete;
+  public:
     explicit S3Connection(const std::string& endpoint,
                           const std::string& access_key_id,
                           const std::string& secret_access_key);
 
     ~S3Connection() noexcept = default;
 
-    /// @brief Test a connection by listing all buckets at this connection's
-    ///        endpoint.
-    /// @returns True if the connection is valid, otherwise false.
+    /**
+     * @brief Test a connection by listing all buckets at this connection's
+     * endpoint.
+     * @returns True if the connection is valid, otherwise false.
+     */
     bool check_connection();
 
-    // bucket operations
-    /// @brief Check whether a bucket exists.
-    /// @param bucket_name The name of the bucket.
-    /// @returns True if the bucket exists, otherwise false.
-    /// @throws std::runtime_error if the bucket name is empty.
+    /* Bucket operations */
+
+    /**
+     * @brief Check whether a bucket exists.
+     * @param bucket_name The name of the bucket.
+     * @returns True if the bucket exists, otherwise false.
+     * @throws std::runtime_error if the bucket name is empty.
+     */
     bool bucket_exists(std::string_view bucket_name);
 
-    // object operations
-    /// @brief Check whether an object exists.
-    /// @param bucket_name The name of the bucket containing the object.
-    /// @param object_name The name of the object.
-    /// @returns True if the object exists, otherwise false.
-    /// @throws std::runtime_error if the bucket name is empty or the object
-    ///         name is empty.
+    /* Object operations */
+
+    /**
+     * @brief Check whether an object exists.
+     * @param bucket_name The name of the bucket containing the object.
+     * @param object_name The name of the object.
+     * @returns True if the object exists, otherwise false.
+     * @throws std::runtime_error if the bucket name is empty or the object
+     * name is empty.
+     */
     bool object_exists(std::string_view bucket_name,
                        std::string_view object_name);
 
-    /// @brief Put an object.
-    /// @param bucket_name The name of the bucket to put the object in.
-    /// @param object_name The name of the object.
-    /// @param data The data to put in the object.
-    /// @returns The etag of the object.
-    /// @throws std::runtime_error if the bucket name is empty, the object name
-    ///         is empty, or @p data is empty.
+    /**
+     * @brief Put an object.
+     * @param bucket_name The name of the bucket to put the object in.
+     * @param object_name The name of the object.
+     * @param data The data to put in the object.
+     * @returns The etag of the object.
+     * @throws std::runtime_error if the bucket name is empty, the object name
+     * is empty, or @p data is empty.
+     */
     [[nodiscard]] std::string put_object(std::string_view bucket_name,
                                          std::string_view object_name,
                                          std::span<uint8_t> data);
 
-    /// @brief Delete an object.
-    /// @param bucket_name The name of the bucket containing the object.
-    /// @param object_name The name of the object.
-    /// @returns True if the object was successfully deleted, otherwise false.
-    /// @throws std::runtime_error if the bucket name is empty or the object
-    ///         name is empty.
+    /**
+     * @brief Delete an object.
+     * @param bucket_name The name of the bucket containing the object.
+     * @param object_name The name of the object.
+     * @returns True if the object was successfully deleted, otherwise false.
+     * @throws std::runtime_error if the bucket name is empty or the object
+     * name is empty.
+     */
     [[nodiscard]] bool delete_object(std::string_view bucket_name,
                                      std::string_view object_name);
 
-    // multipart object operations
+    /* Multipart object operations */
+
     /// @brief Create a multipart object.
     /// @param bucket_name The name of the bucket containing the object.
     /// @param object_name The name of the object.
@@ -108,7 +121,7 @@ struct S3Connection final
     std::unique_ptr<minio::creds::StaticProvider> provider_;
 };
 
-struct S3ConnectionPool final
+class S3ConnectionPool
 {
   public:
     S3ConnectionPool(size_t n_connections,
@@ -127,4 +140,4 @@ struct S3ConnectionPool final
 
     std::atomic<bool> is_accepting_connections_;
 };
-} // namespace acquire::sink::zarr::common
+} // namespace zarr

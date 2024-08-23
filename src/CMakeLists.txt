@@ -1,35 +1,41 @@
-#add_subdirectory(3rdParty)
-#
+add_subdirectory(3rdParty)
+
 #if (NOT TARGET acquire-core-logger)
 #    add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 #endif ()
 
-set(tgt-lib acquire-zarr)
-add_library(${tgt-lib} STATIC
+set(tgt acquire-zarr)
+add_library(${tgt} STATIC
         include/zarr.h
         include/zarr_errors.h
+        internal/logger.hh
+        internal/logger.cpp
         internal/zarr.common.c
         internal/stream.settings.hh
         internal/stream.settings.cpp
         internal/zarr.stream.hh
         internal/zarr.stream.cpp
-#        internal/utilities.hh
-#        internal/utilities.cpp
         internal/thread.pool.hh
         internal/thread.pool.cpp
+        internal/s3.connection.hh
+        internal/s3.connection.cpp
 )
 
-target_include_directories(${tgt-lib}
+target_include_directories(${tgt}
         PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>
 )
 
-install(TARGETS ${tgt-lib} LIBRARY DESTINATION lib)
+target_link_libraries(${tgt} PRIVATE
+        miniocpp::miniocpp
+)
 
-#set(tgt acquire-driver-zarr)
-#add_library(${tgt} MODULE
+install(TARGETS ${tgt} LIBRARY DESTINATION lib)
+
+#set(tgt-driver acquire-driver-zarr)
+#add_library(${tgt-driver} MODULE
 #        common/dimension.hh
 #        common/dimension.cpp
 #        common/s3.connection.hh
@@ -60,12 +66,12 @@ install(TARGETS ${tgt-lib} LIBRARY DESTINATION lib)
 #        driver/zarr.driver.c
 #)
 #
-#target_include_directories(${tgt} PRIVATE
+#target_include_directories(${tgt-driver} PRIVATE
 #        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
 #)
 #
-#target_enable_simd(${tgt})
-#target_link_libraries(${tgt} PRIVATE
+#target_enable_simd(${tgt-driver})
+#target_link_libraries(${tgt-driver} PRIVATE
 #        acquire-core-logger
 #        acquire-core-platform
 #        acquire-device-kit
@@ -74,8 +80,8 @@ install(TARGETS ${tgt-lib} LIBRARY DESTINATION lib)
 #        nlohmann_json::nlohmann_json
 #        miniocpp::miniocpp
 #)
-#set_target_properties(${tgt} PROPERTIES
+#set_target_properties(${tgt-driver} PROPERTIES
 #        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 #)
 #
-#install(TARGETS ${tgt} LIBRARY DESTINATION lib)
+#install(TARGETS ${tgt-driver} LIBRARY DESTINATION lib)

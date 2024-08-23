@@ -1,6 +1,6 @@
 #pragma once
 
-#include "macros.hh"
+#include "../internal/macros.hh"
 #include "device/props/storage.h"
 
 #include <string>

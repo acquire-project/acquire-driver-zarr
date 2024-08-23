@@ -199,6 +199,9 @@ extern "C"
      * These functions return the value of the specified parameter.
      * If the Zarr stream is NULL, the functions return NULL or 0.
      **************************************************************************/
+
+    ZarrVersion ZarrStream_get_version(ZarrStream* stream);
+
     const char* ZarrStream_get_store_path(ZarrStream* stream);
     const char* ZarrStream_get_s3_endpoint(ZarrStream* stream);
     const char* ZarrStream_get_s3_bucket_name(ZarrStream* stream);

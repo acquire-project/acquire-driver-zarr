@@ -4,7 +4,7 @@
 #include "logger.h"
 #include "device/props/components.h"
 #include "device/props/storage.h"
-#include "macros.hh"
+#include "../internal/macros.hh"
 #include "dimension.hh"
 
 #include <condition_variable>
