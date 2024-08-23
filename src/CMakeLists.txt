@@ -19,6 +19,8 @@ add_library(${tgt} STATIC
         internal/thread.pool.cpp
         internal/s3.connection.hh
         internal/s3.connection.cpp
+        internal/blosc.compressor.hh
+        internal/blosc.compressor.cpp
 )
 
 target_include_directories(${tgt}
@@ -29,6 +31,7 @@ target_include_directories(${tgt}
 )
 
 target_link_libraries(${tgt} PRIVATE
+        blosc_static
         miniocpp::miniocpp
 )
 
