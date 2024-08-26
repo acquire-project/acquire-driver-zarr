@@ -6,7 +6,7 @@
 #include <iomanip>
 #include <filesystem>
 
-LogLevel Logger::current_level = LogLevel::INFO;
+LogLevel Logger::current_level = LogLevel_Info;
 
 void
 Logger::setLogLevel(LogLevel level)
@@ -38,17 +38,17 @@ Logger::log(LogLevel level,
     std::ostream* stream = &std::cout;
 
     switch (level) {
-        case LogLevel::DEBUG:
+        case LogLevel_Debug:
             prefix = "[DEBUG] ";
             break;
-        case LogLevel::INFO:
+        case LogLevel_Info:
             prefix = "[INFO] ";
             break;
-        case LogLevel::WARNING:
+        case LogLevel_Warning:
             prefix = "[WARNING] ";
             stream = &std::cerr;
             break;
-        case LogLevel::ERROR:
+        case LogLevel_Error:
             prefix = "[ERROR] ";
             stream = &std::cerr;
             break;

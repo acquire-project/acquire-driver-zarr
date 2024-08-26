@@ -1,11 +1,11 @@
 #include <string>
 
-enum class LogLevel
+enum LogLevel
 {
-    DEBUG,
-    INFO,
-    WARNING,
-    ERROR
+    LogLevel_Debug,
+    LogLevel_Info,
+    LogLevel_Warning,
+    LogLevel_Error
 };
 
 class Logger
@@ -27,17 +27,19 @@ class Logger
 };
 
 #define LOG_DEBUG(...)                                                         \
-    Logger::log(LogLevel::DEBUG, __FILE__, __LINE__, __func__, __VA_ARGS__)
+    Logger::log(LogLevel_Debug, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define LOG_INFO(...)                                                          \
-    Logger::log(LogLevel::INFO, __FILE__, __LINE__, __func__, __VA_ARGS__)
+    Logger::log(LogLevel_Info, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define LOG_WARNING(...)                                                       \
-    Logger::log(LogLevel::WARNING, __FILE__, __LINE__, __func__, __VA_ARGS__)
+    Logger::log(LogLevel_Warning, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define LOG_ERROR(...)                                                         \
-    Logger::log(LogLevel::ERROR, __FILE__, __LINE__, __func__, __VA_ARGS__)
+    Logger::log(LogLevel_Error, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 #define EXPECT(e, ...)                                                         \
     do {                                                                       \
-        if (!(e))                                                              \
-            throw std::runtime_error(LOG_ERROR(__VA_ARGS__));                  \
+        if (!(e)) {                                                            \
+            const std::string err = LOG_ERROR(__VA_ARGS__);                    \
+            throw std::runtime_error(err);                                     \
+        }                                                                      \
     } while (0)
 #define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t%s", #e)

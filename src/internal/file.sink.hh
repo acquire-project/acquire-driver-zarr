@@ -10,11 +10,11 @@ namespace zarr {
 struct FileSink : public Sink
 {
   public:
-    explicit FileSink(const std::string& uri);
+    explicit FileSink(const std::string& filename);
 
     bool write(size_t offset, const uint8_t* data, size_t bytes_of_buf) override;
 
   private:
-    std::unique_ptr<std::ofstream> file_;
+    std::ofstream file_;
 };
 } // namespace zarr

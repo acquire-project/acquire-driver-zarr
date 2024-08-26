@@ -3,6 +3,10 @@
 
 #include <miniocpp/client.h>
 
+#ifdef min
+#undef min
+#endif
+
 zarr::S3Sink::S3Sink(std::string_view bucket_name,
                      std::string_view object_key,
                      std::shared_ptr<S3ConnectionPool> connection_pool)

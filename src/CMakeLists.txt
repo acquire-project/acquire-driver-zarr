@@ -24,10 +24,10 @@ add_library(${tgt} STATIC
         internal/sink.hh
         internal/file.sink.hh
         internal/file.sink.cpp
-        internal/s3.sink.hh
-        internal/s3.sink.cpp
-        internal/array.writer.hh
-        internal/array.writer.cpp
+#        internal/s3.sink.hh
+#        internal/s3.sink.cpp
+#        internal/array.writer.hh
+#        internal/array.writer.cpp
 )
 
 target_include_directories(${tgt}
@@ -90,8 +90,8 @@ install(TARGETS ${tgt} LIBRARY DESTINATION lib)
 #        nlohmann_json::nlohmann_json
 #        miniocpp::miniocpp
 #)
-#set_target_properties(${tgt-driver} PROPERTIES
-#        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-#)
+set_target_properties(${tgt} PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+)
 #
 #install(TARGETS ${tgt-driver} LIBRARY DESTINATION lib)

@@ -1,12 +1,10 @@
 #include "array.writer.hh"
-#include "common/utilities.hh"
+#include "logger.hh"
 
 #include <cmath>
 #include <functional>
 #include <latch>
 #include <stdexcept>
-
-namespace zarr = acquire::sink::zarr;
 
 namespace {
 /// Returns the index of the chunk in the lattice of chunks for the given frame
