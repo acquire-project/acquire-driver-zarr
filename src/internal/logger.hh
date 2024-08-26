@@ -38,8 +38,8 @@ class Logger
 #define EXPECT(e, ...)                                                         \
     do {                                                                       \
         if (!(e)) {                                                            \
-            const std::string err = LOG_ERROR(__VA_ARGS__);                    \
-            throw std::runtime_error(err);                                     \
+            const std::string __err = LOG_ERROR(__VA_ARGS__);                  \
+            throw std::runtime_error(__err);                                   \
         }                                                                      \
     } while (0)
 #define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t%s", #e)

@@ -4,13 +4,13 @@
 
 #include <memory>
 #include <fstream>
-#include <string>
+#include <string_view>
 
 namespace zarr {
 struct FileSink : public Sink
 {
   public:
-    explicit FileSink(const std::string& filename);
+    explicit FileSink(std::string_view filename);
 
     bool write(size_t offset, const uint8_t* data, size_t bytes_of_buf) override;
 

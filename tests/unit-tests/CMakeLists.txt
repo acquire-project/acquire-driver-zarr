@@ -7,6 +7,7 @@ set(tests
         s3-connection-put-object
         s3-connection-upload-multipart-object
         s3-sink-write
+        sink-creator-create-chunk-file-sinks
 )
 
 foreach (name ${tests})

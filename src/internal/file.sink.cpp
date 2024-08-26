@@ -6,8 +6,8 @@
 
 namespace fs = std::filesystem;
 
-zarr::FileSink::FileSink(const std::string& filename)
-: file_(filename, std::ios::binary | std::ios::trunc)
+zarr::FileSink::FileSink(std::string_view filename)
+: file_(filename.data(), std::ios::binary | std::ios::trunc)
 {
 }
 

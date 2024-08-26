@@ -1,30 +1,58 @@
 #pragma once
 
+#include "stream.settings.hh" // ZarrDimension_s
 #include "sink.hh"
-#include "common/utilities.hh"
-#include "common/dimension.hh"
-#include "common/thread.pool.hh"
-#include "common/s3.connection.hh"
+#include "thread.pool.hh"
+#include "s3.connection.hh"
 
 #include <optional>
 #include <memory>
 #include <unordered_map>
 
-namespace acquire::sink::zarr {
+namespace zarr {
+using Dimension = ZarrDimension_s;
+
 class SinkCreator final
 {
   public:
     SinkCreator() = delete;
-    SinkCreator(std::shared_ptr<common::ThreadPool> thread_pool_,
-                std::shared_ptr<common::S3ConnectionPool> connection_pool);
+    SinkCreator(std::shared_ptr<ThreadPool> thread_pool_,
+                std::shared_ptr<S3ConnectionPool> connection_pool);
     ~SinkCreator() noexcept = default;
 
-    /// @brief Create a sink from a URI and a path.
-    /// @param[in] base_uri The base URI for the sink.
-    /// @param[in] path The path for the sink.
-    /// @return The sink created, or nullptr if the URI is invalid.
-    std::unique_ptr<Sink> make_sink(std::string_view base_uri,
-                                    std::string_view path);
+    /**
+     * @brief Create a sink from a file path.
+     * @param file_path The path to the file.
+     * @return Pointer to the sink created, or nullptr if the file cannot be
+     * opened.
+     * @throws std::runtime_error if the file path is not valid.
+     */
+    std::unique_ptr<Sink> make_sink(std::string_view file_path);
+
+    /**
+     * @brief Create a sink from an S3 bucket name and object key.
+     * @param bucket_name The name of the bucket in which the object is stored.
+     * @param object_key The key of the object to write to.
+     * @return Pointer to the sink created, or nullptr if the bucket does not
+     * exist.
+     * @throws std::runtime_error if the bucket name or object key is not valid,
+     * or if there is no connection pool.
+     */
+    std::unique_ptr<Sink> make_sink(std::string_view bucket_name,
+                                    std::string_view object_key);
+
+    [[nodiscard]] bool make_data_sinks(
+      std::string_view base_path,
+      const std::vector<Dimension>& dimensions,
+      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      std::vector<std::unique_ptr<Sink>>& part_sinks);
+
+    [[nodiscard]] bool make_data_sinks(
+      std::string_view bucket_name,
+      std::string_view base_path,
+      const std::vector<Dimension>& dimensions,
+      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      std::vector<std::unique_ptr<Sink>>& part_sinks);
 
     /// @brief Create a collection of data sinks, either chunk or shard.
     /// @param[in] base_uri The base URI for the sinks.
@@ -50,13 +78,13 @@ class SinkCreator final
     /// @throws std::runtime_error if @p base_uri is not valid, or if, for S3
     ///         sinks, the bucket does not exist.
     [[nodiscard]] bool make_metadata_sinks(
-      ZarrVersion version,
+      size_t version,
       const std::string& base_uri,
       std::unordered_map<std::string, std::unique_ptr<Sink>>& metadata_sinks);
 
   private:
-    std::shared_ptr<common::ThreadPool> thread_pool_;
-    std::shared_ptr<common::S3ConnectionPool> connection_pool_; // could be null
+    std::shared_ptr<ThreadPool> thread_pool_;
+    std::shared_ptr<S3ConnectionPool> connection_pool_; // could be null
 
     /// @brief Parallel create a collection of directories.
     /// @param[in] dir_paths The directories to create.
