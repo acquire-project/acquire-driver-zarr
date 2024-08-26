@@ -19,6 +19,7 @@ else ()
             unit-tests
             get
             get-meta
+            get-set-get
             external-metadata-with-whitespace-ok
             restart-stopped-zarr-resets-threadpool
             repeat-start

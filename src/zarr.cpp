@@ -20,11 +20,13 @@ as_path(const StorageProperties& props)
         return {};
     }
 
-    const size_t offset =
-      strlen(props.uri.str) > 7 && strcmp(props.uri.str, "file://") == 0 ? 7
-                                                                         : 0;
-    return { props.uri.str + offset,
-             props.uri.str + offset + props.uri.nbytes - (offset + 1) };
+    std::string uri{ props.uri.str, props.uri.nbytes - 1 };
+
+    if (uri.find("file://") == std::string::npos) {
+        return uri;
+    }
+
+    return uri.substr(7); // strlen("file://") == 7
 }
 
 /// \brief Check that the JSON string is valid. (Valid can mean empty.)
@@ -68,19 +70,15 @@ validate_props(const StorageProperties* props)
         CHECK(tokens.size() > 2); // http://endpoint/bucket
     } else {
         const fs::path path = as_path(*props);
-        fs::path parent_path = path.parent_path().string();
+        fs::path parent_path = path.parent_path();
         if (parent_path.empty())
             parent_path = ".";
 
         EXPECT(fs::is_directory(parent_path),
                "Expected \"%s\" to be a directory.",
-               parent_path.c_str());
+               parent_path.string().c_str());
 
         // check directory is writable
-        EXPECT(fs::is_directory(parent_path),
-               "Expected \"%s\" to be a directory.",
-               parent_path.c_str());
-
         const auto perms = fs::status(fs::path(parent_path)).permissions();
 
         EXPECT((perms & (fs::perms::owner_write | fs::perms::group_write |
@@ -394,10 +392,13 @@ zarr::Zarr::get(StorageProperties* props) const
     storage_properties_destroy(props);
 
     std::string uri;
-    if (!dataset_root_.empty()) {
+    if (common::is_web_uri(dataset_root_)) {
+        uri = dataset_root_;
+    } else if (!dataset_root_.empty()) {
         fs::path dataset_root_abs = fs::absolute(dataset_root_);
         uri = "file://" + dataset_root_abs.string();
     }
+
     const size_t bytes_of_filename = uri.empty() ? 0 : uri.size() + 1;
 
     const char* metadata = external_metadata_json_.empty()
