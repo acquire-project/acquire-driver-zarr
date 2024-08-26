@@ -1,5 +1,11 @@
 #include "logger.hh"
 
+#include <iostream>
+#include <cstdarg>
+#include <chrono>
+#include <iomanip>
+#include <filesystem>
+
 LogLevel Logger::current_level = LogLevel::INFO;
 
 void
@@ -14,7 +20,7 @@ Logger::getLogLevel()
     return current_level;
 }
 
-void
+std::string
 Logger::log(LogLevel level,
             const char* file,
             int line,
@@ -23,7 +29,7 @@ Logger::log(LogLevel level,
             ...)
 {
     if (level < current_level)
-        return; // Suppress logs below current_level
+        return {}; // Suppress logs below current_level
 
     va_list args;
     va_start(args, format);
@@ -69,4 +75,6 @@ Logger::log(LogLevel level,
     *stream << buffer << std::endl;
 
     va_end(args);
+
+    return buffer;
 }

@@ -1,9 +1,4 @@
-#include <iostream>
-#include <cstdarg>
 #include <string>
-#include <chrono>
-#include <iomanip>
-#include <filesystem>
 
 enum class LogLevel
 {
@@ -20,12 +15,12 @@ class Logger
 
     static LogLevel getLogLevel();
 
-    static void log(LogLevel level,
-                    const char* file,
-                    int line,
-                    const char* func,
-                    const char* format,
-                    ...);
+    static std::string log(LogLevel level,
+                           const char* file,
+                           int line,
+                           const char* func,
+                           const char* format,
+                           ...);
 
   private:
     static LogLevel current_level;
@@ -42,9 +37,7 @@ class Logger
 
 #define EXPECT(e, ...)                                                         \
     do {                                                                       \
-        if (!(e)) {                                                            \
-            LOG_ERROR(__VA_ARGS__);                                            \
-            throw std::runtime_error("Expression was false: " #e);             \
-        }                                                                      \
+        if (!(e))                                                              \
+            throw std::runtime_error(LOG_ERROR(__VA_ARGS__));                  \
     } while (0)
 #define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t%s", #e)

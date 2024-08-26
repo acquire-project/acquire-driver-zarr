@@ -1,39 +1,35 @@
 #include "s3.sink.hh"
-
-#include "common/utilities.hh"
-#include "logger.h"
+#include "logger.hh"
 
 #include <miniocpp/client.h>
 
-namespace zarr = acquire::sink::zarr;
-
 zarr::S3Sink::S3Sink(std::string_view bucket_name,
                      std::string_view object_key,
-                     std::shared_ptr<common::S3ConnectionPool> connection_pool)
+                     std::shared_ptr<S3ConnectionPool> connection_pool)
   : bucket_name_{ bucket_name }
   , object_key_{ object_key }
   , connection_pool_{ connection_pool }
 {
-    CHECK(!bucket_name_.empty());
-    CHECK(!object_key_.empty());
-    CHECK(connection_pool_);
+    EXPECT(!bucket_name_.empty(), "Bucket name must not be empty");
+    EXPECT(!object_key_.empty(), "Object key must not be empty");
+    EXPECT(connection_pool_, "Null pointer: connection_pool");
 }
 
 zarr::S3Sink::~S3Sink()
 {
     if (!is_multipart_upload_() && n_bytes_buffered_ > 0) {
         if (!put_object_()) {
-            LOGE("Failed to upload object: %s", object_key_.c_str());
+            LOG_ERROR("Failed to upload object: %s", object_key_.c_str());
         }
     } else if (is_multipart_upload_()) {
         if (n_bytes_buffered_ > 0 && !flush_part_()) {
-            LOGE("Failed to upload part %zu of object %s",
-                 parts_.size() + 1,
-                 object_key_.c_str());
+            LOG_ERROR("Failed to upload part %zu of object %s",
+                      parts_.size() + 1,
+                      object_key_.c_str());
         }
         if (!finalize_multipart_upload_()) {
-            LOGE("Failed to finalize multipart upload of object %s",
-                 object_key_.c_str());
+            LOG_ERROR("Failed to finalize multipart upload of object %s",
+                      object_key_.c_str());
         }
     }
 }
@@ -41,8 +37,9 @@ zarr::S3Sink::~S3Sink()
 bool
 zarr::S3Sink::write(size_t _, const uint8_t* data, size_t bytes_of_data)
 {
-    CHECK(data);
-    CHECK(bytes_of_data);
+    EXPECT(data, "Null pointer: data");
+    if (bytes_of_data == 0)
+        return true;
 
     while (bytes_of_data > 0) {
         const auto bytes_to_write =
@@ -84,7 +81,7 @@ zarr::S3Sink::put_object_()
 
         retval = true;
     } catch (const std::exception& exc) {
-        LOGE("Error: %s", exc.what());
+        LOG_ERROR("Error: %s", exc.what());
     }
 
     // cleanup
@@ -142,7 +139,7 @@ zarr::S3Sink::flush_part_()
 
         retval = true;
     } catch (const std::exception& exc) {
-        LOGE("Error: %s", exc.what());
+        LOG_ERROR("Error: %s", exc.what());
     }
 
     // cleanup

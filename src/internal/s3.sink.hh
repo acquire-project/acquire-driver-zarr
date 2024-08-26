@@ -1,22 +1,20 @@
 #pragma once
 
 #include "sink.hh"
-#include "platform.h"
-#include "common/s3.connection.hh"
+#include "s3.connection.hh"
 
 #include <miniocpp/types.h>
 
 #include <array>
 #include <string>
 
-namespace acquire::sink::zarr {
+namespace zarr {
 class S3Sink final : public Sink
 {
   public:
-    S3Sink() = delete;
     S3Sink(std::string_view bucket_name,
            std::string_view object_key,
-           std::shared_ptr<common::S3ConnectionPool> connection_pool);
+           std::shared_ptr<S3ConnectionPool> connection_pool);
     ~S3Sink() override;
 
     bool write(size_t offset,
@@ -27,10 +25,11 @@ class S3Sink final : public Sink
     std::string bucket_name_;
     std::string object_key_;
 
-    std::shared_ptr<common::S3ConnectionPool> connection_pool_;
+    std::shared_ptr<S3ConnectionPool> connection_pool_;
 
     // multipart upload
-    std::array<uint8_t, 5 << 20> part_buffer_; /// temporary 5MiB buffer for multipart upload
+    std::array<uint8_t, 5 << 20>
+      part_buffer_; /// temporary 5MiB buffer for multipart upload
     size_t n_bytes_buffered_ = 0;
 
     std::string upload_id_;
@@ -44,8 +43,8 @@ class S3Sink final : public Sink
     // multipart upload
     bool is_multipart_upload_() const;
 
-    /// @brief Get the multipart upload ID, if it exists. Otherwise, create a new
-    /// multipart upload.
+    /// @brief Get the multipart upload ID, if it exists. Otherwise, create a
+    /// new multipart upload.
     /// @returns The multipart upload ID.
     std::string get_multipart_upload_id_();
 

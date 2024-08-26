@@ -1,11 +1,8 @@
 #pragma once
 
-#include "platform.h"
-#include "device/props/components.h"
-
-#include "common/dimension.hh"
-#include "common/thread.pool.hh"
-#include "common/s3.connection.hh"
+#include "stream.settings.hh"
+#include "thread.pool.hh"
+#include "s3.connection.hh"
 #include "blosc.compressor.hh"
 #include "file.sink.hh"
 
@@ -14,13 +11,11 @@
 
 namespace fs = std::filesystem;
 
-namespace acquire::sink::zarr {
-struct Zarr;
+namespace zarr {
 
 struct ArrayWriterConfig final
 {
-    ImageShape image_shape;
-    std::vector<Dimension> dimensions;
+    std::vector<ZarrDimension_s> dimensions;
     int level_of_detail;
     std::string dataset_root;
     std::optional<BloscCompressionParams> compression_params;
@@ -42,8 +37,8 @@ struct ArrayWriter
   public:
     ArrayWriter() = delete;
     ArrayWriter(const ArrayWriterConfig& config,
-                std::shared_ptr<common::ThreadPool> thread_pool,
-                std::shared_ptr<common::S3ConnectionPool> connection_pool);
+                std::shared_ptr<ThreadPool> thread_pool,
+                std::shared_ptr<S3ConnectionPool> connection_pool);
 
     virtual ~ArrayWriter() noexcept = default;
 
@@ -63,7 +58,7 @@ struct ArrayWriter
     std::unique_ptr<Sink> metadata_sink_;
 
     /// Multithreading
-    std::shared_ptr<common::ThreadPool> thread_pool_;
+    std::shared_ptr<ThreadPool> thread_pool_;
     std::mutex buffers_mutex_;
 
     /// Bookkeeping
@@ -72,7 +67,7 @@ struct ArrayWriter
     uint32_t append_chunk_index_;
     bool is_finalizing_;
 
-    std::shared_ptr<common::S3ConnectionPool> connection_pool_;
+    std::shared_ptr<S3ConnectionPool> connection_pool_;
 
     void make_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
