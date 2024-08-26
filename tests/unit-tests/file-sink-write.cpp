@@ -27,7 +27,7 @@ main()
     {
         const uint8_t str[] = "Hello, Acquire!";
         zarr::FileSink sink(tmp_path.string());
-        sink.write(0, str, sizeof(str) - 1);
+        CHECK(sink.write(0, str, sizeof(str) - 1));
     }
 
     // The file tmp_path should now contain the string "Hello, world!\n".

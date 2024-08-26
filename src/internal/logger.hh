@@ -1,6 +1,6 @@
 #include <string>
 
-enum LogLevel
+enum LogLevel // todo (aliddell): Use enum class
 {
     LogLevel_Debug,
     LogLevel_Info,

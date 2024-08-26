@@ -1,7 +1,7 @@
 #include "s3.connection.hh"
 #include "logger.hh"
 
-#include <miniocpp/client.h>
+#include <cstdlib>
 
 namespace {
 bool
@@ -46,7 +46,8 @@ main()
       s3_secret_access_key;
     if (!get_credentials(
           s3_endpoint, bucket_name, s3_access_key_id, s3_secret_access_key)) {
-        return 1;
+        LOG_WARNING("Failed to get credentials. Skipping test.");
+        return 0;
     }
 
     int retval = 1;
@@ -61,9 +62,7 @@ main()
             LOG_ERROR("Failed to connect to S3.");
             return 1;
         }
-
         CHECK(conn.bucket_exists(bucket_name));
-
         CHECK(conn.delete_object(bucket_name, object_name));
         CHECK(!conn.object_exists(bucket_name, object_name));
 
