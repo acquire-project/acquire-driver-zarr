@@ -1,9 +1,3 @@
-add_subdirectory(3rdParty)
-
-#if (NOT TARGET acquire-core-logger)
-#    add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
-#endif ()
-
 set(tgt acquire-zarr)
 add_library(${tgt} STATIC
         include/zarr.h
@@ -43,6 +37,10 @@ target_link_libraries(${tgt} PRIVATE
 )
 
 install(TARGETS ${tgt} LIBRARY DESTINATION lib)
+
+#if (NOT TARGET acquire-core-logger)
+#    add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
+#endif ()
 
 #set(tgt-driver acquire-driver-zarr)
 #add_library(${tgt-driver} MODULE
