@@ -1,6 +1,7 @@
 #include "zarr.h"
 
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <string>
 

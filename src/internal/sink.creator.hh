@@ -41,6 +41,17 @@ class SinkCreator final
     std::unique_ptr<Sink> make_sink(std::string_view bucket_name,
                                     std::string_view object_key);
 
+    /**
+     * @brief Create a collection of file sinks for a Zarr dataset.
+     * @param[in] base_path The path to the base directory for the dataset.
+     * @param[in] dimensions The dimensions of the dataset.
+     * @param[in] parts_along_dimension Function to determine the number of
+     * parts (i.e., shards or chunks) along a dimension.
+     * @param[out] part_sinks The sinks created.
+     * @return True iff all file sinks were created successfully.
+     * @throws std::runtime_error if @p base_path is not valid, or if the number
+     * of parts along a dimension is zero.
+     */
     [[nodiscard]] bool make_data_sinks(
       std::string_view base_path,
       const std::vector<Dimension>& dimensions,
@@ -50,22 +61,6 @@ class SinkCreator final
     [[nodiscard]] bool make_data_sinks(
       std::string_view bucket_name,
       std::string_view base_path,
-      const std::vector<Dimension>& dimensions,
-      const std::function<size_t(const Dimension&)>& parts_along_dimension,
-      std::vector<std::unique_ptr<Sink>>& part_sinks);
-
-    /// @brief Create a collection of data sinks, either chunk or shard.
-    /// @param[in] base_uri The base URI for the sinks.
-    /// @param[in] dimensions The dimensions of the data.
-    /// @param[in] parts_along_dimension Function for computing the number of
-    ///            parts (either chunk or shard) along each dimension.
-    /// @param[out] part_sinks The sinks created.
-    /// @return True iff all data sinks were created successfully.
-    /// @throws std::runtime_error if @p base_uri is not valid, if the number of
-    ///         parts along a dimension cannot be computed, or if, for S3 sinks,
-    ///         the bucket does not exist.
-    [[nodiscard]] bool make_data_sinks(
-      const std::string& base_uri,
       const std::vector<Dimension>& dimensions,
       const std::function<size_t(const Dimension&)>& parts_along_dimension,
       std::vector<std::unique_ptr<Sink>>& part_sinks);
@@ -86,6 +81,12 @@ class SinkCreator final
     std::shared_ptr<ThreadPool> thread_pool_;
     std::shared_ptr<S3ConnectionPool> connection_pool_; // could be null
 
+    std::queue<std::string> construct_dataset_paths_(
+      std::string_view base_path,
+      const std::vector<Dimension>& dimensions,
+      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      bool create_directories);
+
     /// @brief Parallel create a collection of directories.
     /// @param[in] dir_paths The directories to create.
     /// @return True iff all directories were created successfully.
@@ -101,7 +102,8 @@ class SinkCreator final
 
     /// @brief Parallel create a collection of files, keyed by path.
     /// @param[in] base_dir The base directory for the files.
-    /// @param[in] file_paths Paths to the files to create, relative to @p base_dir.
+    /// @param[in] file_paths Paths to the files to create, relative to @p
+    /// base_dir.
     /// @param[out] sinks The sinks created, keyed by path.
     /// @return True iff all files were created successfully.
     [[nodiscard]] bool make_files_(

@@ -66,55 +66,13 @@ zarr::SinkCreator::make_data_sinks(
   const std::function<size_t(const Dimension&)>& parts_along_dimension,
   std::vector<std::unique_ptr<Sink>>& part_sinks)
 {
-    std::queue<std::string> paths;
     if (base_path.starts_with("file://"))
         base_path = base_path.substr(7);
 
-    paths.emplace(base_path);
-    if (!make_dirs_(paths)) {
-        LOG_ERROR("Failed to create directory '%s'.", base_path.data());
-        return false;
-    }
+    EXPECT(!base_path.empty(), "Base path must not be empty.");
 
-    // create directories
-    for (auto i = 1;                // skip the last dimension
-         i < dimensions.size() - 2; // skip the y and x dimensions
-         --i) {
-        const auto& dim = dimensions.at(i);
-        const auto n_parts = parts_along_dimension(dim);
-        CHECK(n_parts);
-
-        auto n_paths = paths.size();
-        for (auto j = 0; j < n_paths; ++j) {
-            const auto path = paths.front();
-            paths.pop();
-
-            for (auto k = 0; k < n_parts; ++k) {
-                const auto kstr = std::to_string(k);
-                paths.push(path + (path.empty() ? kstr : "/" + kstr));
-            }
-        }
-
-        if (!make_dirs_(paths)) {
-            LOG_ERROR("Failed to create directories.");
-            return false;
-        }
-    }
-
-    // create files
-    {
-        const auto& dim = dimensions.back();
-        const auto n_parts = parts_along_dimension(dim);
-        CHECK(n_parts);
-
-        auto n_paths = paths.size();
-        for (auto i = 0; i < n_paths; ++i) {
-            const auto path = paths.front();
-            paths.pop();
-            for (auto j = 0; j < n_parts; ++j)
-                paths.push(path + "/" + std::to_string(j));
-        }
-    }
+    auto paths = construct_dataset_paths_(
+      base_path, dimensions, parts_along_dimension, false);
 
     return make_files_(paths, part_sinks);
 }
@@ -167,77 +125,6 @@ zarr::SinkCreator::make_data_sinks(
     }
 
     return make_s3_objects_(bucket_name, paths, part_sinks);
-}
-
-bool
-zarr::SinkCreator::make_data_sinks(
-  const std::string& base_uri,
-  const std::vector<Dimension>& dimensions,
-  const std::function<size_t(const Dimension&)>& parts_along_dimension,
-  std::vector<std::unique_ptr<Sink>>& part_sinks)
-{
-    std::queue<std::string> paths;
-
-    bool is_s3 = common::is_web_uri(base_uri);
-    std::string bucket_name;
-    if (is_s3) {
-        std::string base_dir;
-        common::parse_path_from_uri(base_uri, bucket_name, base_dir);
-
-        paths.push(base_dir);
-    } else {
-        std::string base_dir = base_uri;
-
-        if (base_uri.starts_with("file://")) {
-            base_dir = base_uri.substr(7);
-        }
-        paths.emplace(base_dir);
-
-        if (!make_dirs_(paths)) {
-            return false;
-        }
-    }
-
-    // create directories
-    for (auto i = dimensions.size() - 2; i >= 1; --i) {
-        const auto& dim = dimensions.at(i);
-        const auto n_parts = parts_along_dimension(dim);
-        CHECK(n_parts);
-
-        auto n_paths = paths.size();
-        for (auto j = 0; j < n_paths; ++j) {
-            const auto path = paths.front();
-            paths.pop();
-
-            for (auto k = 0; k < n_parts; ++k) {
-                const auto kstr = std::to_string(k);
-                paths.push(path + (path.empty() ? kstr : "/" + kstr));
-            }
-        }
-
-        if (!is_s3 && !make_dirs_(paths)) {
-            return false;
-        }
-    }
-
-    // create files
-    {
-        const auto& dim = dimensions.front();
-        const auto n_parts = parts_along_dimension(dim);
-        CHECK(n_parts);
-
-        auto n_paths = paths.size();
-        for (auto i = 0; i < n_paths; ++i) {
-            const auto path = paths.front();
-            paths.pop();
-            for (auto j = 0; j < n_parts; ++j) {
-                paths.push(path + "/" + std::to_string(j));
-            }
-        }
-    }
-
-    return is_s3 ? make_s3_objects_(bucket_name, paths, part_sinks)
-                 : make_files_(paths, part_sinks);
 }
 
 bool
@@ -312,6 +199,38 @@ zarr::SinkCreator::make_metadata_sinks(
 
     return is_s3 ? make_s3_objects_(bucket_name, file_paths, metadata_sinks)
                  : make_files_(base_dir, file_paths, metadata_sinks);
+}
+
+std::queue<std::string>
+zarr::SinkCreator::construct_dataset_paths_(
+  std::string_view base_path,
+  const std::vector<Dimension>& dimensions,
+  const std::function<size_t(const Dimension&)>& parts_along_dimension,
+  bool create_directories)
+{
+    std::queue<std::string> paths;
+    paths.emplace(base_path);
+
+    for (auto i = 1;                // skip the last dimension
+         i < dimensions.size() - 2; // skip the y and x dimensions
+         --i) {
+        const auto& dim = dimensions.at(i);
+        const auto n_parts = parts_along_dimension(dim);
+        CHECK(n_parts);
+
+        auto n_paths = paths.size();
+        for (auto j = 0; j < n_paths; ++j) {
+            const auto path = paths.front();
+            paths.pop();
+
+            for (auto k = 0; k < n_parts; ++k) {
+                const auto kstr = std::to_string(k);
+                paths.push(path + (path.empty() ? kstr : "/" + kstr));
+            }
+        }
+    }
+
+    return paths;
 }
 
 bool
