@@ -1,4 +1,5 @@
 #include "array.writer.hh"
+#include "zarr.common.hh"
 #include "logger.hh"
 
 #include <cmath>
@@ -69,10 +70,10 @@ tile_group_offset(size_t frame_id, const std::vector<zarr::Dimension>& dims)
 size_t
 chunk_internal_offset(size_t frame_id,
                       const std::vector<zarr::Dimension>& dims,
-                      SampleType type)
+                      ZarrDataType type)
 {
     const auto tile_size =
-      bytes_of_type(type) * dims.at(0).chunk_size_px * dims.at(1).chunk_size_px;
+      bytes_of_data_type(type) * dims.at(0).chunk_size_px * dims.at(1).chunk_size_px;
     auto offset = 0;
     std::vector<size_t> array_strides, chunk_strides;
     array_strides.push_back(1);
@@ -108,7 +109,7 @@ zarr::downsample(const ArrayWriterConfig& config,
     // downsample dimensions
     downsampled_config.dimensions.clear();
     for (const auto& dim : config.dimensions) {
-        if (dim.kind == DimensionType_Channel) { // don't downsample channels
+        if (dim.kind == ZarrDimensionType_Channel) { // don't downsample channels
             downsampled_config.dimensions.push_back(dim);
         } else {
             const uint32_t array_size_px =
@@ -238,7 +239,7 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
     // break the frame into tiles and write them to the chunk buffers
     const auto image_shape = config_.image_shape;
-    const auto bytes_per_px = bytes_of_type(image_shape.type);
+    const auto bytes_per_px = bytes_of_data_type(image_shape.type);
 
     const auto frame_cols = image_shape.dims.width;
     const auto frame_rows = image_shape.dims.height;
@@ -333,7 +334,7 @@ zarr::ArrayWriter::compress_buffers_() noexcept
     TRACE("Compressing");
 
     BloscCompressionParams params = config_.compression_params.value();
-    const auto bytes_per_px = bytes_of_type(config_.image_shape.type);
+    const auto bytes_per_px = bytes_of_data_type(config_.image_shape.type);
 
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
@@ -452,79 +453,6 @@ class TestWriter : public zarr::ArrayWriter
 
 extern "C"
 {
-    acquire_export int unit_test__chunk_lattice_index()
-    {
-        int retval = 0;
-        try {
-            std::vector<zarr::Dimension> dims;
-            dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
-            dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
-            dims.emplace_back("z", DimensionType_Space, 5, 2, 0);   // 3 chunks
-            dims.emplace_back("c", DimensionType_Channel, 3, 2, 0); // 2 chunks
-            dims.emplace_back(
-              "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
-
-            CHECK(chunk_lattice_index(0, 2, dims) == 0);
-            CHECK(chunk_lattice_index(0, 3, dims) == 0);
-            CHECK(chunk_lattice_index(0, 4, dims) == 0);
-            CHECK(chunk_lattice_index(1, 2, dims) == 0);
-            CHECK(chunk_lattice_index(1, 3, dims) == 0);
-            CHECK(chunk_lattice_index(1, 4, dims) == 0);
-            CHECK(chunk_lattice_index(2, 2, dims) == 1);
-            CHECK(chunk_lattice_index(2, 3, dims) == 0);
-            CHECK(chunk_lattice_index(2, 4, dims) == 0);
-            CHECK(chunk_lattice_index(3, 2, dims) == 1);
-            CHECK(chunk_lattice_index(3, 3, dims) == 0);
-            CHECK(chunk_lattice_index(3, 4, dims) == 0);
-            CHECK(chunk_lattice_index(4, 2, dims) == 2);
-            CHECK(chunk_lattice_index(4, 3, dims) == 0);
-            CHECK(chunk_lattice_index(4, 4, dims) == 0);
-            CHECK(chunk_lattice_index(5, 2, dims) == 0);
-            CHECK(chunk_lattice_index(5, 3, dims) == 0);
-            CHECK(chunk_lattice_index(5, 4, dims) == 0);
-            CHECK(chunk_lattice_index(12, 2, dims) == 1);
-            CHECK(chunk_lattice_index(12, 3, dims) == 1);
-            CHECK(chunk_lattice_index(12, 4, dims) == 0);
-            CHECK(chunk_lattice_index(19, 2, dims) == 2);
-            CHECK(chunk_lattice_index(19, 3, dims) == 0);
-            CHECK(chunk_lattice_index(19, 4, dims) == 0);
-            CHECK(chunk_lattice_index(26, 2, dims) == 0);
-            CHECK(chunk_lattice_index(26, 3, dims) == 1);
-            CHECK(chunk_lattice_index(26, 4, dims) == 0);
-            CHECK(chunk_lattice_index(33, 2, dims) == 1);
-            CHECK(chunk_lattice_index(33, 3, dims) == 0);
-            CHECK(chunk_lattice_index(33, 4, dims) == 0);
-            CHECK(chunk_lattice_index(40, 2, dims) == 0);
-            CHECK(chunk_lattice_index(40, 3, dims) == 1);
-            CHECK(chunk_lattice_index(40, 4, dims) == 0);
-            CHECK(chunk_lattice_index(47, 2, dims) == 1);
-            CHECK(chunk_lattice_index(47, 3, dims) == 0);
-            CHECK(chunk_lattice_index(47, 4, dims) == 0);
-            CHECK(chunk_lattice_index(54, 2, dims) == 2);
-            CHECK(chunk_lattice_index(54, 3, dims) == 0);
-            CHECK(chunk_lattice_index(54, 4, dims) == 0);
-            CHECK(chunk_lattice_index(61, 2, dims) == 0);
-            CHECK(chunk_lattice_index(61, 3, dims) == 0);
-            CHECK(chunk_lattice_index(61, 4, dims) == 0);
-            CHECK(chunk_lattice_index(68, 2, dims) == 1);
-            CHECK(chunk_lattice_index(68, 3, dims) == 0);
-            CHECK(chunk_lattice_index(68, 4, dims) == 0);
-            CHECK(chunk_lattice_index(74, 2, dims) == 2);
-            CHECK(chunk_lattice_index(74, 3, dims) == 1);
-            CHECK(chunk_lattice_index(74, 4, dims) == 0);
-            CHECK(chunk_lattice_index(75, 2, dims) == 0);
-            CHECK(chunk_lattice_index(75, 3, dims) == 0);
-            CHECK(chunk_lattice_index(75, 4, dims) == 1);
-
-            retval = 1;
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-        }
-        return retval;
-    }
-
     acquire_export int unit_test__tile_group_offset()
     {
         int retval = 0;
@@ -765,7 +693,7 @@ extern "C"
               },
               .type = SampleType_u16,
         };
-        const unsigned int nbytes_px = bytes_of_type(shape.type);
+        const unsigned int nbytes_px = bytes_of_data_type(shape.type);
 
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(

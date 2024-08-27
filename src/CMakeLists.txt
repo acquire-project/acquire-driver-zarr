@@ -23,7 +23,7 @@ add_library(${tgt} STATIC
         internal/s3.sink.cpp
         internal/sink.creator.hh
         internal/sink.creator.cpp
-#        internal/array.writer.hh
+        internal/array.writer.hh
 #        internal/array.writer.cpp
 )
 

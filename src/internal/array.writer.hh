@@ -35,7 +35,6 @@ downsample(const ArrayWriterConfig& config,
 struct ArrayWriter
 {
   public:
-    ArrayWriter() = delete;
     ArrayWriter(const ArrayWriterConfig& config,
                 std::shared_ptr<ThreadPool> thread_pool,
                 std::shared_ptr<S3ConnectionPool> connection_pool);

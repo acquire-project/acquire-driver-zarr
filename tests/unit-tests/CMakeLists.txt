@@ -9,6 +9,7 @@ set(tests
         s3-sink-write
         sink-creator-make-metadata-sinks
         sink-creator-make-data-sinks
+        common-chunk-lattice-index
 )
 
 foreach (name ${tests})

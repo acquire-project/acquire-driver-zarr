@@ -32,6 +32,14 @@ jobs:
             vcpkg_triplet: "arm64-osx"
     permissions:
       actions: write
+    env:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+      MINIO_URL: http://localhost:9000
+      MINIO_ALIAS: myminio
+      MINIO_BUCKET: acquire-test
+      MINIO_ACCESS_KEY: acquire
+      MINIO_SECRET_KEY: 12345678
 
     steps:
       - name: Cancel Previous Runs
@@ -52,6 +60,14 @@ jobs:
           echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
           ./vcpkg integrate install
         shell: bash
+
+      - name: Install minio (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: |
+          Invoke-WebRequest -Uri "https://dl.min.io/server/minio/release/windows-amd64/minio.exe" -OutFile "C:\minio.exe"
+          Invoke-WebRequest -Uri "https://dl.minio.io/client/mc/release/windows-amd64/mc.exe" -OutFile "C:\mc.exe"
+          C:\minio.exe server C:\tmp --console-address ":9001"
+        shell: powershell
 
       - name: Configure CMake
         run: |
