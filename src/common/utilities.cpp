@@ -11,27 +11,6 @@ namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 
 size_t
-common::chunks_along_dimension(const Dimension& dimension)
-{
-    EXPECT(dimension.chunk_size_px > 0, "Invalid chunk_size size.");
-
-    return (dimension.array_size_px + dimension.chunk_size_px - 1) /
-           dimension.chunk_size_px;
-}
-
-size_t
-common::shards_along_dimension(const Dimension& dimension)
-{
-    const size_t shard_size = dimension.shard_size_chunks;
-    if (shard_size == 0) {
-        return 0;
-    }
-
-    const size_t n_chunks = chunks_along_dimension(dimension);
-    return (n_chunks + shard_size - 1) / shard_size;
-}
-
-size_t
 common::number_of_chunks_in_memory(const std::vector<Dimension>& dimensions)
 {
     size_t n_chunks = 1;

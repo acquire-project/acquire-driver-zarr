@@ -4,7 +4,8 @@ add_library(${tgt} STATIC
         include/zarr_errors.h
         internal/logger.hh
         internal/logger.cpp
-        internal/zarr.common.c
+        internal/zarr.common.hh
+        internal/zarr.common.cpp
         internal/stream.settings.hh
         internal/stream.settings.cpp
         internal/zarr.stream.hh

@@ -29,25 +29,12 @@ enum class ZarrVersion
 };
 
 namespace common {
-/// @brief Get the number of chunks along a dimension.
-/// @param dimension A dimension.
-/// @return The number of, possibly ragged, chunks along the dimension, given
-/// the dimension's array and chunk sizes.
-size_t
-chunks_along_dimension(const Dimension& dimension);
 
 /// @brief Get the number of chunks to hold in memory.
 /// @param dimensions The dimensions of the array.
 /// @return The number of chunks to buffer before writing out.
 size_t
 number_of_chunks_in_memory(const std::vector<Dimension>& dimensions);
-
-/// @brief Get the number of shards along a dimension.
-/// @param dimension A dimension.
-/// @return The number of shards along the dimension, given the dimension's
-/// array, chunk, and shard sizes.
-size_t
-shards_along_dimension(const Dimension& dimension);
 
 /// @brief Get the number of shards to write at one time.
 /// @param dimensions The dimensions of the array.
