@@ -25,12 +25,14 @@ struct ZarrStreamSettings_s
     std::string s3_access_key_id;     /* Access key ID for the S3 service */
     std::string s3_secret_access_key; /* Secret access key for the S3 service */
 
+    size_t dtype; /* Data type of the base array */
+
     size_t compressor; /* Compression library to use */
     size_t codec;      /* Compression codec to use */
 
-    std::vector<ZarrDimension_s> dimensions;
+    std::vector<ZarrDimension_s> dimensions; /* Dimensions of the base array */
 
-    bool multiscale;
+    bool multiscale; /* Whether to stream to multiple resolutions */
 };
 
 bool

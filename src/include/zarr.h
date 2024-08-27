@@ -19,7 +19,30 @@ extern "C"
      * If the struct fails to be created, ZarrStreamSettings_create returns
      *NULL.
      **************************************************************************/
+
     typedef struct ZarrStreamSettings_s ZarrStreamSettings;
+
+    /***************************************************************************
+     * Data type
+     *
+     * The ZarrDataType enum lists the available pixel types.
+     **************************************************************************/
+
+    typedef enum
+    {
+        ZarrDataType_uint8,
+        ZarrDataType_uint16,
+        ZarrDataType_uint32,
+        ZarrDataType_uint64,
+        ZarrDataType_int8,
+        ZarrDataType_int16,
+        ZarrDataType_int32,
+        ZarrDataType_int64,
+        ZarrDataType_float16,
+        ZarrDataType_float32,
+        ZarrDataType_float64,
+        ZarrDataTypeCount
+    } ZarrDataType;
 
     /***************************************************************************
      * Compression
@@ -117,6 +140,9 @@ extern "C"
       const char* s3_secret_access_key,
       size_t bytes_of_s3_secret_access_key);
 
+    ZarrError ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
+                                               ZarrDataType pixel_type);
+
     ZarrError ZarrStreamSettings_set_compressor(ZarrStreamSettings* settings,
                                                 ZarrCompressor compressor);
     ZarrError ZarrStreamSettings_set_compression_codec(
@@ -154,6 +180,8 @@ extern "C"
       ZarrStreamSettings* settings);
     const char* ZarrStreamSettings_get_s3_secret_access_key(
       ZarrStreamSettings* settings);
+
+    ZarrDataType ZarrStreamSettings_get_data_type(ZarrStreamSettings* settings);
 
     ZarrCompressor ZarrStreamSettings_get_compressor(
       ZarrStreamSettings* settings);

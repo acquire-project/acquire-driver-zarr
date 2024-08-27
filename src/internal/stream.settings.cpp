@@ -151,6 +151,18 @@ ZarrStreamSettings_set_s3_secret_access_key(
 }
 
 ZarrError
+ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
+                                 ZarrDataType pixel_type)
+{
+    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
+    EXPECT_VALID_ARGUMENT(
+      pixel_type < ZarrDataTypeCount, "Invalid pixel type: %d", pixel_type);
+
+    settings->dtype = pixel_type;
+    return ZarrError_Success;
+}
+
+ZarrError
 ZarrStreamSettings_set_compressor(ZarrStreamSettings* settings,
                                   ZarrCompressor compressor)
 {
@@ -276,6 +288,16 @@ const char*
 ZarrStreamSettings_get_s3_secret_access_key(ZarrStreamSettings* settings)
 {
     SETTINGS_GET_STRING(settings, s3_secret_access_key);
+}
+
+ZarrDataType
+ZarrStreamSettings_get_data_type(ZarrStreamSettings* settings)
+{
+    if (!settings) {
+        LOG_WARNING("Null pointer: settings. Returning DataType_uint8.");
+        return ZarrDataType_uint8;
+    }
+    return static_cast<ZarrDataType>(settings->dtype);
 }
 
 ZarrCompressor

@@ -50,6 +50,8 @@ check_preconditions(ZarrStreamSettings* stream)
     str_param_value = ZarrStreamSettings_get_s3_secret_access_key(stream);
     CHECK(str_param_value.empty());
 
+    CHECK_EQ(ZarrStreamSettings_get_data_type(stream), ZarrDataType_uint8);
+
     CHECK_EQ(ZarrStreamSettings_get_compressor(stream), ZarrCompressor_None);
 
     CHECK_EQ(ZarrStreamSettings_get_compression_codec(stream),
@@ -94,6 +96,11 @@ set_and_get_parameters(ZarrStreamSettings* stream)
     TRY_SET_STRING(stream, s3_secret_access_key, "s3_secret_access_key");
     str_param_value = ZarrStreamSettings_get_s3_secret_access_key(stream);
     CHECK_EQ(str_param_value, "s3_secret_access_key");
+
+    /* Set and get data type */
+    CHECK_EQ(ZarrStreamSettings_set_data_type(stream, ZarrDataType_float16),
+             ZarrError_Success);
+    CHECK_EQ(ZarrStreamSettings_get_data_type(stream), ZarrDataType_float16);
 
     /* Set and get compressor */
     CHECK_EQ(ZarrStreamSettings_set_compressor(stream, ZarrCompressor_Blosc1),

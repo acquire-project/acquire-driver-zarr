@@ -2,9 +2,9 @@
 
 #include "stream.settings.hh"
 
+namespace zarr {
 using Dimension = ZarrDimension_s;
 
-namespace zarr {
 /**
  * @brief Get the number of chunks along a dimension.
  * @param dimension A dimension.
