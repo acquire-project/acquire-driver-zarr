@@ -21,8 +21,9 @@ zarr::SinkCreator::SinkCreator(
 std::unique_ptr<zarr::Sink>
 zarr::SinkCreator::make_sink(std::string_view file_path)
 {
-    if (file_path.starts_with("file://"))
+    if (file_path.starts_with("file://")) {
         file_path = file_path.substr(7);
+    }
 
     EXPECT(!file_path.empty(), "File path must not be empty.");
 
@@ -66,8 +67,9 @@ zarr::SinkCreator::make_data_sinks(
   const std::function<size_t(const Dimension&)>& parts_along_dimension,
   std::vector<std::unique_ptr<Sink>>& part_sinks)
 {
-    if (base_path.starts_with("file://"))
+    if (base_path.starts_with("file://")) {
         base_path = base_path.substr(7);
+    }
 
     EXPECT(!base_path.empty(), "Base path must not be empty.");
 
@@ -105,8 +107,9 @@ zarr::SinkCreator::make_metadata_sinks(
   std::string_view base_path,
   std::unordered_map<std::string, std::unique_ptr<Sink>>& metadata_sinks)
 {
-    if (base_path.starts_with("file://"))
+    if (base_path.starts_with("file://")) {
         base_path = base_path.substr(7);
+    }
     EXPECT(!base_path.empty(), "Base path must not be empty.");
 
     std::vector<std::string> file_paths =
@@ -143,9 +146,10 @@ zarr::SinkCreator::make_data_sink_paths_(
     std::queue<std::string> paths;
     paths.emplace(base_path);
 
-    if (create_directories)
+    if (create_directories) {
         EXPECT(
           make_dirs_(paths), "Failed to create directory '%s'.", base_path);
+    }
 
     // create intermediate paths
     for (auto i = 1;                // skip the last dimension
@@ -166,10 +170,11 @@ zarr::SinkCreator::make_data_sink_paths_(
             }
         }
 
-        if (create_directories)
+        if (create_directories) {
             EXPECT(make_dirs_(paths),
                    "Failed to create directories for dimension '%s'.",
                    dim.name.c_str());
+        }
     }
 
     // create final paths
@@ -217,13 +222,15 @@ zarr::SinkCreator::make_metadata_sink_paths_(size_t version,
         dir_paths.emplace(base_path);
         for (const auto& path : paths) {
             fs::path parent_path = fs::path(path).parent_path();
-            if (!parent_path.empty())
+            if (!parent_path.empty()) {
                 dir_paths.push((fs::path(base_path) / parent_path).string());
+            }
         }
 
-        if (!dir_paths.empty())
+        if (!dir_paths.empty()) {
             EXPECT(make_dirs_(dir_paths),
                    "Failed to create metadata directories.");
+        }
     }
 
     return paths;
@@ -232,8 +239,9 @@ zarr::SinkCreator::make_metadata_sink_paths_(size_t version,
 bool
 zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
 {
-    if (dir_paths.empty())
+    if (dir_paths.empty()) {
         return true;
+    }
 
     std::atomic<char> all_successful = 1;
 
@@ -411,8 +419,9 @@ zarr::SinkCreator::make_s3_objects_(std::string_view bucket_name,
                                     std::queue<std::string>& object_keys,
                                     std::vector<std::unique_ptr<Sink>>& sinks)
 {
-    if (object_keys.empty())
+    if (object_keys.empty()) {
         return true;
+    }
 
     if (bucket_name.empty()) {
         LOG_ERROR("Bucket name not provided.");
@@ -441,8 +450,9 @@ zarr::SinkCreator::make_s3_objects_(
   std::vector<std::string>& object_keys,
   std::unordered_map<std::string, std::unique_ptr<Sink>>& sinks)
 {
-    if (object_keys.empty())
+    if (object_keys.empty()) {
         return true;
+    }
 
     if (bucket_name.empty()) {
         LOG_ERROR("Bucket name not provided.");

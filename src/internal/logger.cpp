@@ -28,8 +28,9 @@ Logger::log(LogLevel level,
             const char* format,
             ...)
 {
-    if (level < current_level)
+    if (level < current_level) {
         return {}; // Suppress logs below current_level
+    }
 
     va_list args;
     va_start(args, format);

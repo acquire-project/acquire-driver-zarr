@@ -42,8 +42,9 @@ bool
 zarr::S3Sink::write(size_t _, const uint8_t* data, size_t bytes_of_data)
 {
     EXPECT(data, "Null pointer: data");
-    if (bytes_of_data == 0)
+    if (bytes_of_data == 0) {
         return true;
+    }
 
     while (bytes_of_data > 0) {
         const auto bytes_to_write =

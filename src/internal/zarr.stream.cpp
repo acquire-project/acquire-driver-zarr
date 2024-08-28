@@ -32,23 +32,27 @@ validate_settings(struct ZarrStreamSettings_s* settings, ZarrVersion version)
         LOG_ERROR("Null pointer: settings");
         return false;
     }
-    if (!settings || version < ZarrVersion_2 || version >= ZarrVersionCount)
+    if (!settings || version < ZarrVersion_2 || version >= ZarrVersionCount) {
         return false;
+    }
 
     // validate the dimensions individually
     for (size_t i = 0; i < settings->dimensions.size(); ++i) {
-        if (!validate_dimension(settings->dimensions[i]))
+        if (!validate_dimension(settings->dimensions[i])) {
             return false;
+        }
 
-        if (i > 0 && settings->dimensions[i].array_size_px == 0)
+        if (i > 0 && settings->dimensions[i].array_size_px == 0) {
             return false;
+        }
     }
 
     // if version 3, we require shard size to be positive
     if (version == ZarrVersion_3) {
         for (const auto& dim : settings->dimensions) {
-            if (dim.shard_size_chunks == 0)
+            if (dim.shard_size_chunks == 0) {
                 return false;
+            }
         }
     }
 
@@ -73,12 +77,14 @@ validate_settings(struct ZarrStreamSettings_s* settings, ZarrVersion version)
         // or that it can be created
         fs::path path(store_path);
         fs::path parent_path = path.parent_path();
-        if (parent_path.empty())
+        if (parent_path.empty()) {
             parent_path = ".";
+        }
 
         // parent path must exist and be a directory
-        if (!fs::exists(parent_path) || !fs::is_directory(parent_path))
+        if (!fs::exists(parent_path) || !fs::is_directory(parent_path)) {
             return false;
+        }
 
         // parent path must be writable
         const auto perms = fs::status(parent_path).permissions();
@@ -86,8 +92,9 @@ validate_settings(struct ZarrStreamSettings_s* settings, ZarrVersion version)
           (perms & (fs::perms::owner_write | fs::perms::group_write |
                     fs::perms::others_write)) != fs::perms::none;
 
-        if (!is_writable)
+        if (!is_writable) {
             return false;
+        }
     }
 
     return true;
@@ -97,8 +104,9 @@ validate_settings(struct ZarrStreamSettings_s* settings, ZarrVersion version)
 ZarrStream*
 ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
 {
-    if (!validate_settings(settings, version))
+    if (!validate_settings(settings, version)) {
         return nullptr;
+    }
 
     // initialize the stream
     ZarrStream_s* stream;

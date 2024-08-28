@@ -48,8 +48,9 @@ size_t
 zarr::shards_along_dimension(const Dimension& dimension)
 {
     const size_t shard_size = dimension.shard_size_chunks;
-    if (shard_size == 0)
+    if (shard_size == 0) {
         return 0;
+    }
 
     const size_t n_chunks = chunks_along_dimension(dimension);
     return (n_chunks + shard_size - 1) / shard_size;
@@ -131,8 +132,9 @@ zarr::chunk_internal_offset(size_t frame_id,
     for (auto i = (int)dims.size() - 3; i >= 0; --i) {
         const auto& dim = dims[i];
 
-        if (i > 0)
+        if (i > 0) {
             CHECK(dim.array_size_px);
+        }
 
         CHECK(dim.chunk_size_px);
         CHECK(array_strides.front());
