@@ -2,9 +2,6 @@
 
 #include "array.writer.hh"
 
-#include "platform.h"
-#include "device/props/components.h"
-
 #include <condition_variable>
 #include <filesystem>
 #include <mutex>
@@ -14,15 +11,15 @@
 
 namespace fs = std::filesystem;
 
-namespace acquire::sink::zarr {
-struct ZarrV2ArrayWriter final : public ArrayWriter
+namespace zarr {
+class ZarrV2ArrayWriter final : public ArrayWriter
 {
   public:
     ZarrV2ArrayWriter() = delete;
     ZarrV2ArrayWriter(
       const ArrayWriterConfig& config,
-      std::shared_ptr<common::ThreadPool> thread_pool,
-      std::shared_ptr<common::S3ConnectionPool> connection_pool);
+      std::shared_ptr<ThreadPool> thread_pool,
+      std::shared_ptr<S3ConnectionPool> connection_pool);
 
     ~ZarrV2ArrayWriter() override = default;
 

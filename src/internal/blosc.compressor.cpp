@@ -14,20 +14,3 @@ zarr::BloscCompressionParams::BloscCompressionParams(std::string_view codec_id,
   , shuffle{ shuffle }
 {
 }
-
-//void
-//zarr::to_json(json& j, const zarr::BloscCompressionParams& bcp)
-//{
-//    j = json{ { "id", std::string(BloscCompressionParams::id) },
-//              { "cname", bcp.codec_id },
-//              { "clevel", bcp.clevel },
-//              { "shuffle", bcp.shuffle } };
-//}
-//
-//void
-//zarr::from_json(const json& j, zarr::BloscCompressionParams& bcp)
-//{
-//    j.at("cname").get_to(bcp.codec_id);
-//    j.at("clevel").get_to(bcp.clevel);
-//    j.at("shuffle").get_to(bcp.shuffle);
-//}

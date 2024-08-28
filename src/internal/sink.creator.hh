@@ -26,7 +26,7 @@ class SinkCreator final
      * opened.
      * @throws std::runtime_error if the file path is not valid.
      */
-    std::unique_ptr<Sink> make_sink(std::string_view file_path);
+    static std::unique_ptr<Sink> make_sink(std::string_view file_path);
 
     /**
      * @brief Create a sink from an S3 bucket name and object key.

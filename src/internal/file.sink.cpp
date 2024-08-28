@@ -19,6 +19,8 @@ zarr::FileSink::write(size_t offset, const uint8_t* data, size_t bytes_of_buf)
         return true;
     }
 
+    file_.seekp(offset);
     file_.write(reinterpret_cast<const char*>(data), bytes_of_buf);
+    file_.flush();
     return true;
 }

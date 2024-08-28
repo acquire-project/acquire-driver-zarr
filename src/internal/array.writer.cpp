@@ -212,8 +212,8 @@ bool
 zarr::ArrayWriter::should_flush_() const
 {
     const auto& dims = config_.dimensions;
-    size_t frames_before_flush = dims.back().chunk_size_px;
-    for (auto i = 2; i < dims.size() - 1; ++i) {
+    size_t frames_before_flush = dims.front().chunk_size_px;
+    for (auto i = 1; i < dims.size() - 3; ++i) {
         frames_before_flush *= dims[i].array_size_px;
     }
 

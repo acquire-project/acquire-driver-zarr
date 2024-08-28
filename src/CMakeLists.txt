@@ -25,6 +25,8 @@ add_library(${tgt} STATIC
         internal/sink.creator.cpp
         internal/array.writer.hh
         internal/array.writer.cpp
+        internal/zarrv2.array.writer.hh
+        internal/zarrv2.array.writer.cpp
 )
 
 target_include_directories(${tgt}
