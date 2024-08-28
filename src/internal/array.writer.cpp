@@ -7,6 +7,10 @@
 #include <latch>
 #include <stdexcept>
 
+#ifdef min
+#undef min
+#endif
+
 bool
 zarr::downsample(const ArrayWriterConfig& config,
                  ArrayWriterConfig& downsampled_config)
