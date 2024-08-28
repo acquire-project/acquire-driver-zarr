@@ -60,7 +60,7 @@ zarr::chunk_lattice_index(size_t frame_id,
 
     // the first dimension is a special case
     if (dimension_idx == 0) {
-        size_t divisor = dims.back().chunk_size_px;
+        size_t divisor = dims.front().chunk_size_px;
         for (auto i = 1; i < dims.size() - 2; ++i) {
             const auto& dim = dims.at(i);
             divisor *= dim.array_size_px;
@@ -75,7 +75,7 @@ zarr::chunk_lattice_index(size_t frame_id,
         const auto& dim = dims.at(i);
         mod_divisor *= dim.array_size_px;
         div_divisor *=
-          (i < dimension_idx ? dim.array_size_px : dim.chunk_size_px);
+          (i == dimension_idx ? dim.chunk_size_px : dim.array_size_px);
     }
 
     CHECK(mod_divisor);

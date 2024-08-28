@@ -4,8 +4,7 @@
 #include <stdexcept>
 
 #define EXPECT_EQ(a, b)                                                        \
-    EXPECT((a) == (b), "Expected %s == %s, got %s == %s", #a, #b, a, b)
-
+    EXPECT((a) == (b), "Expected %s == %s, got %zu == %zu", #a, #b, a, b)
 int
 main()
 {
