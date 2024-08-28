@@ -88,6 +88,26 @@ dimension_type_to_string(ZarrDimensionType kind)
             return "(unknown)";
     }
 }
+
+inline std::string
+trim(const char* s, size_t bytes_of_s)
+{
+    // trim left
+    std::string trimmed(s, bytes_of_s);
+    trimmed.erase(trimmed.begin(),
+                  std::find_if(trimmed.begin(), trimmed.end(), [](char c) {
+                      return !std::isspace(c);
+                  }));
+
+    // trim right
+    trimmed.erase(std::find_if(trimmed.rbegin(),
+                               trimmed.rend(),
+                               [](char c) { return !std::isspace(c); })
+                    .base(),
+                  trimmed.end());
+
+    return trimmed;
+}
 } // namespace
 
 /* Create and destroy */
@@ -189,7 +209,7 @@ ZarrStreamSettings_set_compression_codec(ZarrStreamSettings* settings,
                           "Invalid codec: %s",
                           codec_to_string(codec));
 
-    settings->codec = codec;
+    settings->compression_codec = codec;
     return ZarrError_Success;
 }
 
@@ -238,9 +258,15 @@ ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
         return ZarrError_InvalidIndex;
     }
 
+    std::string dim_name = trim(name, bytes_of_name);
+    if (dim_name.empty()) {
+        LOG_ERROR("Invalid name. Must not be empty");
+        return ZarrError_InvalidArgument;
+    }
+
     struct ZarrDimension_s* dim = &settings->dimensions[index];
 
-    dim->name = { name, strnlen(name, bytes_of_name) };
+    dim->name = dim_name;
     dim->kind = kind;
     dim->array_size_px = array_size_px;
     dim->chunk_size_px = chunk_size_px;
@@ -318,7 +344,7 @@ ZarrStreamSettings_get_compression_codec(ZarrStreamSettings* settings)
           "Null pointer: settings. Returning ZarrCompressionCodec_None.");
         return ZarrCompressionCodec_None;
     }
-    return static_cast<ZarrCompressionCodec>(settings->codec);
+    return static_cast<ZarrCompressionCodec>(settings->compression_codec);
 }
 
 size_t

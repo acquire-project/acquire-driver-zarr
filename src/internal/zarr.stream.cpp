@@ -4,6 +4,7 @@
 #include "zarr.stream.hh"
 #include "zarr.h"
 #include "logger.hh"
+#include "s3.connection.hh"
 
 #define EXPECT_VALID_ARGUMENT(e, ...)                                          \
     do {                                                                       \
@@ -26,55 +27,63 @@ namespace fs = std::filesystem;
 
 namespace {
 bool
-validate_settings(struct ZarrStreamSettings_s* settings, ZarrVersion version)
+is_s3_acquisition(const struct ZarrStreamSettings_s* settings)
+{
+    return !settings->s3_endpoint.empty() &&
+           !settings->s3_bucket_name.empty() &&
+           !settings->s3_access_key_id.empty() &&
+           !settings->s3_secret_access_key.empty();
+}
+
+bool
+validate_settings(const struct ZarrStreamSettings_s* settings,
+                  ZarrVersion version)
 {
     if (!settings) {
         LOG_ERROR("Null pointer: settings");
         return false;
     }
-    if (!settings || version < ZarrVersion_2 || version >= ZarrVersionCount) {
+    if (version < ZarrVersion_2 || version >= ZarrVersionCount) {
+        LOG_ERROR("Invalid Zarr version: %d", version);
         return false;
     }
 
-    // validate the dimensions individually
-    for (size_t i = 0; i < settings->dimensions.size(); ++i) {
-        if (!validate_dimension(settings->dimensions[i])) {
-            return false;
-        }
+    std::string store_path(settings->store_path);
+    std::string s3_endpoint(settings->s3_endpoint);
+    std::string s3_bucket_name(settings->s3_bucket_name);
+    std::string s3_access_key_id(settings->s3_access_key_id);
+    std::string s3_secret_access_key(settings->s3_secret_access_key);
 
-        if (i > 0 && settings->dimensions[i].array_size_px == 0) {
-            return false;
-        }
-    }
-
-    // if version 3, we require shard size to be positive
-    if (version == ZarrVersion_3) {
-        for (const auto& dim : settings->dimensions) {
-            if (dim.shard_size_chunks == 0) {
-                return false;
-            }
-        }
-    }
-
-    std::string_view store_path(settings->store_path);
-    std::string_view s3_endpoint(settings->s3_endpoint);
-    std::string_view s3_bucket_name(settings->s3_bucket_name);
-    std::string_view s3_access_key_id(settings->s3_access_key_id);
-    std::string_view s3_secret_access_key(settings->s3_secret_access_key);
-
-    // if the store path is empty, we require all S3 settings
+    // we require the store_path to be nonempty
     if (store_path.empty()) {
-        if (s3_endpoint.empty() || s3_bucket_name.empty() ||
-            s3_access_key_id.empty() || s3_secret_access_key.empty())
-            return false;
+        LOG_ERROR("Store path is empty");
+        return false;
+    }
 
+    // if all S3 settings are nonempty, we consider this an S3 store
+    if (is_s3_acquisition(settings)) {
         // check that the S3 endpoint is a valid URL
         if (s3_endpoint.find("http://") != 0 &&
-            s3_endpoint.find("https://") != 0)
+            s3_endpoint.find("https://") != 0) {
+            LOG_ERROR("Invalid S3 endpoint: %s", s3_endpoint.c_str());
             return false;
+        }
+
+        // test the S3 connection
+        try {
+            zarr::S3Connection connection(
+              s3_endpoint, s3_access_key_id, s3_secret_access_key);
+
+            if (!connection.check_connection()) {
+                LOG_ERROR("Connection to '%s' failed", s3_endpoint.c_str());
+                return false;
+            }
+        } catch (const std::exception& e) {
+            LOG_ERROR("Error creating S3 connection: %s", e.what());
+            return false;
+        }
     } else {
-        // check that the store path either exists and is a valid directory
-        // or that it can be created
+        // if any S3 setting is nonempty, this is a filesystem store
         fs::path path(store_path);
         fs::path parent_path = path.parent_path();
         if (parent_path.empty()) {
@@ -83,6 +92,8 @@ validate_settings(struct ZarrStreamSettings_s* settings, ZarrVersion version)
 
         // parent path must exist and be a directory
         if (!fs::exists(parent_path) || !fs::is_directory(parent_path)) {
+            LOG_ERROR("Parent path '%s' does not exist or is not a directory",
+                      parent_path.c_str());
             return false;
         }
 
@@ -93,7 +104,53 @@ validate_settings(struct ZarrStreamSettings_s* settings, ZarrVersion version)
                     fs::perms::others_write)) != fs::perms::none;
 
         if (!is_writable) {
+            LOG_ERROR("Parent path '%s' is not writable", parent_path.c_str());
             return false;
+        }
+    }
+
+    if (settings->dtype >= ZarrDataTypeCount) {
+        LOG_ERROR("Invalid data type: %d", settings->dtype);
+        return false;
+    }
+
+    if (settings->compressor >= ZarrCompressorCount) {
+        LOG_ERROR("Invalid compressor: %d", settings->compressor);
+        return false;
+    }
+
+    if (settings->compression_codec >= ZarrCompressionCodecCount) {
+        LOG_ERROR("Invalid compression codec: %d", settings->compression_codec);
+        return false;
+    }
+
+    // if compressing, we require a compression codec
+    if (settings->compressor != ZarrCompressor_None &&
+        settings->compression_codec == ZarrCompressionCodec_None) {
+        LOG_ERROR("Compression codec must be set when using a compressor");
+        return false;
+    }
+
+    // validate the dimensions individually
+    for (size_t i = 0; i < settings->dimensions.size(); ++i) {
+        if (!validate_dimension(settings->dimensions[i])) {
+            LOG_ERROR("Invalid dimension at index %d", i);
+            return false;
+        }
+
+        if (i > 0 && settings->dimensions[i].array_size_px == 0) {
+            LOG_ERROR("Only the first dimension can have an array size of 0");
+            return false;
+        }
+    }
+
+    // if version 3, we require shard size to be positive
+    if (version == ZarrVersion_3) {
+        for (const auto& dim : settings->dimensions) {
+            if (dim.shard_size_chunks == 0) {
+                LOG_ERROR("Shard sizes must be positive");
+                return false;
+            }
         }
     }
 
@@ -268,11 +325,7 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, size_t version)
       [this](const std::string& err) { this->set_error_(err); });
 
     // create the data store
-    if (!create_store_()) {
-        throw std::runtime_error("Error creating Zarr stream: " + error_);
-    }
-
-    // allocate writers
+    EXPECT(create_store_(), "Error creating Zarr stream: %s", error_.c_str());
 }
 
 ZarrStream_s::~ZarrStream_s()
@@ -328,4 +381,35 @@ ZarrStream_s::create_s3_connection_pool_()
       settings_.s3_endpoint,
       settings_.s3_access_key_id,
       settings_.s3_secret_access_key);
+}
+
+bool
+ZarrStream_s::create_writers_()
+{
+    writers_.clear();
+
+    std::string dataset_root;
+    if (is_s3_acquisition(&settings_)) {
+        dataset_root = settings_.s3_endpoint + "/" + settings_.s3_bucket_name +
+                       "/" + settings_.store_path;
+    } else { // filesystem
+        dataset_root = settings_.store_path;
+    }
+
+    // construct Blosc compression parameters
+    std::optional<zarr::BloscCompressionParams> blosc_compression_params;
+    if (settings_.compressor != ZarrCompressor_None) {
+        blosc_compression_params = zarr::BloscCompressionParams(
+          settings_.compressor, settings_.compression_codec);
+    }
+
+    zarr::ArrayWriterConfig config = {
+        .dimensions = settings_.dimensions,
+        .dtype = static_cast<ZarrDataType>(settings_.dtype),
+        .level_of_detail = 0,
+        .dataset_root = dataset_root,
+        .compression_params = blosc_compression_params
+    };
+
+    return true;
 }

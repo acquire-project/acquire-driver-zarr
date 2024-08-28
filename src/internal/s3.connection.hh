@@ -18,8 +18,6 @@ class S3Connection
                           const std::string& access_key_id,
                           const std::string& secret_access_key);
 
-    ~S3Connection() noexcept = default;
-
     /**
      * @brief Test a connection by listing all buckets at this connection's
      * endpoint.
