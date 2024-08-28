@@ -14,7 +14,8 @@ zarr::downsample(const ArrayWriterConfig& config,
     // downsample dimensions
     downsampled_config.dimensions.clear();
     for (const auto& dim : config.dimensions) {
-        if (dim.kind == ZarrDimensionType_Channel) { // don't downsample channels
+        if (dim.kind ==
+            ZarrDimensionType_Channel) { // don't downsample channels
             downsampled_config.dimensions.push_back(dim);
         } else {
             const uint32_t array_size_px =
@@ -42,20 +43,6 @@ zarr::downsample(const ArrayWriterConfig& config,
         }
     }
 
-    // downsample image_shape
-    downsampled_config.image_shape = config.image_shape;
-
-    downsampled_config.image_shape.dims.width =
-      downsampled_config.dimensions.at(0).array_size_px;
-    downsampled_config.image_shape.dims.height =
-      downsampled_config.dimensions.at(1).array_size_px;
-
-    downsampled_config.image_shape.strides.height =
-      downsampled_config.image_shape.dims.width;
-    downsampled_config.image_shape.strides.planes =
-      downsampled_config.image_shape.dims.width *
-      downsampled_config.image_shape.dims.height;
-
     downsampled_config.level_of_detail = config.level_of_detail + 1;
     downsampled_config.dataset_root = config.dataset_root;
 
@@ -65,8 +52,8 @@ zarr::downsample(const ArrayWriterConfig& config,
     // can we downsample downsampled_config?
     for (auto i = 0; i < config.dimensions.size(); ++i) {
         // downsampling made the chunk size strictly smaller
-        const auto& dim = config.dimensions.at(i);
-        const auto& downsampled_dim = downsampled_config.dimensions.at(i);
+        const auto& dim = config.dimensions[i];
+        const auto& downsampled_dim = downsampled_config.dimensions[i];
 
         if (dim.chunk_size_px > downsampled_dim.chunk_size_px) {
             return false;
@@ -79,8 +66,8 @@ zarr::downsample(const ArrayWriterConfig& config,
 /// Writer
 zarr::ArrayWriter::ArrayWriter(
   const ArrayWriterConfig& config,
-  std::shared_ptr<common::ThreadPool> thread_pool,
-  std::shared_ptr<common::S3ConnectionPool> connection_pool)
+  std::shared_ptr<ThreadPool> thread_pool,
+  std::shared_ptr<S3ConnectionPool> connection_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
   , connection_pool_{ connection_pool }
@@ -92,9 +79,9 @@ zarr::ArrayWriter::ArrayWriter(
 }
 
 size_t
-zarr::ArrayWriter::write(const uint8_t* data, size_t bytes_of_frame)
+zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
 {
-    if (bytes_of_image(&config_.image_shape) != bytes_of_frame) {
+    if (bytes_of_frame(config_.dimensions, config_.dtype) != nbytes) {
         return 0;
     }
 
@@ -102,8 +89,9 @@ zarr::ArrayWriter::write(const uint8_t* data, size_t bytes_of_frame)
         make_buffers_();
     }
 
-    // split the incoming frame into tiles and write them to the chunk buffers
-    const auto bytes_written = write_frame_to_chunks_(data, bytes_of_frame);
+    // split the incoming frame into tiles and write_frame them to the chunk
+    // buffers
+    const auto bytes_written = write_frame_to_chunks_(data, nbytes);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
 
@@ -126,32 +114,32 @@ zarr::ArrayWriter::finalize()
 void
 zarr::ArrayWriter::make_buffers_() noexcept
 {
-    const size_t n_chunks =
-      common::number_of_chunks_in_memory(config_.dimensions);
+    const size_t n_chunks = number_of_chunks_in_memory(config_.dimensions);
     chunk_buffers_.resize(n_chunks); // no-op if already the correct size
 
-    const auto bytes_per_chunk =
-      common::bytes_per_chunk(config_.dimensions, config_.image_shape.type);
+    const auto nbytes = bytes_per_chunk(config_.dimensions, config_.dtype);
 
     for (auto& buf : chunk_buffers_) {
-        buf.resize(bytes_per_chunk);
-        std::fill_n(buf.begin(), bytes_per_chunk, 0);
+        buf.resize(nbytes);
+        std::fill_n(buf.begin(), nbytes, 0);
     }
 }
 
 size_t
 zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 {
-    // break the frame into tiles and write them to the chunk buffers
-    const auto image_shape = config_.image_shape;
-    const auto bytes_per_px = bytes_of_data_type(image_shape.type);
-
-    const auto frame_cols = image_shape.dims.width;
-    const auto frame_rows = image_shape.dims.height;
+    // break the frame into tiles and write_frame them to the chunk buffers
+    const auto bytes_per_px = bytes_of_type(config_.dtype);
 
     const auto& dimensions = config_.dimensions;
-    const auto tile_cols = dimensions.at(0).chunk_size_px;
-    const auto tile_rows = dimensions.at(1).chunk_size_px;
+
+    const auto& x_dim = dimensions.back();
+    const auto frame_cols = x_dim.array_size_px;
+    const auto tile_cols = x_dim.chunk_size_px;
+
+    const auto& y_dim = dimensions[dimensions.size() - 2];
+    const auto frame_rows = y_dim.array_size_px;
+    const auto tile_rows = y_dim.chunk_size_px;
 
     if (tile_cols == 0 || tile_rows == 0) {
         return 0;
@@ -172,13 +160,13 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
     const auto group_offset = tile_group_offset(frame_id, dimensions);
     // offset within the chunk
     const auto chunk_offset =
-      chunk_internal_offset(frame_id, dimensions, image_shape.type);
+      chunk_internal_offset(frame_id, dimensions, config_.dtype);
 
     for (auto i = 0; i < n_tiles_y; ++i) {
         // TODO (aliddell): we can optimize this when tiles_per_frame_x_ is 1
         for (auto j = 0; j < n_tiles_x; ++j) {
             const auto c = group_offset + i * n_tiles_x + j;
-            auto& chunk = chunk_buffers_.at(c);
+            auto& chunk = chunk_buffers_[c];
             auto chunk_it =
               chunk.begin() + static_cast<long long>(chunk_offset);
 
@@ -222,7 +210,7 @@ zarr::ArrayWriter::should_flush_() const
     const auto& dims = config_.dimensions;
     size_t frames_before_flush = dims.back().chunk_size_px;
     for (auto i = 2; i < dims.size() - 1; ++i) {
-        frames_before_flush *= dims.at(i).array_size_px;
+        frames_before_flush *= dims[i].array_size_px;
     }
 
     CHECK(frames_before_flush > 0);
@@ -230,60 +218,61 @@ zarr::ArrayWriter::should_flush_() const
 }
 
 void
-zarr::ArrayWriter::compress_buffers_() noexcept
+zarr::ArrayWriter::compress_buffers_()
 {
     if (!config_.compression_params.has_value()) {
         return;
     }
 
-    TRACE("Compressing");
+    LOG_DEBUG("Compressing");
 
     BloscCompressionParams params = config_.compression_params.value();
-    const auto bytes_per_px = bytes_of_data_type(config_.image_shape.type);
+    const auto bytes_per_px = bytes_of_type(config_.dtype);
 
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
-    for (auto i = 0; i < chunk_buffers_.size(); ++i) {
-        auto& chunk = chunk_buffers_.at(i);
+    for (auto& chunk : chunk_buffers_) {
+        EXPECT(thread_pool_->push_to_job_queue(
+                 [&params, buf = &chunk, bytes_per_px, &latch](
+                   std::string& err) -> bool {
+                     bool success = false;
+                     const size_t bytes_of_chunk = buf->size();
 
-        thread_pool_->push_to_job_queue([&params,
-                                         buf = &chunk,
-                                         bytes_per_px,
-                                         &latch](std::string& err) -> bool {
-            bool success = false;
-            const size_t bytes_of_chunk = buf->size();
+                     try {
+                         const auto tmp_size =
+                           bytes_of_chunk + BLOSC_MAX_OVERHEAD;
+                         std::vector<uint8_t> tmp(tmp_size);
+                         const auto nb =
+                           blosc_compress_ctx(params.clevel,
+                                              params.shuffle,
+                                              bytes_per_px,
+                                              bytes_of_chunk,
+                                              buf->data(),
+                                              tmp.data(),
+                                              tmp_size,
+                                              params.codec_id.c_str(),
+                                              0 /* blocksize - 0:automatic */,
+                                              1);
 
-            try {
-                const auto tmp_size = bytes_of_chunk + BLOSC_MAX_OVERHEAD;
-                std::vector<uint8_t> tmp(tmp_size);
-                const auto nb =
-                  blosc_compress_ctx(params.clevel,
-                                     params.shuffle,
-                                     bytes_per_px,
-                                     bytes_of_chunk,
-                                     buf->data(),
-                                     tmp.data(),
-                                     tmp_size,
-                                     params.codec_id.c_str(),
-                                     0 /* blocksize - 0:automatic */,
-                                     1);
+                         tmp.resize(nb);
+                         buf->swap(tmp);
 
-                tmp.resize(nb);
-                buf->swap(tmp);
+                         success = true;
+                     } catch (const std::exception& exc) {
+                         char msg[128];
+                         snprintf(msg,
+                                  sizeof(msg),
+                                  "Failed to compress chunk: %s",
+                                  exc.what());
+                         err = msg;
+                     } catch (...) {
+                         err = "Failed to compress chunk (unknown)";
+                     }
+                     latch.count_down();
 
-                success = true;
-            } catch (const std::exception& exc) {
-                char msg[128];
-                snprintf(
-                  msg, sizeof(msg), "Failed to compress chunk: %s", exc.what());
-                err = msg;
-            } catch (...) {
-                err = "Failed to compress chunk (unknown)";
-            }
-            latch.count_down();
-
-            return success;
-        });
+                     return success;
+                 }),
+               "Failed to push to job queue");
     }
 
     // wait for all threads to finish
@@ -297,7 +286,7 @@ zarr::ArrayWriter::flush_()
         return;
     }
 
-    // compress buffers and write out
+    // compress buffers and write_frame out
     compress_buffers_();
     CHECK(flush_impl_());
 
@@ -326,282 +315,8 @@ zarr::ArrayWriter::close_sinks_()
 void
 zarr::ArrayWriter::rollover_()
 {
-    TRACE("Rolling over");
+    LOG_DEBUG("Rolling over");
 
     close_sinks_();
     ++append_chunk_index_;
 }
-
-#ifndef NO_UNIT_TESTS
-#ifdef _WIN32
-#define acquire_export __declspec(dllexport)
-#else
-#define acquire_export
-#endif
-
-namespace common = zarr::common;
-
-class TestWriter : public zarr::ArrayWriter
-{
-  public:
-    TestWriter(const zarr::ArrayWriterConfig& array_spec,
-               std::shared_ptr<common::ThreadPool> thread_pool)
-      : zarr::ArrayWriter(array_spec, thread_pool, nullptr)
-    {
-    }
-
-  private:
-    bool should_rollover_() const override { return false; }
-    bool flush_impl_() override { return true; }
-    bool write_array_metadata_() override { return true; }
-};
-
-extern "C"
-{
-
-    acquire_export int unit_test__writer__write_frame_to_chunks()
-    {
-        const auto base_dir = fs::temp_directory_path() / "acquire";
-        int retval = 0;
-
-        const unsigned int array_width = 64, array_height = 48,
-                           array_planes = 2, array_channels = 1,
-                           array_timepoints = 2;
-        const unsigned int chunk_width = 16, chunk_height = 16,
-                           chunk_planes = 1, chunk_channels = 1,
-                           chunk_timepoints = 1;
-
-        const unsigned int chunks_in_x =
-          (array_width + chunk_width - 1) / chunk_width; // 4 chunks
-        const unsigned int chunks_in_y =
-          (array_height + chunk_height - 1) / chunk_height; // 3 chunks
-
-        const unsigned int chunks_in_z =
-          (array_planes + chunk_planes - 1) / chunk_planes; // 2 chunks
-        const unsigned int chunks_in_c =
-          (array_channels + chunk_channels - 1) / chunk_channels; // 1 chunk
-        const unsigned int chunks_in_t =
-          (array_timepoints + chunk_timepoints - 1) /
-          chunk_timepoints; // 2 chunks
-        const unsigned int n_frames =
-          array_planes * array_channels * array_timepoints;
-
-        const ImageShape shape
-        {
-            .dims = {
-                .width = array_width,
-                .height = array_height,
-              },
-              .strides = {
-                .width = 1,
-                .height = array_width,
-                .planes = array_width * array_height,
-              },
-              .type = SampleType_u16,
-        };
-        const unsigned int nbytes_px = bytes_of_data_type(shape.type);
-
-        try {
-            auto thread_pool = std::make_shared<common::ThreadPool>(
-              std::thread::hardware_concurrency(),
-              [](const std::string& err) { LOG_ERROR("Error: %s", err.c_str()); });
-
-            std::vector<zarr::Dimension> dims;
-            dims.emplace_back(
-              "x", DimensionType_Space, array_width, chunk_width, 0);
-            dims.emplace_back(
-              "y", DimensionType_Space, array_height, chunk_height, 0);
-            dims.emplace_back(
-              "z", DimensionType_Space, array_planes, chunk_planes, 0);
-            dims.emplace_back(
-              "c", DimensionType_Channel, array_channels, chunk_channels, 0);
-            dims.emplace_back(
-              "t", DimensionType_Time, array_timepoints, chunk_timepoints, 0);
-
-            zarr::ArrayWriterConfig config = {
-                .image_shape = shape,
-                .dimensions = dims,
-                .dataset_root = base_dir.string(),
-                .compression_params = std::nullopt,
-            };
-
-            TestWriter writer(config, thread_pool);
-
-            const size_t frame_size = array_width * array_height * nbytes_px;
-            std::vector<uint8_t> data(frame_size, 0);
-
-            for (auto i = 0; i < n_frames; ++i) {
-                CHECK(writer.write(data.data(), frame_size) == frame_size);
-            }
-
-            retval = 1;
-        } catch (const std::exception& exc) {
-            LOG_ERROR("Exception: %s\n", exc.what());
-        } catch (...) {
-            LOG_ERROR("Exception: (unknown)");
-        }
-
-        // cleanup
-        if (fs::exists(base_dir)) {
-            fs::remove_all(base_dir);
-        }
-        return retval;
-    }
-
-    acquire_export int unit_test__downsample_writer_config()
-    {
-        int retval = 0;
-        try {
-            const fs::path base_dir = "acquire";
-
-            zarr::ArrayWriterConfig config {
-                .image_shape = {
-                    .dims = {
-                      .channels = 1,
-                      .width = 64,
-                      .height = 48,
-                      .planes = 1,
-                    },
-                    .strides = {
-                      .channels = 1,
-                      .width = 1,
-                      .height = 64,
-                      .planes = 64 * 48
-                    },
-                    .type = SampleType_u8
-                },
-                .dimensions = {},
-                .level_of_detail = 0,
-                .dataset_root = base_dir.string(),
-                .compression_params = std::nullopt
-            };
-
-            config.dimensions.emplace_back(
-              "x", DimensionType_Space, 64, 16, 2); // 4 chunks, 2 shards
-            config.dimensions.emplace_back(
-              "y", DimensionType_Space, 48, 16, 3); // 3 chunks, 1 shard
-            config.dimensions.emplace_back(
-              "z", DimensionType_Space, 7, 3, 3); // 3 chunks, 3 shards
-            config.dimensions.emplace_back(
-              "c", DimensionType_Channel, 2, 1, 1); // 2 chunks, 2 shards
-            config.dimensions.emplace_back("t",
-                                           DimensionType_Time,
-                                           0,
-                                           5,
-                                           1); // 5 timepoints / chunk, 1 shard
-
-            zarr::ArrayWriterConfig downsampled_config;
-            CHECK(zarr::downsample(config, downsampled_config));
-
-            // check dimensions
-            CHECK(downsampled_config.dimensions.size() == 5);
-            CHECK(downsampled_config.dimensions.at(0).name == "x");
-            CHECK(downsampled_config.dimensions.at(0).array_size_px == 32);
-            CHECK(downsampled_config.dimensions.at(0).chunk_size_px == 16);
-            CHECK(downsampled_config.dimensions.at(0).shard_size_chunks == 2);
-
-            CHECK(downsampled_config.dimensions.at(1).name == "y");
-            CHECK(downsampled_config.dimensions.at(1).array_size_px == 24);
-            CHECK(downsampled_config.dimensions.at(1).chunk_size_px == 16);
-            CHECK(downsampled_config.dimensions.at(1).shard_size_chunks == 2);
-
-            CHECK(downsampled_config.dimensions.at(2).name == "z");
-            CHECK(downsampled_config.dimensions.at(2).array_size_px == 4);
-            CHECK(downsampled_config.dimensions.at(2).chunk_size_px == 3);
-            CHECK(downsampled_config.dimensions.at(2).shard_size_chunks == 2);
-
-            CHECK(downsampled_config.dimensions.at(3).name == "c");
-            // we don't downsample channels
-            CHECK(downsampled_config.dimensions.at(3).array_size_px == 2);
-            CHECK(downsampled_config.dimensions.at(3).chunk_size_px == 1);
-            CHECK(downsampled_config.dimensions.at(3).shard_size_chunks == 1);
-
-            CHECK(downsampled_config.dimensions.at(4).name == "t");
-            CHECK(downsampled_config.dimensions.at(4).array_size_px == 0);
-            CHECK(downsampled_config.dimensions.at(4).chunk_size_px == 5);
-            CHECK(downsampled_config.dimensions.at(4).shard_size_chunks == 1);
-
-            // check image shape
-            CHECK(downsampled_config.image_shape.dims.channels == 1);
-            CHECK(downsampled_config.image_shape.dims.width == 32);
-            CHECK(downsampled_config.image_shape.dims.height == 24);
-            CHECK(downsampled_config.image_shape.dims.planes == 1);
-
-            CHECK(downsampled_config.image_shape.strides.channels == 1);
-            CHECK(downsampled_config.image_shape.strides.width == 1);
-            CHECK(downsampled_config.image_shape.strides.height == 32);
-            CHECK(downsampled_config.image_shape.strides.planes == 32 * 24);
-
-            // check level of detail
-            CHECK(downsampled_config.level_of_detail == 1);
-
-            // check dataset root
-            CHECK(downsampled_config.dataset_root == config.dataset_root);
-
-            // check compression params
-            CHECK(!downsampled_config.compression_params.has_value());
-
-            // downsample again
-            config = std::move(downsampled_config);
-
-            // can't downsample anymore
-            CHECK(!zarr::downsample(config, downsampled_config));
-
-            // check dimensions
-            CHECK(downsampled_config.dimensions.size() == 5);
-            CHECK(downsampled_config.dimensions.at(0).name == "x");
-            CHECK(downsampled_config.dimensions.at(0).array_size_px == 16);
-            CHECK(downsampled_config.dimensions.at(0).chunk_size_px == 16);
-            CHECK(downsampled_config.dimensions.at(0).shard_size_chunks == 1);
-
-            CHECK(downsampled_config.dimensions.at(1).name == "y");
-            CHECK(downsampled_config.dimensions.at(1).array_size_px == 12);
-            CHECK(downsampled_config.dimensions.at(1).chunk_size_px == 12);
-            CHECK(downsampled_config.dimensions.at(1).shard_size_chunks == 1);
-
-            CHECK(downsampled_config.dimensions.at(2).name == "z");
-            CHECK(downsampled_config.dimensions.at(2).array_size_px == 2);
-            CHECK(downsampled_config.dimensions.at(2).chunk_size_px == 2);
-            CHECK(downsampled_config.dimensions.at(2).shard_size_chunks == 1);
-
-            CHECK(downsampled_config.dimensions.at(3).name == "c");
-            // we don't downsample channels
-            CHECK(downsampled_config.dimensions.at(3).array_size_px == 2);
-            CHECK(downsampled_config.dimensions.at(3).chunk_size_px == 1);
-            CHECK(downsampled_config.dimensions.at(3).shard_size_chunks == 1);
-
-            CHECK(downsampled_config.dimensions.at(4).name == "t");
-            CHECK(downsampled_config.dimensions.at(4).array_size_px == 0);
-            CHECK(downsampled_config.dimensions.at(4).chunk_size_px == 5);
-            CHECK(downsampled_config.dimensions.at(4).shard_size_chunks == 1);
-
-            // check image shape
-            CHECK(downsampled_config.image_shape.dims.channels == 1);
-            CHECK(downsampled_config.image_shape.dims.width == 16);
-            CHECK(downsampled_config.image_shape.dims.height == 12);
-            CHECK(downsampled_config.image_shape.dims.planes == 1);
-
-            CHECK(downsampled_config.image_shape.strides.channels == 1);
-            CHECK(downsampled_config.image_shape.strides.width == 1);
-            CHECK(downsampled_config.image_shape.strides.height == 16);
-            CHECK(downsampled_config.image_shape.strides.planes == 16 * 12);
-
-            // check level of detail
-            CHECK(downsampled_config.level_of_detail == 2);
-
-            // check data root
-            CHECK(downsampled_config.dataset_root == config.dataset_root);
-
-            // check compression params
-            CHECK(!downsampled_config.compression_params.has_value());
-
-            retval = 1;
-        } catch (const std::exception& exc) {
-            LOG_ERROR("Exception: %s\n", exc.what());
-        } catch (...) {
-            LOG_ERROR("Exception: (unknown)");
-        }
-        return retval;
-    }
-};
-#endif

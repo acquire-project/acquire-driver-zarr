@@ -7,7 +7,7 @@
 #include <string_view>
 
 namespace zarr {
-struct FileSink : public Sink
+class FileSink : public Sink
 {
   public:
     explicit FileSink(std::string_view filename);

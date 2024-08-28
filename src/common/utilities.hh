@@ -30,12 +30,6 @@ enum class ZarrVersion
 
 namespace common {
 
-/// @brief Get the number of chunks to hold in memory.
-/// @param dimensions The dimensions of the array.
-/// @return The number of chunks to buffer before writing out.
-size_t
-number_of_chunks_in_memory(const std::vector<Dimension>& dimensions);
-
 /// @brief Get the number of shards to write at one time.
 /// @param dimensions The dimensions of the array.
 /// @return The number of shards to buffer and write out.
@@ -63,14 +57,6 @@ shard_index_for_chunk(size_t chunk_index,
 size_t
 shard_internal_index(size_t chunk_index,
                      const std::vector<Dimension>& dimensions);
-
-/// @brief Get the size, in bytes, of a single chunk.
-/// @param dimensions The dimensions of the array.
-/// @param dtype The pixel type of the array.
-/// @return The number of bytes to allocate for a chunk.
-size_t
-bytes_per_chunk(const std::vector<Dimension>& dimensions,
-                const SampleType& dtype);
 
 /// @brief Get a string representation of the SampleType enum.
 /// @param t An enumerated sample type.

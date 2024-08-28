@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 size_t
-zarr::bytes_of_data_type(ZarrDataType data_type)
+zarr::bytes_of_type(ZarrDataType data_type)
 {
     switch (data_type) {
         case ZarrDataType_int8:
@@ -26,6 +26,13 @@ zarr::bytes_of_data_type(ZarrDataType data_type)
         default:
             throw std::runtime_error("Invalid data type.");
     }
+}
+
+size_t
+zarr::bytes_of_frame(const std::vector<Dimension>& dims, ZarrDataType type)
+{
+    return bytes_of_type(type) * dims.back().array_size_px *
+           dims[dims.size() - 2].array_size_px;
 }
 
 size_t
@@ -114,7 +121,7 @@ zarr::chunk_internal_offset(size_t frame_id,
     const Dimension& x_dim = dims.back();
     const Dimension& y_dim = dims[dims.size() - 2];
     const auto tile_size =
-      bytes_of_data_type(type) * x_dim.chunk_size_px * y_dim.chunk_size_px;
+      bytes_of_type(type) * x_dim.chunk_size_px * y_dim.chunk_size_px;
 
     size_t offset = 0;
     std::vector<size_t> array_strides, chunk_strides;
@@ -162,4 +169,27 @@ Zarr_get_error_message(ZarrError error)
         default:
             return "Unknown error";
     }
+}
+
+size_t
+zarr::number_of_chunks_in_memory(const std::vector<Dimension>& dimensions)
+{
+    size_t n_chunks = 1;
+    for (auto i = 1; i < dimensions.size(); ++i) {
+        n_chunks *= chunks_along_dimension(dimensions[i]);
+    }
+
+    return n_chunks;
+}
+
+size_t
+zarr::bytes_per_chunk(const std::vector<Dimension>& dimensions,
+                      ZarrDataType type)
+{
+    auto n_bytes = bytes_of_type(type);
+    for (const auto& d : dimensions) {
+        n_bytes *= d.chunk_size_px;
+    }
+
+    return n_bytes;
 }

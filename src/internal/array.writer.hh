@@ -16,6 +16,7 @@ namespace zarr {
 struct ArrayWriterConfig final
 {
     std::vector<ZarrDimension_s> dimensions;
+    ZarrDataType dtype;
     int level_of_detail;
     std::string dataset_root;
     std::optional<BloscCompressionParams> compression_params;
@@ -32,7 +33,7 @@ struct ArrayWriterConfig final
 downsample(const ArrayWriterConfig& config,
            ArrayWriterConfig& downsampled_config);
 
-struct ArrayWriter
+class ArrayWriter
 {
   public:
     ArrayWriter(const ArrayWriterConfig& config,
@@ -41,7 +42,7 @@ struct ArrayWriter
 
     virtual ~ArrayWriter() noexcept = default;
 
-    [[nodiscard]] size_t write(const uint8_t* data, size_t bytes_of_frame);
+    [[nodiscard]] size_t write_frame(const uint8_t* data, size_t nbytes);
     void finalize();
 
   protected:
@@ -71,7 +72,7 @@ struct ArrayWriter
     void make_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
     bool should_flush_() const;
-    void compress_buffers_() noexcept;
+    void compress_buffers_();
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
     [[nodiscard]] virtual bool write_array_metadata_() = 0;

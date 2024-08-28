@@ -11,17 +11,6 @@ namespace zarr = acquire::sink::zarr;
 namespace common = zarr::common;
 
 size_t
-common::number_of_chunks_in_memory(const std::vector<Dimension>& dimensions)
-{
-    size_t n_chunks = 1;
-    for (auto i = 0; i < dimensions.size() - 1; ++i) {
-        n_chunks *= chunks_along_dimension(dimensions[i]);
-    }
-
-    return n_chunks;
-}
-
-size_t
 common::number_of_shards(const std::vector<Dimension>& dimensions)
 {
     size_t n_shards = 1;
@@ -131,18 +120,6 @@ common::shard_internal_index(size_t chunk_idx,
     }
 
     return index;
-}
-
-size_t
-common::bytes_per_chunk(const std::vector<Dimension>& dimensions,
-                        const SampleType& type)
-{
-    auto n_bytes = bytes_of_type(type);
-    for (const auto& d : dimensions) {
-        n_bytes *= d.chunk_size_px;
-    }
-
-    return n_bytes;
 }
 
 const char*

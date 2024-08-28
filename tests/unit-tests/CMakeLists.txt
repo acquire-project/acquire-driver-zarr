@@ -12,6 +12,8 @@ set(tests
         common-chunk-lattice-index
         common-tile-group-offset
         common-chunk-internal-offset
+        array-writer-downsample-writer-config
+        array-writer-write-frame-to-chunks
 )
 
 foreach (name ${tests})
