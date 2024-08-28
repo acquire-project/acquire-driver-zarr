@@ -10,6 +10,8 @@
 namespace fs = std::filesystem;
 
 namespace {
+const std::string test_dir = TEST "-data";
+
 bool
 get_credentials(std::string& endpoint,
                 std::string& bucket_name,
@@ -55,13 +57,13 @@ sink_creator_make_chunk_sinks(std::shared_ptr<zarr::ThreadPool> thread_pool,
     {
         std::vector<std::unique_ptr<zarr::Sink>> sinks;
         CHECK(sink_creator.make_data_sinks(
-          TEST, dimensions, zarr::chunks_along_dimension, sinks));
+          test_dir, dimensions, zarr::chunks_along_dimension, sinks));
     }
 
     const auto chunks_in_y = zarr::chunks_along_dimension(dimensions[1]);
     const auto chunks_in_x = zarr::chunks_along_dimension(dimensions[2]);
 
-    const fs::path base_path(TEST);
+    const fs::path base_path(test_dir);
     for (auto i = 0; i < chunks_in_y; ++i) {
         const fs::path y_dir = base_path / std::to_string(i);
 
@@ -91,8 +93,11 @@ sink_creator_make_chunk_sinks(
     {
         const uint8_t data[] = { 0, 0 };
         std::vector<std::unique_ptr<zarr::Sink>> sinks;
-        CHECK(sink_creator.make_data_sinks(
-          bucket_name, TEST, dimensions, zarr::chunks_along_dimension, sinks));
+        CHECK(sink_creator.make_data_sinks(bucket_name,
+                                           test_dir,
+                                           dimensions,
+                                           zarr::chunks_along_dimension,
+                                           sinks));
 
         for (auto& sink : sinks) {
             CHECK(sink);
@@ -106,7 +111,7 @@ sink_creator_make_chunk_sinks(
 
     auto conn = connection_pool->get_connection();
 
-    const std::string base_path(TEST);
+    const std::string base_path(test_dir);
     for (auto i = 0; i < chunks_in_y; ++i) {
         const std::string y_dir = base_path + "/" + std::to_string(i);
 
@@ -136,13 +141,13 @@ sink_creator_make_shard_sinks(std::shared_ptr<zarr::ThreadPool> thread_pool,
     {
         std::vector<std::unique_ptr<zarr::Sink>> sinks;
         CHECK(sink_creator.make_data_sinks(
-          TEST, dimensions, zarr::shards_along_dimension, sinks));
+          test_dir, dimensions, zarr::shards_along_dimension, sinks));
     }
 
     const auto shards_in_y = zarr::shards_along_dimension(dimensions[1]);
     const auto shards_in_x = zarr::shards_along_dimension(dimensions[2]);
 
-    const fs::path base_path(TEST);
+    const fs::path base_path(test_dir);
     for (auto i = 0; i < shards_in_y; ++i) {
         const fs::path y_dir = base_path / std::to_string(i);
 
@@ -172,8 +177,11 @@ sink_creator_make_shard_sinks(
     {
         const uint8_t data[] = { 0, 0 };
         std::vector<std::unique_ptr<zarr::Sink>> sinks;
-        CHECK(sink_creator.make_data_sinks(
-          bucket_name, TEST, dimensions, zarr::shards_along_dimension, sinks));
+        CHECK(sink_creator.make_data_sinks(bucket_name,
+                                           test_dir,
+                                           dimensions,
+                                           zarr::shards_along_dimension,
+                                           sinks));
 
         for (auto& sink : sinks) {
             CHECK(sink);
@@ -187,7 +195,7 @@ sink_creator_make_shard_sinks(
 
     auto conn = connection_pool->get_connection();
 
-    const std::string base_path(TEST);
+    const std::string base_path(test_dir);
     for (auto i = 0; i < shards_in_y; ++i) {
         const std::string y_dir = base_path + "/" + std::to_string(i);
 

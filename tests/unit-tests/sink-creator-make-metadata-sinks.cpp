@@ -8,6 +8,8 @@
 namespace fs = std::filesystem;
 
 namespace {
+const std::string test_dir = TEST "-data";
+
 bool
 get_credentials(std::string& endpoint,
                 std::string& bucket_name,
@@ -50,7 +52,7 @@ sink_creator_make_v2_metadata_sinks(
     zarr::SinkCreator sink_creator(thread_pool, nullptr);
 
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>> metadata_sinks;
-    CHECK(sink_creator.make_metadata_sinks(2, TEST, metadata_sinks));
+    CHECK(sink_creator.make_metadata_sinks(2, test_dir, metadata_sinks));
 
     CHECK(metadata_sinks.size() == 3);
     CHECK(metadata_sinks.contains(".zattrs"));
@@ -61,13 +63,13 @@ sink_creator_make_v2_metadata_sinks(
         CHECK(sink);
         sink.reset(nullptr); // close the file
 
-        fs::path file_path(TEST "/" + key);
+        fs::path file_path(test_dir + "/" + key);
         CHECK(fs::is_regular_file(file_path));
         // cleanup
         fs::remove(file_path);
     }
 
-    fs::remove(TEST "/0");
+    fs::remove(test_dir + "/0");
 }
 
 void
@@ -79,7 +81,8 @@ sink_creator_make_v2_metadata_sinks(
     zarr::SinkCreator sink_creator(thread_pool, connection_pool);
 
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>> metadata_sinks;
-    CHECK(sink_creator.make_metadata_sinks(2, bucket_name, TEST, metadata_sinks));
+    CHECK(
+      sink_creator.make_metadata_sinks(2, bucket_name, test_dir, metadata_sinks));
 
     CHECK(metadata_sinks.size() == 3);
     CHECK(metadata_sinks.contains(".zattrs"));
@@ -95,7 +98,7 @@ sink_creator_make_v2_metadata_sinks(
         CHECK(sink->write(0, data, 2));
         sink.reset(nullptr); // close the connection
 
-        std::string path = TEST "/" + key;
+        std::string path = test_dir + "/" + key;
         CHECK(conn->object_exists(bucket_name, path));
         // cleanup
         CHECK(conn->delete_object(bucket_name, path));
@@ -111,7 +114,7 @@ sink_creator_make_v3_metadata_sinks(
     zarr::SinkCreator sink_creator(thread_pool, nullptr);
 
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>> metadata_sinks;
-    CHECK(sink_creator.make_metadata_sinks(3, TEST, metadata_sinks));
+    CHECK(sink_creator.make_metadata_sinks(3, test_dir, metadata_sinks));
 
     CHECK(metadata_sinks.size() == 2);
     CHECK(metadata_sinks.contains("zarr.json"));
@@ -121,13 +124,13 @@ sink_creator_make_v3_metadata_sinks(
         CHECK(sink);
         sink.reset(nullptr); // close the file
 
-        fs::path file_path(TEST "/" + key);
+        fs::path file_path(test_dir + "/" + key);
         CHECK(fs::is_regular_file(file_path));
         // cleanup
         fs::remove(file_path);
     }
 
-    fs::remove(TEST "/meta");
+    fs::remove(test_dir + "/meta");
 }
 
 void
@@ -139,7 +142,8 @@ sink_creator_make_v3_metadata_sinks(
     zarr::SinkCreator sink_creator(thread_pool, connection_pool);
 
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>> metadata_sinks;
-    CHECK(sink_creator.make_metadata_sinks(3, bucket_name, TEST, metadata_sinks));
+    CHECK(
+      sink_creator.make_metadata_sinks(3, bucket_name, test_dir, metadata_sinks));
 
     CHECK(metadata_sinks.size() == 2);
     CHECK(metadata_sinks.contains("zarr.json"));
@@ -154,7 +158,7 @@ sink_creator_make_v3_metadata_sinks(
         CHECK(sink->write(0, data, 2));
         sink.reset(nullptr); // close the connection
 
-        std::string path = TEST "/" + key;
+        std::string path = test_dir + "/" + key;
         CHECK(conn->object_exists(bucket_name, path));
         // cleanup
         CHECK(conn->delete_object(bucket_name, path));
