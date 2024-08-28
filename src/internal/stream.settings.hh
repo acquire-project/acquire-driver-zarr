@@ -8,11 +8,11 @@
 struct ZarrDimension_s
 {
     std::string name; /* Name of the dimension */
-    size_t kind;      /* Type of dimension */
+    uint8_t kind;     /* Type of dimension */
 
-    size_t array_size_px;     /* Size of the array along this dimension */
-    size_t chunk_size_px;     /* Size of a chunk along this dimension */
-    size_t shard_size_chunks; /* Number of chunks in a shard along this
+    uint32_t array_size_px;     /* Size of the array along this dimension */
+    uint32_t chunk_size_px;     /* Size of a chunk along this dimension */
+    uint32_t shard_size_chunks; /* Number of chunks in a shard along this
                                  dimension */
 };
 
@@ -25,10 +25,10 @@ struct ZarrStreamSettings_s
     std::string s3_access_key_id;     /* Access key ID for the S3 service */
     std::string s3_secret_access_key; /* Secret access key for the S3 service */
 
-    size_t dtype; /* Data type of the base array */
+    uint8_t dtype; /* Data type of the base array */
 
-    size_t compressor; /* Compression library to use */
-    size_t codec;      /* Compression codec to use */
+    uint8_t compressor; /* Compression library to use */
+    uint8_t codec;      /* Compression codec to use */
 
     std::vector<ZarrDimension_s> dimensions; /* Dimensions of the base array */
 

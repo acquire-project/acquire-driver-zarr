@@ -44,4 +44,25 @@ size_t
 chunk_lattice_index(size_t frame_id,
                     size_t dimension_idx,
                     const std::vector<Dimension>& dims);
+
+/**
+ * @brief Find the offset in the array of chunk buffers for the given frame.
+ * @param frame_id The frame ID.
+ * @param dims The dimensions of the array.
+ * @return The offset in the array of chunk buffers.
+ */
+size_t
+tile_group_offset(size_t frame_id, const std::vector<Dimension>& dims);
+
+/**
+ * @brief Find the byte offset inside a chunk for a given frame and data type.
+ * @param frame_id The frame ID.
+ * @param dims The dimensions of the array.
+ * @param type The data type of the array.
+ * @return The byte offset inside a chunk.
+ */
+size_t
+chunk_internal_offset(size_t frame_id,
+                      const std::vector<Dimension>& dims,
+                      ZarrDataType type);
 } // namespace zarr

@@ -10,6 +10,8 @@ set(tests
         sink-creator-make-metadata-sinks
         sink-creator-make-data-sinks
         common-chunk-lattice-index
+        common-tile-group-offset
+        common-chunk-internal-offset
 )
 
 foreach (name ${tests})

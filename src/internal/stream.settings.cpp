@@ -215,9 +215,9 @@ ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
                                  const char* name,
                                  size_t bytes_of_name,
                                  ZarrDimensionType kind,
-                                 size_t array_size_px,
-                                 size_t chunk_size_px,
-                                 size_t shard_size_chunks)
+                                 uint32_t array_size_px,
+                                 uint32_t chunk_size_px,
+                                 uint32_t shard_size_chunks)
 {
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
     EXPECT_VALID_ARGUMENT(name, "Null pointer: name");

@@ -7,101 +7,6 @@
 #include <latch>
 #include <stdexcept>
 
-namespace {
-/// Returns the index of the chunk in the lattice of chunks for the given frame
-/// and dimension.
-size_t
-chunk_lattice_index(size_t frame_id,
-                    size_t dimension_idx,
-                    const std::vector<zarr::Dimension>& dims)
-{
-    CHECK(dimension_idx >= 2 && dimension_idx < dims.size());
-
-    // the last dimension is a special case
-    if (dimension_idx == dims.size() - 1) {
-        size_t divisor = dims.back().chunk_size_px;
-        for (auto i = 2; i < dims.size() - 1; ++i) {
-            const auto& dim = dims.at(i);
-            divisor *= dim.array_size_px;
-        }
-
-        CHECK(divisor);
-        return frame_id / divisor;
-    }
-
-    size_t mod_divisor = 1, div_divisor = 1;
-    for (auto i = 2; i <= dimension_idx; ++i) {
-        const auto& dim = dims.at(i);
-        mod_divisor *= dim.array_size_px;
-        div_divisor *=
-          (i < dimension_idx ? dim.array_size_px : dim.chunk_size_px);
-    }
-
-    CHECK(mod_divisor);
-    CHECK(div_divisor);
-
-    return (frame_id % mod_divisor) / div_divisor;
-}
-
-/// Find the offset in the array of chunks for the given frame.
-size_t
-tile_group_offset(size_t frame_id, const std::vector<zarr::Dimension>& dims)
-{
-    std::vector<size_t> strides;
-    strides.push_back(1);
-    for (auto i = 0; i < dims.size() - 1; ++i) {
-        const auto& dim = dims.at(i);
-        CHECK(dim.chunk_size_px);
-        const auto a = dim.array_size_px, c = dim.chunk_size_px;
-        strides.push_back(strides.back() * ((a + c - 1) / c));
-    }
-
-    size_t offset = 0;
-    for (auto i = 2; i < dims.size() - 1; ++i) {
-        const auto idx = chunk_lattice_index(frame_id, i, dims);
-        const auto stride = strides.at(i);
-        offset += idx * stride;
-    }
-
-    return offset;
-}
-
-/// Find the offset inside a chunk for the given frame.
-size_t
-chunk_internal_offset(size_t frame_id,
-                      const std::vector<zarr::Dimension>& dims,
-                      ZarrDataType type)
-{
-    const auto tile_size =
-      bytes_of_data_type(type) * dims.at(0).chunk_size_px * dims.at(1).chunk_size_px;
-    auto offset = 0;
-    std::vector<size_t> array_strides, chunk_strides;
-    array_strides.push_back(1);
-    chunk_strides.push_back(1);
-    for (auto i = 2; i < dims.size(); ++i) {
-        const auto& dim = dims.at(i);
-
-        if (i < dims.size() - 1) {
-            CHECK(dim.array_size_px);
-        }
-        CHECK(dim.chunk_size_px);
-        CHECK(array_strides.back());
-
-        const auto internal_idx =
-          i == dims.size() - 1
-            ? (frame_id / array_strides.back()) % dim.chunk_size_px
-            : (frame_id / array_strides.back()) % dim.array_size_px %
-                dim.chunk_size_px;
-        offset += internal_idx * chunk_strides.back();
-
-        array_strides.push_back(array_strides.back() * dim.array_size_px);
-        chunk_strides.push_back(chunk_strides.back() * dim.chunk_size_px);
-    }
-
-    return offset * tile_size;
-}
-} // end ::{anonymous} namespace
-
 bool
 zarr::downsample(const ArrayWriterConfig& config,
                  ArrayWriterConfig& downsampled_config)
@@ -290,13 +195,13 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
                     const auto nbytes = region_width * bytes_per_px;
                     const auto region_stop = region_start + nbytes;
                     if (region_stop > buf_size) {
-                        LOGE("Buffer overflow");
+                        LOG_ERROR("Buffer overflow");
                         return bytes_written;
                     }
 
                     // copy region
                     if (nbytes > std::distance(chunk_it, chunk.end())) {
-                        LOGE("Buffer overflow");
+                        LOG_ERROR("Buffer overflow");
                         return bytes_written;
                     }
                     std::copy(buf + region_start, buf + region_stop, chunk_it);
@@ -453,205 +358,6 @@ class TestWriter : public zarr::ArrayWriter
 
 extern "C"
 {
-    acquire_export int unit_test__tile_group_offset()
-    {
-        int retval = 0;
-
-        std::vector<zarr::Dimension> dims;
-        dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
-        dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
-        dims.emplace_back("z", DimensionType_Space, 5, 2, 0);   // 3 chunks
-        dims.emplace_back("c", DimensionType_Channel, 3, 2, 0); // 2 chunks
-        dims.emplace_back(
-          "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
-
-        try {
-            CHECK(tile_group_offset(0, dims) == 0);
-            CHECK(tile_group_offset(1, dims) == 0);
-            CHECK(tile_group_offset(2, dims) == 12);
-            CHECK(tile_group_offset(3, dims) == 12);
-            CHECK(tile_group_offset(4, dims) == 24);
-            CHECK(tile_group_offset(5, dims) == 0);
-            CHECK(tile_group_offset(6, dims) == 0);
-            CHECK(tile_group_offset(7, dims) == 12);
-            CHECK(tile_group_offset(8, dims) == 12);
-            CHECK(tile_group_offset(9, dims) == 24);
-            CHECK(tile_group_offset(10, dims) == 36);
-            CHECK(tile_group_offset(11, dims) == 36);
-            CHECK(tile_group_offset(12, dims) == 48);
-            CHECK(tile_group_offset(13, dims) == 48);
-            CHECK(tile_group_offset(14, dims) == 60);
-            CHECK(tile_group_offset(15, dims) == 0);
-            CHECK(tile_group_offset(16, dims) == 0);
-            CHECK(tile_group_offset(17, dims) == 12);
-            CHECK(tile_group_offset(18, dims) == 12);
-            CHECK(tile_group_offset(19, dims) == 24);
-            CHECK(tile_group_offset(20, dims) == 0);
-            CHECK(tile_group_offset(21, dims) == 0);
-            CHECK(tile_group_offset(22, dims) == 12);
-            CHECK(tile_group_offset(23, dims) == 12);
-            CHECK(tile_group_offset(24, dims) == 24);
-            CHECK(tile_group_offset(25, dims) == 36);
-            CHECK(tile_group_offset(26, dims) == 36);
-            CHECK(tile_group_offset(27, dims) == 48);
-            CHECK(tile_group_offset(28, dims) == 48);
-            CHECK(tile_group_offset(29, dims) == 60);
-            CHECK(tile_group_offset(30, dims) == 0);
-            CHECK(tile_group_offset(31, dims) == 0);
-            CHECK(tile_group_offset(32, dims) == 12);
-            CHECK(tile_group_offset(33, dims) == 12);
-            CHECK(tile_group_offset(34, dims) == 24);
-            CHECK(tile_group_offset(35, dims) == 0);
-            CHECK(tile_group_offset(36, dims) == 0);
-            CHECK(tile_group_offset(37, dims) == 12);
-            CHECK(tile_group_offset(38, dims) == 12);
-            CHECK(tile_group_offset(39, dims) == 24);
-            CHECK(tile_group_offset(40, dims) == 36);
-            CHECK(tile_group_offset(41, dims) == 36);
-            CHECK(tile_group_offset(42, dims) == 48);
-            CHECK(tile_group_offset(43, dims) == 48);
-            CHECK(tile_group_offset(44, dims) == 60);
-            CHECK(tile_group_offset(45, dims) == 0);
-            CHECK(tile_group_offset(46, dims) == 0);
-            CHECK(tile_group_offset(47, dims) == 12);
-            CHECK(tile_group_offset(48, dims) == 12);
-            CHECK(tile_group_offset(49, dims) == 24);
-            CHECK(tile_group_offset(50, dims) == 0);
-            CHECK(tile_group_offset(51, dims) == 0);
-            CHECK(tile_group_offset(52, dims) == 12);
-            CHECK(tile_group_offset(53, dims) == 12);
-            CHECK(tile_group_offset(54, dims) == 24);
-            CHECK(tile_group_offset(55, dims) == 36);
-            CHECK(tile_group_offset(56, dims) == 36);
-            CHECK(tile_group_offset(57, dims) == 48);
-            CHECK(tile_group_offset(58, dims) == 48);
-            CHECK(tile_group_offset(59, dims) == 60);
-            CHECK(tile_group_offset(60, dims) == 0);
-            CHECK(tile_group_offset(61, dims) == 0);
-            CHECK(tile_group_offset(62, dims) == 12);
-            CHECK(tile_group_offset(63, dims) == 12);
-            CHECK(tile_group_offset(64, dims) == 24);
-            CHECK(tile_group_offset(65, dims) == 0);
-            CHECK(tile_group_offset(66, dims) == 0);
-            CHECK(tile_group_offset(67, dims) == 12);
-            CHECK(tile_group_offset(68, dims) == 12);
-            CHECK(tile_group_offset(69, dims) == 24);
-            CHECK(tile_group_offset(70, dims) == 36);
-            CHECK(tile_group_offset(71, dims) == 36);
-            CHECK(tile_group_offset(72, dims) == 48);
-            CHECK(tile_group_offset(73, dims) == 48);
-            CHECK(tile_group_offset(74, dims) == 60);
-            CHECK(tile_group_offset(75, dims) == 0);
-
-            retval = 1;
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-        }
-
-        return retval;
-    }
-
-    acquire_export int unit_test__chunk_internal_offset()
-    {
-        int retval = 0;
-
-        std::vector<zarr::Dimension> dims;
-        dims.emplace_back("x", DimensionType_Space, 64, 16, 0); // 4 chunks
-        dims.emplace_back("y", DimensionType_Space, 48, 16, 0); // 3 chunks
-        dims.emplace_back("z", DimensionType_Space, 5, 2, 0);   // 3 chunks
-        dims.emplace_back("c", DimensionType_Channel, 3, 2, 0); // 2 chunks
-        dims.emplace_back(
-          "t", DimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
-
-        try {
-            CHECK(chunk_internal_offset(0, dims, SampleType_u16) == 0);
-            CHECK(chunk_internal_offset(1, dims, SampleType_u16) == 512);
-            CHECK(chunk_internal_offset(2, dims, SampleType_u16) == 0);
-            CHECK(chunk_internal_offset(3, dims, SampleType_u16) == 512);
-            CHECK(chunk_internal_offset(4, dims, SampleType_u16) == 0);
-            CHECK(chunk_internal_offset(5, dims, SampleType_u16) == 1024);
-            CHECK(chunk_internal_offset(6, dims, SampleType_u16) == 1536);
-            CHECK(chunk_internal_offset(7, dims, SampleType_u16) == 1024);
-            CHECK(chunk_internal_offset(8, dims, SampleType_u16) == 1536);
-            CHECK(chunk_internal_offset(9, dims, SampleType_u16) == 1024);
-            CHECK(chunk_internal_offset(10, dims, SampleType_u16) == 0);
-            CHECK(chunk_internal_offset(11, dims, SampleType_u16) == 512);
-            CHECK(chunk_internal_offset(12, dims, SampleType_u16) == 0);
-            CHECK(chunk_internal_offset(13, dims, SampleType_u16) == 512);
-            CHECK(chunk_internal_offset(14, dims, SampleType_u16) == 0);
-            CHECK(chunk_internal_offset(15, dims, SampleType_u16) == 2048);
-            CHECK(chunk_internal_offset(16, dims, SampleType_u16) == 2560);
-            CHECK(chunk_internal_offset(17, dims, SampleType_u16) == 2048);
-            CHECK(chunk_internal_offset(18, dims, SampleType_u16) == 2560);
-            CHECK(chunk_internal_offset(19, dims, SampleType_u16) == 2048);
-            CHECK(chunk_internal_offset(20, dims, SampleType_u16) == 3072);
-            CHECK(chunk_internal_offset(21, dims, SampleType_u16) == 3584);
-            CHECK(chunk_internal_offset(22, dims, SampleType_u16) == 3072);
-            CHECK(chunk_internal_offset(23, dims, SampleType_u16) == 3584);
-            CHECK(chunk_internal_offset(24, dims, SampleType_u16) == 3072);
-            CHECK(chunk_internal_offset(25, dims, SampleType_u16) == 2048);
-            CHECK(chunk_internal_offset(26, dims, SampleType_u16) == 2560);
-            CHECK(chunk_internal_offset(27, dims, SampleType_u16) == 2048);
-            CHECK(chunk_internal_offset(28, dims, SampleType_u16) == 2560);
-            CHECK(chunk_internal_offset(29, dims, SampleType_u16) == 2048);
-            CHECK(chunk_internal_offset(30, dims, SampleType_u16) == 4096);
-            CHECK(chunk_internal_offset(31, dims, SampleType_u16) == 4608);
-            CHECK(chunk_internal_offset(32, dims, SampleType_u16) == 4096);
-            CHECK(chunk_internal_offset(33, dims, SampleType_u16) == 4608);
-            CHECK(chunk_internal_offset(34, dims, SampleType_u16) == 4096);
-            CHECK(chunk_internal_offset(35, dims, SampleType_u16) == 5120);
-            CHECK(chunk_internal_offset(36, dims, SampleType_u16) == 5632);
-            CHECK(chunk_internal_offset(37, dims, SampleType_u16) == 5120);
-            CHECK(chunk_internal_offset(38, dims, SampleType_u16) == 5632);
-            CHECK(chunk_internal_offset(39, dims, SampleType_u16) == 5120);
-            CHECK(chunk_internal_offset(40, dims, SampleType_u16) == 4096);
-            CHECK(chunk_internal_offset(41, dims, SampleType_u16) == 4608);
-            CHECK(chunk_internal_offset(42, dims, SampleType_u16) == 4096);
-            CHECK(chunk_internal_offset(43, dims, SampleType_u16) == 4608);
-            CHECK(chunk_internal_offset(44, dims, SampleType_u16) == 4096);
-            CHECK(chunk_internal_offset(45, dims, SampleType_u16) == 6144);
-            CHECK(chunk_internal_offset(46, dims, SampleType_u16) == 6656);
-            CHECK(chunk_internal_offset(47, dims, SampleType_u16) == 6144);
-            CHECK(chunk_internal_offset(48, dims, SampleType_u16) == 6656);
-            CHECK(chunk_internal_offset(49, dims, SampleType_u16) == 6144);
-            CHECK(chunk_internal_offset(50, dims, SampleType_u16) == 7168);
-            CHECK(chunk_internal_offset(51, dims, SampleType_u16) == 7680);
-            CHECK(chunk_internal_offset(52, dims, SampleType_u16) == 7168);
-            CHECK(chunk_internal_offset(53, dims, SampleType_u16) == 7680);
-            CHECK(chunk_internal_offset(54, dims, SampleType_u16) == 7168);
-            CHECK(chunk_internal_offset(55, dims, SampleType_u16) == 6144);
-            CHECK(chunk_internal_offset(56, dims, SampleType_u16) == 6656);
-            CHECK(chunk_internal_offset(57, dims, SampleType_u16) == 6144);
-            CHECK(chunk_internal_offset(58, dims, SampleType_u16) == 6656);
-            CHECK(chunk_internal_offset(59, dims, SampleType_u16) == 6144);
-            CHECK(chunk_internal_offset(60, dims, SampleType_u16) == 8192);
-            CHECK(chunk_internal_offset(61, dims, SampleType_u16) == 8704);
-            CHECK(chunk_internal_offset(62, dims, SampleType_u16) == 8192);
-            CHECK(chunk_internal_offset(63, dims, SampleType_u16) == 8704);
-            CHECK(chunk_internal_offset(64, dims, SampleType_u16) == 8192);
-            CHECK(chunk_internal_offset(65, dims, SampleType_u16) == 9216);
-            CHECK(chunk_internal_offset(66, dims, SampleType_u16) == 9728);
-            CHECK(chunk_internal_offset(67, dims, SampleType_u16) == 9216);
-            CHECK(chunk_internal_offset(68, dims, SampleType_u16) == 9728);
-            CHECK(chunk_internal_offset(69, dims, SampleType_u16) == 9216);
-            CHECK(chunk_internal_offset(70, dims, SampleType_u16) == 8192);
-            CHECK(chunk_internal_offset(71, dims, SampleType_u16) == 8704);
-            CHECK(chunk_internal_offset(72, dims, SampleType_u16) == 8192);
-            CHECK(chunk_internal_offset(73, dims, SampleType_u16) == 8704);
-            CHECK(chunk_internal_offset(74, dims, SampleType_u16) == 8192);
-            CHECK(chunk_internal_offset(75, dims, SampleType_u16) == 0);
-
-            retval = 1;
-        } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
-        } catch (...) {
-            LOGE("Exception: (unknown)");
-        }
-
-        return retval;
-    }
 
     acquire_export int unit_test__writer__write_frame_to_chunks()
     {
@@ -698,7 +404,7 @@ extern "C"
         try {
             auto thread_pool = std::make_shared<common::ThreadPool>(
               std::thread::hardware_concurrency(),
-              [](const std::string& err) { LOGE("Error: %s", err.c_str()); });
+              [](const std::string& err) { LOG_ERROR("Error: %s", err.c_str()); });
 
             std::vector<zarr::Dimension> dims;
             dims.emplace_back(
@@ -730,9 +436,9 @@ extern "C"
 
             retval = 1;
         } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
+            LOG_ERROR("Exception: %s\n", exc.what());
         } catch (...) {
-            LOGE("Exception: (unknown)");
+            LOG_ERROR("Exception: (unknown)");
         }
 
         // cleanup
@@ -891,9 +597,9 @@ extern "C"
 
             retval = 1;
         } catch (const std::exception& exc) {
-            LOGE("Exception: %s\n", exc.what());
+            LOG_ERROR("Exception: %s\n", exc.what());
         } catch (...) {
-            LOGE("Exception: (unknown)");
+            LOG_ERROR("Exception: (unknown)");
         }
         return retval;
     }

@@ -51,7 +51,7 @@ zarr::shards_along_dimension(const Dimension& dimension)
 size_t
 zarr::chunk_lattice_index(size_t frame_id,
                           size_t dimension_idx,
-                          const std::vector<zarr::Dimension>& dims)
+                          const std::vector<Dimension>& dims)
 {
     // the last two dimensions are special cases
     EXPECT(dimension_idx < dims.size() - 2,
@@ -62,7 +62,7 @@ zarr::chunk_lattice_index(size_t frame_id,
     if (dimension_idx == 0) {
         size_t divisor = dims.front().chunk_size_px;
         for (auto i = 1; i < dims.size() - 2; ++i) {
-            const auto& dim = dims.at(i);
+            const auto& dim = dims[i];
             divisor *= dim.array_size_px;
         }
 
@@ -72,7 +72,7 @@ zarr::chunk_lattice_index(size_t frame_id,
 
     size_t mod_divisor = 1, div_divisor = 1;
     for (auto i = dimension_idx; i < dims.size() - 2; ++i) {
-        const auto& dim = dims.at(i);
+        const auto& dim = dims[i];
         mod_divisor *= dim.array_size_px;
         div_divisor *=
           (i == dimension_idx ? dim.chunk_size_px : dim.array_size_px);
@@ -82,6 +82,67 @@ zarr::chunk_lattice_index(size_t frame_id,
     CHECK(div_divisor);
 
     return (frame_id % mod_divisor) / div_divisor;
+}
+
+size_t
+zarr::tile_group_offset(size_t frame_id, const std::vector<Dimension>& dims)
+{
+    std::vector<size_t> strides;
+    strides.push_back(1);
+    for (auto i = dims.size() - 1; i > 0; --i) {
+        const auto& dim = dims[i];
+        CHECK(dim.chunk_size_px);
+        const auto a = dim.array_size_px, c = dim.chunk_size_px;
+        strides.insert(strides.begin(), strides.front() * ((a + c - 1) / c));
+    }
+
+    size_t offset = 0;
+    for (auto i = dims.size() - 3; i > 0; --i) {
+        const auto idx = chunk_lattice_index(frame_id, i, dims);
+        const auto stride = strides[i];
+        offset += idx * stride;
+    }
+
+    return offset;
+}
+
+size_t
+zarr::chunk_internal_offset(size_t frame_id,
+                            const std::vector<Dimension>& dims,
+                            ZarrDataType type)
+{
+    const Dimension& x_dim = dims.back();
+    const Dimension& y_dim = dims[dims.size() - 2];
+    const auto tile_size =
+      bytes_of_data_type(type) * x_dim.chunk_size_px * y_dim.chunk_size_px;
+
+    size_t offset = 0;
+    std::vector<size_t> array_strides, chunk_strides;
+    array_strides.push_back(1);
+    chunk_strides.push_back(1);
+
+    for (auto i = (int)dims.size() - 3; i >= 0; --i) {
+        const auto& dim = dims[i];
+
+        if (i > 0)
+            CHECK(dim.array_size_px);
+
+        CHECK(dim.chunk_size_px);
+        CHECK(array_strides.front());
+
+        const auto internal_idx =
+          i == 0 ? (frame_id / array_strides.front()) % dim.chunk_size_px
+                 : (frame_id / array_strides.front()) % dim.array_size_px %
+                     dim.chunk_size_px;
+        offset += internal_idx * chunk_strides.front();
+
+        array_strides.insert(array_strides.begin(),
+                             array_strides.front() * dim.array_size_px);
+        chunk_strides.insert(chunk_strides.begin(),
+                             chunk_strides.front() * dim.chunk_size_px);
+    }
+
+    return offset * tile_size;
 }
 
 extern "C" const char*

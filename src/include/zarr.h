@@ -157,9 +157,9 @@ extern "C"
                                                const char* name,
                                                size_t bytes_of_name,
                                                ZarrDimensionType kind,
-                                               size_t array_size_px,
-                                               size_t chunk_size_px,
-                                               size_t shard_size_chunks);
+                                               uint32_t array_size_px,
+                                               uint32_t chunk_size_px,
+                                               uint32_t shard_size_chunks);
 
     ZarrError ZarrStreamSettings_set_multiscale(ZarrStreamSettings* settings,
                                                 uint8_t multiscale);
