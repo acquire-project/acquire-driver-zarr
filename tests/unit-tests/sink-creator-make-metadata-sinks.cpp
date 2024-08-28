@@ -170,7 +170,7 @@ sink_creator_make_v3_metadata_sinks(
 int
 main()
 {
-    Logger::setLogLevel(LogLevel_Debug);
+    Logger::set_log_level(LogLevel_Debug);
 
     auto thread_pool = std::make_shared<zarr::ThreadPool>(
       std::thread::hardware_concurrency(),

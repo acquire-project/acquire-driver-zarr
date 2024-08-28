@@ -3,6 +3,7 @@
 #include "zarr.common.hh"
 
 #include <nlohmann/json.hpp>
+
 #include <filesystem>
 
 #define EXPECT_EQ(a, b)                                                        \
@@ -11,7 +12,7 @@
 namespace fs = std::filesystem;
 
 namespace {
-const fs::path base_dir = fs::temp_directory_path() / "acquire";
+const fs::path base_dir = fs::temp_directory_path() / TEST;
 
 const unsigned int array_width = 64, array_height = 48, array_planes = 6,
                    array_channels = 8, array_timepoints = 10;
@@ -38,34 +39,35 @@ const int level_of_detail = 0;
 void
 check_json()
 {
-    fs::path zarray_path =
+    fs::path meta_path =
       base_dir / std::to_string(level_of_detail) / ".zarray";
-    CHECK(fs::is_regular_file(zarray_path));
+    CHECK(fs::is_regular_file(meta_path));
 
-    std::ifstream f(zarray_path);
-    nlohmann::json zarray = nlohmann::json::parse(f);
+    std::ifstream f(meta_path);
+    nlohmann::json meta = nlohmann::json::parse(f);
 
-    EXPECT(zarray["dtype"].get<std::string>() == "<u2",
+    EXPECT(meta["dtype"].get<std::string>() == "<u2",
            "Expected dtype to be '<u2', but got '%s'",
-           zarray["dtype"].get<std::string>().c_str());
+           meta["dtype"].get<std::string>().c_str());
 
-    EXPECT_EQ(zarray["zarr_format"].get<int>(), 2);
+    EXPECT_EQ(meta["zarr_format"].get<int>(), 2);
 
-    const auto& chunks = zarray["chunks"];
-    EXPECT_EQ(chunks.size(), 5);
-    EXPECT_EQ(chunks[0].get<int>(), chunk_timepoints);
-    EXPECT_EQ(chunks[1].get<int>(), chunk_channels);
-    EXPECT_EQ(chunks[2].get<int>(), chunk_planes);
-    EXPECT_EQ(chunks[3].get<int>(), chunk_height);
-    EXPECT_EQ(chunks[4].get<int>(), chunk_width);
+    const auto& array_shape = meta["shape"];
+    const auto& chunk_shape = meta["chunks"];
 
-    const auto& shape = zarray["shape"];
-    EXPECT_EQ(shape.size(), 5);
-    EXPECT_EQ(shape[0].get<int>(), array_timepoints);
-    EXPECT_EQ(shape[1].get<int>(), array_channels);
-    EXPECT_EQ(shape[2].get<int>(), array_planes);
-    EXPECT_EQ(shape[3].get<int>(), array_height);
-    EXPECT_EQ(shape[4].get<int>(), array_width);
+    EXPECT_EQ(array_shape.size(), 5);
+    EXPECT_EQ(array_shape[0].get<int>(), array_timepoints);
+    EXPECT_EQ(array_shape[1].get<int>(), array_channels);
+    EXPECT_EQ(array_shape[2].get<int>(), array_planes);
+    EXPECT_EQ(array_shape[3].get<int>(), array_height);
+    EXPECT_EQ(array_shape[4].get<int>(), array_width);
+
+    EXPECT_EQ(chunk_shape.size(), 5);
+    EXPECT_EQ(chunk_shape[0].get<int>(), chunk_timepoints);
+    EXPECT_EQ(chunk_shape[1].get<int>(), chunk_channels);
+    EXPECT_EQ(chunk_shape[2].get<int>(), chunk_planes);
+    EXPECT_EQ(chunk_shape[3].get<int>(), chunk_height);
+    EXPECT_EQ(chunk_shape[4].get<int>(), chunk_width);
 }
 
 int
@@ -142,7 +144,7 @@ main()
                             const auto x_file = y_dir / std::to_string(x);
                             CHECK(fs::is_regular_file(x_file));
                             const auto file_size = fs::file_size(x_file);
-                            CHECK(file_size == expected_file_size);
+                            EXPECT_EQ(file_size, expected_file_size);
                         }
 
                         CHECK(!fs::is_regular_file(

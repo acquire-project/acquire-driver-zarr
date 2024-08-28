@@ -195,3 +195,123 @@ zarr::bytes_per_chunk(const std::vector<Dimension>& dimensions,
 
     return n_bytes;
 }
+
+size_t
+zarr::number_of_shards(const std::vector<Dimension>& dimensions)
+{
+    size_t n_shards = 1;
+    for (auto i = 1; i < dimensions.size(); ++i) {
+        const auto& dim = dimensions[i];
+        n_shards *= shards_along_dimension(dim);
+    }
+
+    return n_shards;
+}
+
+size_t
+zarr::chunks_per_shard(const std::vector<Dimension>& dimensions)
+{
+    size_t n_chunks = 1;
+    for (const auto& dim : dimensions) {
+        n_chunks *= dim.shard_size_chunks;
+    }
+
+    return n_chunks;
+}
+
+size_t
+zarr::shard_index_for_chunk(size_t chunk_index,
+                            const std::vector<zarr::Dimension>& dimensions)
+{
+    // make chunk strides
+    std::vector<size_t> chunk_strides(1, 1);
+    for (auto i = dimensions.size() - 1; i > 0; --i) {
+        const auto& dim = dimensions[i];
+        chunk_strides.insert(chunk_strides.begin(),
+                             chunk_strides.front() *
+                               chunks_along_dimension(dim));
+        CHECK(chunk_strides.front());
+    }
+
+    // get chunk indices
+    std::vector<size_t> chunk_lattice_indices;
+    for (auto i = dimensions.size() - 1; i > 0; --i) {
+        chunk_lattice_indices.insert(chunk_lattice_indices.begin(),
+                                     chunk_index % chunk_strides[i - 1] /
+                                       chunk_strides[i]);
+    }
+    chunk_lattice_indices.insert(chunk_lattice_indices.begin(),
+                                 chunk_index / chunk_strides.front());
+
+    // make shard strides
+    std::vector<size_t> shard_strides(1, 1);
+    for (auto i = dimensions.size() - 1; i > 0; --i) {
+        const auto& dim = dimensions[i];
+        shard_strides.insert(shard_strides.begin(),
+                             shard_strides.front() *
+                               shards_along_dimension(dim));
+        CHECK(shard_strides.front());
+    }
+
+    std::vector<size_t> shard_lattice_indices;
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        shard_lattice_indices.push_back(chunk_lattice_indices[i] /
+                                        dimensions[i].shard_size_chunks);
+    }
+
+    size_t index = 0;
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        index += shard_lattice_indices[i] * shard_strides[i];
+    }
+
+    return index;
+}
+
+size_t
+zarr::shard_internal_index(size_t chunk_idx,
+                           const std::vector<zarr::Dimension>& dimensions)
+{
+    // make chunk strides
+    std::vector<size_t> chunk_strides(1, 1);
+    for (auto i = dimensions.size() - 1; i > 0; --i) {
+        const auto& dim = dimensions[i];
+        chunk_strides.insert(chunk_strides.begin(),
+                             chunk_strides.front() *
+                               chunks_along_dimension(dim));
+        CHECK(chunk_strides.front());
+    }
+
+    // get chunk indices
+    std::vector<size_t> chunk_lattice_indices;
+    for (auto i = dimensions.size() - 1; i > 0; --i) {
+        chunk_lattice_indices.insert(chunk_lattice_indices.begin(),
+                                     chunk_idx % chunk_strides.at(i - 1) /
+                                       chunk_strides[i]);
+    }
+    chunk_lattice_indices.insert(chunk_lattice_indices.begin(),
+                                 chunk_idx / chunk_strides.front());
+
+    // make shard lattice indices
+    std::vector<size_t> shard_lattice_indices;
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        shard_lattice_indices.push_back(chunk_lattice_indices[i] /
+                                        dimensions[i].shard_size_chunks);
+    }
+
+    std::vector<size_t> chunk_internal_strides(1, 1);
+    for (auto i = dimensions.size() - 1; i > 0; --i) {
+        const auto& dim = dimensions[i];
+        chunk_internal_strides.insert(chunk_internal_strides.begin(),
+                                      chunk_internal_strides.front() *
+                                        dim.shard_size_chunks);
+    }
+
+    size_t index = 0;
+
+    for (auto i = 0; i < dimensions.size(); ++i) {
+        index += (chunk_lattice_indices[i] % dimensions[i].shard_size_chunks) *
+                 chunk_internal_strides[i];
+    }
+
+    return index;
+}

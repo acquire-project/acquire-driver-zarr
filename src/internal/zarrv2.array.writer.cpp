@@ -5,7 +5,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include <cmath>
 #include <latch>
 #include <stdexcept>
 

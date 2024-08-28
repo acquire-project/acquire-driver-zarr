@@ -234,6 +234,25 @@ ZarrStream_get_multiscale(ZarrStream* stream)
     return ZarrStreamSettings_get_multiscale(&stream->settings());
 }
 
+/* Logging */
+
+ZarrError
+Zarr_set_log_level(LogLevel level)
+{
+    if (level < LogLevel_Debug || level >= LogLevelCount) {
+        return ZarrError_InvalidArgument;
+    }
+
+    Logger::set_log_level(level);
+    return ZarrError_Success;
+}
+
+LogLevel
+Zarr_get_log_level()
+{
+    return Logger::get_log_level();
+}
+
 /* ZarrStream_s implementation */
 
 ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, size_t version)

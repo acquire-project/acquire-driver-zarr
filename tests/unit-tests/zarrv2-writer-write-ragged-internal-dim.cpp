@@ -11,7 +11,7 @@
 namespace fs = std::filesystem;
 
 namespace {
-const fs::path base_dir = fs::temp_directory_path() / "acquire";
+const fs::path base_dir = fs::temp_directory_path() / TEST;
 
 const unsigned int array_width = 64, array_height = 48, array_planes = 5,
                    array_timepoints = 5;
@@ -66,6 +66,8 @@ check_json()
 int
 main()
 {
+    Logger::set_log_level(LogLevel_Debug);
+
     int retval = 1;
 
     const ZarrDataType dtype = ZarrDataType_float64;
@@ -132,7 +134,7 @@ main()
                             const auto x_file = y_dir / std::to_string(x);
                             CHECK(fs::is_regular_file(x_file));
                             const auto file_size = fs::file_size(x_file);
-                            CHECK(file_size == expected_file_size);
+                            EXPECT_EQ(file_size, expected_file_size);
                         }
 
                         CHECK(!fs::is_regular_file(

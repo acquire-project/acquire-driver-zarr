@@ -218,7 +218,7 @@ sink_creator_make_shard_sinks(
 int
 main()
 {
-    Logger::setLogLevel(LogLevel_Debug);
+    Logger::set_log_level(LogLevel_Debug);
 
     std::vector<zarr::Dimension> dims;
     dims.emplace_back("z",

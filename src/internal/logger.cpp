@@ -9,13 +9,13 @@
 LogLevel Logger::current_level = LogLevel_Info;
 
 void
-Logger::setLogLevel(LogLevel level)
+Logger::set_log_level(LogLevel level)
 {
     current_level = level;
 }
 
 LogLevel
-Logger::getLogLevel()
+Logger::get_log_level()
 {
     return current_level;
 }
@@ -28,8 +28,8 @@ Logger::log(LogLevel level,
             const char* format,
             ...)
 {
-    if (level < current_level) {
-        return {}; // Suppress logs below current_level
+    if (current_level == LogLevel_None || level < current_level) {
+        return {}; // Suppress logs
     }
 
     va_list args;

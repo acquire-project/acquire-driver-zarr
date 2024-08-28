@@ -1,19 +1,12 @@
-#include <string>
+#include "zarr.h"
 
-enum LogLevel // todo (aliddell): Use enum class
-{
-    LogLevel_Debug,
-    LogLevel_Info,
-    LogLevel_Warning,
-    LogLevel_Error
-};
+#include <string>
 
 class Logger
 {
   public:
-    static void setLogLevel(LogLevel level);
-
-    static LogLevel getLogLevel();
+    static void set_log_level(LogLevel level);
+    static LogLevel get_log_level();
 
     static std::string log(LogLevel level,
                            const char* file,

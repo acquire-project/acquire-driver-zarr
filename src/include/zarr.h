@@ -10,6 +10,21 @@
 extern "C"
 {
 #endif
+    /***************************************************************************
+     * Log level
+     *
+     * The LogLevel enum lists the available log levels. Use LogLevel_None to
+     * suppress all log messages.
+     **************************************************************************/
+    enum LogLevel
+    {
+        LogLevel_Debug,
+        LogLevel_Info,
+        LogLevel_Warning,
+        LogLevel_Error,
+        LogLevel_None,
+        LogLevelCount
+    };
 
     /***************************************************************************
      * Zarr stream settings
@@ -17,7 +32,7 @@ extern "C"
      * The Zarr stream settings struct is created using
      * ZarrStreamSettings_create and destroyed using ZarrStreamSettings_destroy.
      * If the struct fails to be created, ZarrStreamSettings_create returns
-     *NULL.
+     * NULL.
      **************************************************************************/
 
     typedef struct ZarrStreamSettings_s ZarrStreamSettings;
@@ -105,7 +120,7 @@ extern "C"
      * for the Zarr stream. The struct is created using
      * ZarrStreamSettings_create and destroyed using ZarrStreamSettings_destroy.
      * If the struct fails to be created, ZarrStreamSettings_create returns
-     *NULL.
+     * NULL.
      **************************************************************************/
 
     ZarrStreamSettings* ZarrStreamSettings_create();
@@ -263,6 +278,19 @@ extern "C"
                                 size_t first_frame_index,
                                 const void* data,
                                 size_t bytes_of_data);
+
+    /***************************************************************************
+     * Logging
+     *
+     * The Zarr library uses a logging system to output messages. The log level
+     * can be set using Zarr_set_log_level. The log level can be retrieved using
+     * Zarr_get_log_level. The log level can be set to one of the values in the
+     * in the LogLevel enum. Use LogLevel_None to suppress all log messages. By
+     * default, the log level is set to LogLevel_Info.
+     **************************************************************************/
+
+    ZarrError Zarr_set_log_level(LogLevel level);
+    LogLevel Zarr_get_log_level();
 
 #ifdef __cplusplus
 }

@@ -2,15 +2,6 @@
 
 #include "array.writer.hh"
 
-#include <condition_variable>
-#include <filesystem>
-#include <mutex>
-#include <optional>
-#include <queue>
-#include <thread>
-
-namespace fs = std::filesystem;
-
 namespace zarr {
 class ZarrV2ArrayWriter final : public ArrayWriter
 {
