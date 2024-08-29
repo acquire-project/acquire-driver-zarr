@@ -63,18 +63,15 @@ zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
         std::fill_n(
           table.begin(), table.size(), std::numeric_limits<uint64_t>::max());
     }
-
-    data_root_ = config_.dataset_root + "/data/root/" +
-                 std::to_string(config_.level_of_detail);
-    meta_root_ = config_.dataset_root + "/meta/root";
 }
 
 bool
 zarr::ZarrV3ArrayWriter::flush_impl_()
 {
     // create shard files if they don't exist
-    const std::string data_root =
-      data_root_ + "/c" + std::to_string(append_chunk_index_);
+    const std::string data_root = config_.store_path + "/data/root/" +
+                                  std::to_string(config_.level_of_detail) +
+                                  "/c" + std::to_string(append_chunk_index_);
 
     {
         SinkCreator creator(thread_pool_, s3_connection_pool_);
@@ -174,19 +171,19 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
 {
     if (!metadata_sink_) {
         const std::string metadata_path =
+          config_.store_path + "/meta/root/" +
           std::to_string(config_.level_of_detail) + ".array.json";
 
-        if (s3_connection_pool_) {
+        if (config_.bucket_name) {
             SinkCreator creator(thread_pool_, s3_connection_pool_);
-            metadata_sink_ = creator.make_sink(meta_root_, metadata_path);
-        } else {
             metadata_sink_ =
-              zarr::SinkCreator::make_sink(meta_root_ + "/" + metadata_path);
+              creator.make_sink(*config_.bucket_name, metadata_path);
+        } else {
+            metadata_sink_ = zarr::SinkCreator::make_sink(metadata_path);
         }
 
         if (!metadata_sink_) {
-            LOG_ERROR("Failed to create metadata sink: %s/%s",
-                      meta_root_.c_str(),
+            LOG_ERROR("Failed to create metadata sink: %s",
                       metadata_path.c_str());
             return false;
         }

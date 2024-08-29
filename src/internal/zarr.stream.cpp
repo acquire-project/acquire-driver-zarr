@@ -514,8 +514,6 @@ ZarrStream_s::create_writers_()
 {
     writers_.clear();
 
-    std::string dataset_root = dataset_root_();
-
     // construct Blosc compression parameters
     std::optional<zarr::BloscCompressionParams> blosc_compression_params;
     if (settings_.compressor == ZarrCompressor_Blosc1) {
@@ -526,11 +524,17 @@ ZarrStream_s::create_writers_()
           settings_.compression_shuffle);
     }
 
+    std::optional<std::string> bucket_name;
+    if (is_s3_acquisition(&settings_)) {
+        bucket_name = settings_.s3_bucket_name;
+    }
+
     zarr::ArrayWriterConfig config = {
         .dimensions = settings_.dimensions,
         .dtype = static_cast<ZarrDataType>(settings_.dtype),
         .level_of_detail = 0,
-        .dataset_root = dataset_root,
+        .bucket_name = bucket_name,
+        .store_path = settings_.store_path,
         .compression_params = blosc_compression_params
     };
 

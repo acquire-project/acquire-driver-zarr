@@ -52,9 +52,6 @@ zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
   : ArrayWriter(config, thread_pool, s3_connection_pool)
 {
-    data_root_ =
-      config_.dataset_root + "/" + std::to_string(config_.level_of_detail);
-    meta_root_ = data_root_;
 }
 
 bool
@@ -62,15 +59,25 @@ zarr::ZarrV2ArrayWriter::flush_impl_()
 {
     // create chunk files
     CHECK(data_sinks_.empty());
-    const std::string data_root =
-      data_root_ + "/" + std::to_string(append_chunk_index_);
+    const std::string data_root = config_.store_path + "/" +
+                                  std::to_string(config_.level_of_detail) +
+                                  "/" + std::to_string(append_chunk_index_);
 
     {
         SinkCreator creator(thread_pool_, s3_connection_pool_);
-        if (!creator.make_data_sinks(data_root,
-                                     config_.dimensions,
-                                     chunks_along_dimension,
-                                     data_sinks_)) {
+
+        if (config_.bucket_name) {
+            if (!creator.make_data_sinks(*config_.bucket_name,
+                                         data_root,
+                                         config_.dimensions,
+                                         chunks_along_dimension,
+                                         data_sinks_)) {
+                return false;
+            }
+        } else if (!creator.make_data_sinks(data_root,
+                                            config_.dimensions,
+                                            chunks_along_dimension,
+                                            data_sinks_)) {
             return false;
         }
     }
@@ -115,19 +122,20 @@ bool
 zarr::ZarrV2ArrayWriter::write_array_metadata_()
 {
     if (!metadata_sink_) {
-        const std::string metadata_path = ".zarray";
+        const std::string metadata_path =
+          config_.store_path + "/" + std::to_string(config_.level_of_detail) +
+          "/.zarray";
 
-        if (s3_connection_pool_) {
+        if (config_.bucket_name) {
             SinkCreator creator(thread_pool_, s3_connection_pool_);
-            metadata_sink_ = creator.make_sink(meta_root_, metadata_path);
-        } else {
             metadata_sink_ =
-              zarr::SinkCreator::make_sink(meta_root_ + "/" + metadata_path);
+              creator.make_sink(*config_.bucket_name, metadata_path);
+        } else {
+            metadata_sink_ = zarr::SinkCreator::make_sink(metadata_path);
         }
 
         if (!metadata_sink_) {
-            LOG_ERROR("Failed to create metadata sink: %s/%s",
-                      meta_root_.c_str(),
+            LOG_ERROR("Failed to create metadata sink: %s",
                       metadata_path.c_str());
             return false;
         }

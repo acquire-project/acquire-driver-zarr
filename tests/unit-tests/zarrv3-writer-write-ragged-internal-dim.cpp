@@ -123,7 +123,8 @@ main()
             .dimensions = dims,
             .dtype = dtype,
             .level_of_detail = 5,
-            .dataset_root = base_dir.string(),
+            .bucket_name = std::nullopt,
+            .store_path = base_dir.string(),
             .compression_params = std::nullopt,
         };
 

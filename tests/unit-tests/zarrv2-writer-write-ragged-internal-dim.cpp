@@ -93,7 +93,8 @@ main()
             .dimensions = dims,
             .dtype = dtype,
             .level_of_detail = level_of_detail,
-            .dataset_root = base_dir.string(),
+            .bucket_name = std::nullopt,
+            .store_path = base_dir.string(),
             .compression_params = std::nullopt,
         };
 

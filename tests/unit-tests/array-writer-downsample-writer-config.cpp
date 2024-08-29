@@ -16,7 +16,8 @@ main()
         zarr::ArrayWriterConfig config{ .dimensions = {},
                                         .dtype = ZarrDataType_uint8,
                                         .level_of_detail = 0,
-                                        .dataset_root = base_dir.string(),
+                                        .bucket_name = std::nullopt,
+                                        .store_path = base_dir.string(),
                                         .compression_params = std::nullopt };
 
         config.dimensions.emplace_back("t",
@@ -68,8 +69,8 @@ main()
         // check level of detail
         CHECK(downsampled_config.level_of_detail == 1);
 
-        // check dataset root
-        CHECK(downsampled_config.dataset_root == config.dataset_root);
+        // check store path
+        CHECK(downsampled_config.store_path == config.store_path);
 
         // check compression params
         CHECK(!downsampled_config.compression_params.has_value());
@@ -113,7 +114,7 @@ main()
         CHECK(downsampled_config.level_of_detail == 2);
 
         // check data root
-        CHECK(downsampled_config.dataset_root == config.dataset_root);
+        CHECK(downsampled_config.store_path == config.store_path);
 
         // check compression params
         CHECK(!downsampled_config.compression_params.has_value());

@@ -7,6 +7,7 @@ set(tests
         stream-zarr-v2-compressed-to-filesystem
         stream-zarr-v3-raw-to-filesystem
         stream-zarr-v3-compressed-to-filesystem
+        stream-zarr-v2-raw-to-s3
 )
 
 foreach (name ${tests})
@@ -21,6 +22,7 @@ foreach (name ${tests})
     target_link_libraries(${tgt} PRIVATE
             acquire-zarr
             nlohmann_json::nlohmann_json
+            miniocpp::miniocpp
     )
 
     add_test(NAME test-${tgt} COMMAND ${tgt})

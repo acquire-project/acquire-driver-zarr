@@ -56,7 +56,8 @@ main()
         zarr::ArrayWriterConfig config = {
             .dimensions = dims,
             .dtype = dtype,
-            .dataset_root = base_dir.string(),
+            .bucket_name = std::nullopt,
+            .store_path = base_dir.string(),
             .compression_params = std::nullopt,
         };
 

@@ -18,7 +18,8 @@ struct ArrayWriterConfig final
     std::vector<ZarrDimension_s> dimensions;
     ZarrDataType dtype;
     int level_of_detail;
-    std::string dataset_root;
+    std::optional<std::string> bucket_name;
+    std::string store_path;
     std::optional<BloscCompressionParams> compression_params;
 };
 
@@ -52,8 +53,6 @@ class ArrayWriter
     std::vector<std::vector<uint8_t>> chunk_buffers_;
 
     /// Filesystem
-    std::string data_root_;
-    std::string meta_root_;
     std::vector<std::unique_ptr<Sink>> data_sinks_;
     std::unique_ptr<Sink> metadata_sink_;
 
