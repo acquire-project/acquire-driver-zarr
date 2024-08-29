@@ -204,22 +204,33 @@ void
 validate_array_metadata(const nlohmann::json& meta)
 {
     const auto shape = meta["shape"];
-    EXPECT_EQ(size_t, "%zu", shape.size(), 4);
+    EXPECT_EQ(size_t, "%zu", shape.size(), 5);
     EXPECT_EQ(int, "%d", shape[0].get<int>(), array_timepoints);
     EXPECT_EQ(int, "%d", shape[1].get<int>(), array_channels);
-    EXPECT_EQ(int, "%d", shape[2].get<int>(), array_height);
-    EXPECT_EQ(int, "%d", shape[3].get<int>(), array_width);
+    EXPECT_EQ(int, "%d", shape[2].get<int>(), array_planes);
+    EXPECT_EQ(int, "%d", shape[3].get<int>(), array_height);
+    EXPECT_EQ(int, "%d", shape[4].get<int>(), array_width);
 
-    const auto chunks = meta["chunks"];
-    EXPECT_EQ(size_t, "%zu", chunks.size(), 4);
+    const auto chunks = meta["chunk_grid"]["chunk_shape"];
+    EXPECT_EQ(size_t, "%zu", chunks.size(), 5);
     EXPECT_EQ(int, "%d", chunks[0].get<int>(), chunk_timepoints);
     EXPECT_EQ(int, "%d", chunks[1].get<int>(), chunk_channels);
-    EXPECT_EQ(int, "%d", chunks[2].get<int>(), chunk_height);
-    EXPECT_EQ(int, "%d", chunks[3].get<int>(), chunk_width);
+    EXPECT_EQ(int, "%d", chunks[2].get<int>(), chunk_planes);
+    EXPECT_EQ(int, "%d", chunks[3].get<int>(), chunk_height);
+    EXPECT_EQ(int, "%d", chunks[4].get<int>(), chunk_width);
 
-    const auto dtype = meta["dtype"];
-    EXPECT(dtype.get<std::string>() == "<u2",
-           "Expected dtype to be '<u2', but got '%s'",
+    const auto shards =
+      meta["storage_transformers"][0]["configuration"]["chunks_per_shard"];
+    EXPECT_EQ(size_t, "%zu", shards.size(), 5);
+    EXPECT_EQ(int, "%d", shards[0].get<int>(), shard_timepoints);
+    EXPECT_EQ(int, "%d", shards[1].get<int>(), shard_channels);
+    EXPECT_EQ(int, "%d", shards[2].get<int>(), shard_planes);
+    EXPECT_EQ(int, "%d", shards[3].get<int>(), shard_height);
+    EXPECT_EQ(int, "%d", shards[4].get<int>(), shard_width);
+
+    const auto dtype = meta["data_type"];
+    EXPECT(dtype.get<std::string>() == "uint16",
+           "Expected dtype to be 'uint16', but got '%s'",
            dtype.get<std::string>().c_str());
 }
 
@@ -300,13 +311,14 @@ validate()
         validate_group_metadata(group_metadata);
     }
 
-    //    {
-    //        fs::path array_metadata_path = fs::path(test_path) / "0" /
-    //        ".zarray"; std::ifstream f = std::ifstream(array_metadata_path);
-    //        nlohmann::json array_metadata = nlohmann::json::parse(f);
-    //
-    //        validate_array_metadata(array_metadata);
-    //    }
+    {
+        fs::path array_metadata_path =
+          fs::path(test_path) / "meta" / "root" / "0.array.json";
+        std::ifstream f = std::ifstream(array_metadata_path);
+        nlohmann::json array_metadata = nlohmann::json::parse(f);
+
+        validate_array_metadata(array_metadata);
+    }
 
     validate_file_data();
 }
@@ -338,7 +350,7 @@ main()
         validate();
 
         // Clean up
-        //        fs::remove_all(test_path);
+        fs::remove_all(test_path);
 
         retval = 0;
     } catch (const std::exception& e) {
