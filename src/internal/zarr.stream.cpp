@@ -194,6 +194,28 @@ ZarrStream_destroy(ZarrStream* stream)
     delete stream;
 }
 
+/* Appending data */
+
+ZarrError
+ZarrStream_append(ZarrStream* stream,
+                  const void* data,
+                  size_t bytes_in,
+                  size_t* bytes_out)
+{
+    EXPECT_VALID_ARGUMENT(stream, "Null pointer: stream");
+    EXPECT_VALID_ARGUMENT(data, "Null pointer: data");
+    EXPECT_VALID_ARGUMENT(bytes_out, "Null pointer: bytes_out");
+
+    try {
+        *bytes_out = stream->append(data, bytes_in);
+    } catch (const std::exception& e) {
+        LOG_ERROR("Error appending data: %s", e.what());
+        return ZarrError_InternalError;
+    }
+
+    return ZarrError_Success;
+}
+
 /* Getters */
 
 ZarrVersion
@@ -361,6 +383,37 @@ ZarrStream_s::~ZarrStream_s()
     } catch (const std::exception& e) {
         LOG_ERROR("Error finalizing Zarr stream: %s", e.what());
     }
+}
+
+size_t
+ZarrStream_s::append(const void* data, size_t nbytes)
+{
+    EXPECT(error_.empty(), "Cannot append data: %s", error_.c_str());
+
+    if (0 == nbytes) {
+        return 0;
+    }
+
+    const size_t bytes_of_frame = zarr::bytes_of_frame(
+      settings_.dimensions, static_cast<ZarrDataType>(settings_.dtype));
+
+    if (nbytes < bytes_of_frame) {
+        LOG_ERROR("Data size is less than frame size");
+        return 0;
+    }
+
+    size_t bytes_written = 0;
+    while (nbytes - bytes_written >= bytes_of_frame) {
+        const size_t bytes_written_this_frame =
+          writers_[0]->write_frame((uint8_t*)data, bytes_of_frame);
+        if (bytes_written_this_frame == 0) {
+            break;
+        }
+        bytes_written += bytes_written_this_frame;
+        data = (uint8_t*)data + bytes_written_this_frame;
+    }
+
+    return bytes_written;
 }
 
 std::string

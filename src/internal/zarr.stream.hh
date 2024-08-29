@@ -14,6 +14,14 @@ struct ZarrStream_s
     ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version);
     ~ZarrStream_s();
 
+    /**
+     * @brief Append data to the stream.
+     * @param data The data to append.
+     * @param nbytes The number of bytes to append.
+     * @return The number of bytes appended.
+     */
+    size_t append(const void* data, size_t nbytes);
+
     size_t version() const { return version_; }
     ZarrStreamSettings_s& settings() { return settings_; }
 

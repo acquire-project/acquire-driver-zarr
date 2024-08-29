@@ -14,6 +14,7 @@ extern "C"
         ZarrError_InvalidIndex,
         ZarrError_NotYetImplemented,
         ZarrError_Failure,
+        ZarrError_InternalError,
         ZarrErrorCount,
     } ZarrError;
 

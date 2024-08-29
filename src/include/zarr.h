@@ -247,6 +247,19 @@ extern "C"
     void ZarrStream_destroy(ZarrStream* stream);
 
     /***************************************************************************
+     * Writing data to the Zarr stream.
+     *
+     * This function writes data to the Zarr stream. It returns a ZarrError to
+     * indicate success or failure, which can be converted to a human-readable
+     * error message using Zarr_get_error_message().
+     **************************************************************************/
+
+    ZarrError ZarrStream_append(ZarrStream* stream,
+                                const void* data,
+                                size_t bytes_in,
+                                size_t* bytes_out);
+
+    /***************************************************************************
      * Functions for getting parameters on the Zarr stream.
      *
      * These functions return the value of the specified parameter.
@@ -275,19 +288,6 @@ extern "C"
                                        size_t* shard_size_chunks);
 
     uint8_t ZarrStream_get_multiscale(ZarrStream* stream);
-
-    /***************************************************************************
-     * Writing data to the Zarr stream.
-     *
-     * This function writes data to the Zarr stream. It returns a ZarrError to
-     * indicate success or failure, which can be converted to a human-readable
-     * error message using Zarr_get_error_message().
-     **************************************************************************/
-
-    ZarrError ZarrStream_append(ZarrStream* stream,
-                                size_t first_frame_index,
-                                const void* data,
-                                size_t bytes_of_data);
 
     /***************************************************************************
      * Logging
