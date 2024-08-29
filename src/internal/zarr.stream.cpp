@@ -279,6 +279,26 @@ ZarrStream_get_compression_codec(ZarrStream* stream)
     return ZarrStreamSettings_get_compression_codec(&stream->settings());
 }
 
+uint8_t
+ZarrStream_get_compression_level(ZarrStream* stream)
+{
+    if (!stream) {
+        LOG_WARNING("Null pointer: stream. Returning 0");
+        return 0;
+    }
+    return ZarrStreamSettings_get_compression_level(&stream->settings());
+}
+
+uint8_t
+ZarrStream_get_compression_shuffle(ZarrStream* stream)
+{
+    if (!stream) {
+        LOG_WARNING("Null pointer: stream. Returning 0");
+        return 0;
+    }
+    return ZarrStreamSettings_get_compression_shuffle(&stream->settings());
+}
+
 size_t
 ZarrStream_get_dimension_count(ZarrStream* stream)
 {
@@ -367,6 +387,11 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version)
     // write base metadata
     EXPECT(
       write_base_metadata_(), "Error creating Zarr stream: %s", error_.c_str());
+
+    // write group metadata
+    EXPECT(write_group_metadata_(),
+           "Error creating Zarr stream: %s",
+           error_.c_str());
 }
 
 ZarrStream_s::~ZarrStream_s()
@@ -654,9 +679,9 @@ ZarrStream_s::make_multiscale_metadata_() const
           static_cast<ZarrDimensionType>(dim->kind));
 
         if (dim < dimensions.end() - 2) {
-            axes.push_back({ { "name", dim->name }, { "type", type } });
+            axes.push_back({ { "name", dim->name.c_str() }, { "type", type } });
         } else {
-            axes.push_back({ { "name", dim->name },
+            axes.push_back({ { "name", dim->name.c_str() },
                              { "type", type },
                              { "unit", "micrometer" } });
         }

@@ -276,6 +276,8 @@ extern "C"
 
     ZarrCompressor ZarrStream_get_compressor(ZarrStream* stream);
     ZarrCompressionCodec ZarrStream_get_compression_codec(ZarrStream* stream);
+    uint8_t ZarrStream_get_compression_level(ZarrStream* stream);
+    uint8_t ZarrStream_get_compression_shuffle(ZarrStream* stream);
 
     size_t ZarrStream_get_dimension_count(ZarrStream* stream);
     ZarrError ZarrStream_get_dimension(ZarrStream* stream,

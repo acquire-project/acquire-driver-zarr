@@ -156,17 +156,16 @@ try_with_valid_settings()
     CHECK(fs::is_directory(store_path + "/0"));
     CHECK(fs::is_regular_file(store_path + "/0/.zattrs"));
 
+    ZarrStream_destroy(stream);
+
     // cleanup
     try {
         fs::remove_all(store_path);
     } catch (const fs::filesystem_error& e) {
         fprintf(
           stderr, "Failed to remove %s: %s\n", store_path.c_str(), e.what());
-        ZarrStream_destroy(stream);
         return false;
     }
-
-    ZarrStream_destroy(stream);
 
     return true;
 
