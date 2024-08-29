@@ -38,7 +38,7 @@ class ArrayWriter
   public:
     ArrayWriter(const ArrayWriterConfig& config,
                 std::shared_ptr<ThreadPool> thread_pool,
-                std::shared_ptr<S3ConnectionPool> connection_pool);
+                std::shared_ptr<S3ConnectionPool> s3_connection_pool);
 
     virtual ~ArrayWriter() noexcept = default;
 
@@ -67,7 +67,7 @@ class ArrayWriter
     uint32_t append_chunk_index_;
     bool is_finalizing_;
 
-    std::shared_ptr<S3ConnectionPool> connection_pool_;
+    std::shared_ptr<S3ConnectionPool> s3_connection_pool_;
 
     void make_buffers_() noexcept;
     size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);

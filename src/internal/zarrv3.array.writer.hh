@@ -6,11 +6,10 @@ namespace zarr {
 struct ZarrV3ArrayWriter final : public ArrayWriter
 {
   public:
-    ZarrV3ArrayWriter() = delete;
     ZarrV3ArrayWriter(
       const ArrayWriterConfig& array_spec,
       std::shared_ptr<ThreadPool> thread_pool,
-      std::shared_ptr<S3ConnectionPool> connection_pool);
+      std::shared_ptr<S3ConnectionPool> s3_connection_pool);
 
     ~ZarrV3ArrayWriter() override = default;
 

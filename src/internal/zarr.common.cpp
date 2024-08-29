@@ -330,3 +330,20 @@ zarr::compression_codec_to_string(ZarrCompressionCodec codec)
             return "(unknown)";
     }
 }
+
+const char*
+zarr::dimension_type_to_string(ZarrDimensionType type)
+{
+    switch (type) {
+        case ZarrDimensionType_Time:
+            return "time";
+        case ZarrDimensionType_Channel:
+            return "channel";
+        case ZarrDimensionType_Space:
+            return "space";
+        case ZarrDimensionType_Other:
+            return "other";
+        default:
+            return "(unknown)";
+    }
+}

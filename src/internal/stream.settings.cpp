@@ -60,23 +60,6 @@ compressor_to_string(ZarrCompressor compressor)
     }
 }
 
-const char*
-dimension_type_to_string(ZarrDimensionType kind)
-{
-    switch (kind) {
-        case ZarrDimensionType_Space:
-            return "space";
-        case ZarrDimensionType_Time:
-            return "time";
-        case ZarrDimensionType_Channel:
-            return "channel";
-        case ZarrDimensionType_Other:
-            return "other";
-        default:
-            return "(unknown)";
-    }
-}
-
 inline std::string
 trim(const char* s, size_t bytes_of_s)
 {

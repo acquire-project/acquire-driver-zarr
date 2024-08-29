@@ -71,10 +71,10 @@ zarr::downsample(const ArrayWriterConfig& config,
 zarr::ArrayWriter::ArrayWriter(
   const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,
-  std::shared_ptr<S3ConnectionPool> connection_pool)
+  std::shared_ptr<S3ConnectionPool> s3_connection_pool)
   : config_{ config }
   , thread_pool_{ thread_pool }
-  , connection_pool_{ connection_pool }
+  , s3_connection_pool_{ s3_connection_pool }
   , bytes_to_flush_{ 0 }
   , frames_written_{ 0 }
   , append_chunk_index_{ 0 }

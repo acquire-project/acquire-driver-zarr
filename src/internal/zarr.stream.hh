@@ -11,7 +11,7 @@
 struct ZarrStream_s
 {
   public:
-    ZarrStream_s(struct ZarrStreamSettings_s* settings, size_t version);
+    ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version);
     ~ZarrStream_s();
 
     size_t version() const { return version_; }
@@ -19,13 +19,17 @@ struct ZarrStream_s
 
   private:
     struct ZarrStreamSettings_s settings_;
-    size_t version_; // Zarr version. 2 or 3.
+    uint8_t version_;   // Zarr version. 2 or 3.
     std::string error_; // error message. If nonempty, an error occurred.
 
     std::shared_ptr<zarr::ThreadPool> thread_pool_;
     std::shared_ptr<zarr::S3ConnectionPool> s3_connection_pool_;
 
     std::vector<std::unique_ptr<zarr::ArrayWriter>> writers_;
+    std::unordered_map<std::string, std::unique_ptr<zarr::Sink>>
+      metadata_sinks_;
+
+    std::string dataset_root_() const;
 
     /**
      * @brief Set an error message.
@@ -35,9 +39,19 @@ struct ZarrStream_s
 
     /** @brief Create the data store. */
     [[nodiscard]] bool create_store_();
-    void create_filesystem_store_();
-    void create_s3_connection_pool_();
 
     /** @brief Create the writers. */
     [[nodiscard]] bool create_writers_();
+
+    /** @brief Create the metadata sinks. */
+    [[nodiscard]] bool create_metadata_sinks_();
+
+    /** @brief Write per-acquisition metadata. */
+    [[nodiscard]] bool write_base_metadata_();
+
+    /** @brief Write Zarr group metadata. */
+    bool write_group_metadata_();
+
+    /** @brief Construct OME metadata pertaining to the multiscale pyramid. */
+    nlohmann::json make_multiscale_metadata_() const;
 };

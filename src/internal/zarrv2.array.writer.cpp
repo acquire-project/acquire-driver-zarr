@@ -49,8 +49,8 @@ sample_type_to_dtype(ZarrDataType t)
 zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
   const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,
-  std::shared_ptr<S3ConnectionPool> connection_pool)
-  : ArrayWriter(config, thread_pool, connection_pool)
+  std::shared_ptr<S3ConnectionPool> s3_connection_pool)
+  : ArrayWriter(config, thread_pool, s3_connection_pool)
 {
     data_root_ =
       config_.dataset_root + "/" + std::to_string(config_.level_of_detail);
@@ -66,7 +66,7 @@ zarr::ZarrV2ArrayWriter::flush_impl_()
       data_root_ + "/" + std::to_string(append_chunk_index_);
 
     {
-        SinkCreator creator(thread_pool_, connection_pool_);
+        SinkCreator creator(thread_pool_, s3_connection_pool_);
         if (!creator.make_data_sinks(data_root,
                                      config_.dimensions,
                                      chunks_along_dimension,
@@ -117,8 +117,8 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
     if (!metadata_sink_) {
         const std::string metadata_path = ".zarray";
 
-        if (connection_pool_) {
-            SinkCreator creator(thread_pool_, connection_pool_);
+        if (s3_connection_pool_) {
+            SinkCreator creator(thread_pool_, s3_connection_pool_);
             metadata_sink_ = creator.make_sink(meta_root_, metadata_path);
         } else {
             metadata_sink_ =

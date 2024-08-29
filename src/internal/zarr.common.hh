@@ -130,6 +130,19 @@ size_t
 shard_internal_index(size_t chunk_index,
                      const std::vector<Dimension>& dimensions);
 
+/**
+ * @brief Get the string representation of a compression codec.
+ * @param codec The compression codec.
+ * @return The string representation of the codec.
+ */
 const char*
 compression_codec_to_string(ZarrCompressionCodec codec);
+
+/**
+ * @brief Get the string representation of a dimension type.
+ * @param type The dimension type.
+ * @return The string representation of the dimension type.
+ */
+const char*
+dimension_type_to_string(ZarrDimensionType type);
 } // namespace zarr

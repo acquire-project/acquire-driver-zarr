@@ -150,6 +150,12 @@ try_with_valid_settings()
     // check the store path was created
     CHECK(fs::is_directory(store_path));
 
+    // check the store path contains the expected files
+    CHECK(fs::is_regular_file(store_path + "/.zattrs"));
+    CHECK(fs::is_regular_file(store_path + "/.zgroup"));
+    CHECK(fs::is_directory(store_path + "/0"));
+    CHECK(fs::is_regular_file(store_path + "/0/.zattrs"));
+
     // cleanup
     try {
         fs::remove_all(store_path);

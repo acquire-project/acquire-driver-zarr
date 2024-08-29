@@ -51,8 +51,8 @@ sample_type_to_dtype(ZarrDataType t)
 zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
   const ArrayWriterConfig& array_spec,
   std::shared_ptr<ThreadPool> thread_pool,
-  std::shared_ptr<S3ConnectionPool> connection_pool)
-  : ArrayWriter(array_spec, thread_pool, connection_pool)
+  std::shared_ptr<S3ConnectionPool> s3_connection_pool)
+  : ArrayWriter(array_spec, thread_pool, s3_connection_pool)
   , shard_file_offsets_(number_of_shards(array_spec.dimensions), 0)
   , shard_tables_{ number_of_shards(array_spec.dimensions) }
 {
@@ -77,7 +77,7 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
       data_root_ + "/c" + std::to_string(append_chunk_index_);
 
     {
-        SinkCreator creator(thread_pool_, connection_pool_);
+        SinkCreator creator(thread_pool_, s3_connection_pool_);
         if (data_sinks_.empty() &&
             !creator.make_data_sinks(data_root,
                                      config_.dimensions,
@@ -176,8 +176,8 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
         const std::string metadata_path =
           std::to_string(config_.level_of_detail) + ".array.json";
 
-        if (connection_pool_) {
-            SinkCreator creator(thread_pool_, connection_pool_);
+        if (s3_connection_pool_) {
+            SinkCreator creator(thread_pool_, s3_connection_pool_);
             metadata_sink_ = creator.make_sink(meta_root_, metadata_path);
         } else {
             metadata_sink_ =
