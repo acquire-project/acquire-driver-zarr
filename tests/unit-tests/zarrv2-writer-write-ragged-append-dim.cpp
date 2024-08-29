@@ -132,7 +132,7 @@ main()
             CHECK(!fs::is_directory(z_dir / std::to_string(chunks_in_y)));
         }
 
-        CHECK(!fs::is_directory(base_dir / std::to_string(chunks_in_z)));
+        CHECK(!fs::is_directory(data_root / std::to_string(chunks_in_z)));
 
         retval = 0;
     } catch (const std::exception& exc) {

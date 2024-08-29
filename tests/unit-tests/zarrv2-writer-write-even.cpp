@@ -73,6 +73,8 @@ check_json()
 int
 main()
 {
+    Logger::set_log_level(LogLevel_Debug);
+
     int retval = 1;
 
     const ZarrDataType dtype = ZarrDataType_uint16;
@@ -161,7 +163,7 @@ main()
             CHECK(!fs::is_directory(t_dir / std::to_string(chunks_in_c)));
         }
 
-        CHECK(!fs::is_directory(base_dir / std::to_string(chunks_in_t)));
+        CHECK(!fs::is_directory(data_root / std::to_string(chunks_in_t)));
 
         retval = 0;
     } catch (const std::exception& exc) {

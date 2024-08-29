@@ -4,6 +4,7 @@ set(tests
         set-and-get-params
         create-and-destroy-stream
         stream-raw-v2-to-filesystem
+        stream-raw-v3-to-filesystem
 )
 
 foreach (name ${tests})

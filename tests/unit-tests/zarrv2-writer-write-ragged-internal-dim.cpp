@@ -146,10 +146,10 @@ main()
                 }
 
                 CHECK(
-                  !fs::is_directory(base_dir / std::to_string(chunks_in_z)));
+                  !fs::is_directory(t_dir / std::to_string(chunks_in_z)));
             }
 
-            CHECK(!fs::is_directory(base_dir / std::to_string(chunks_in_t)));
+            CHECK(!fs::is_directory(data_root / std::to_string(chunks_in_t)));
         }
 
         retval = 0;

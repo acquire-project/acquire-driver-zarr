@@ -157,7 +157,7 @@ main()
         }
 
         CHECK(
-          !fs::is_directory(base_dir / ("c" + std::to_string(shards_in_z))));
+          !fs::is_directory(data_root / ("c" + std::to_string(shards_in_z))));
 
         retval = 0;
     } catch (const std::exception& exc) {

@@ -271,7 +271,7 @@ zarr::ZarrV3ArrayWriter::should_rollover_() const
     const auto& append_dim = dims.front();
     size_t frames_before_flush =
       append_dim.chunk_size_px * append_dim.shard_size_chunks;
-    for (auto i = 1; i < dims.size() - 3; ++i) {
+    for (auto i = 1; i < dims.size() - 2; ++i) {
         frames_before_flush *= dims[i].array_size_px;
     }
 
