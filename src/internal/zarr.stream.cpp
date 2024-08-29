@@ -520,7 +520,7 @@ ZarrStream_s::create_writers_()
     std::optional<zarr::BloscCompressionParams> blosc_compression_params;
     if (settings_.compressor == ZarrCompressor_Blosc1) {
         blosc_compression_params = zarr::BloscCompressionParams(
-          zarr::compression_codec_to_string(
+          zarr::blosc_codec_to_string(
             static_cast<ZarrCompressionCodec>(settings_.compression_codec)),
           settings_.compression_level,
           settings_.compression_shuffle);

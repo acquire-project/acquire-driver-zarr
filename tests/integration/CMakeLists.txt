@@ -3,8 +3,10 @@ set(project acquire-zarr)
 set(tests
         set-and-get-params
         create-and-destroy-stream
-        stream-raw-v2-to-filesystem
-        stream-raw-v3-to-filesystem
+        stream-zarr-v2-raw-to-filesystem
+        stream-zarr-v2-compressed-to-filesystem
+        stream-zarr-v3-raw-to-filesystem
+        stream-zarr-v3-compressed-to-filesystem
 )
 
 foreach (name ${tests})

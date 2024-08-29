@@ -242,6 +242,8 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
               { "shuffle", params.shuffle },
             }) },
         });
+    } else {
+        metadata["compressor"] = nullptr;
     }
 
     // sharding storage transformer

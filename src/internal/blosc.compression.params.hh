@@ -8,23 +8,8 @@
 #include <string_view>
 
 namespace zarr {
-template<ZarrCompressionCodec CodecId>
-constexpr const char*
-compression_codec_as_string();
-
-template<>
-constexpr const char*
-compression_codec_as_string<ZarrCompressionCodec_BloscZstd>()
-{
-    return "zstd";
-}
-
-template<>
-constexpr const char*
-compression_codec_as_string<ZarrCompressionCodec_BloscLZ4>()
-{
-    return "lz4";
-}
+const char*
+blosc_codec_to_string(ZarrCompressionCodec codec);
 
 struct BloscCompressionParams
 {

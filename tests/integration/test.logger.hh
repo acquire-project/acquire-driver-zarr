@@ -46,3 +46,10 @@ class Logger
         T b_ = (T)(b);                                                         \
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
     } while (0)
+
+#define EXPECT_LT(T, fmt, a, b)                                                \
+    do {                                                                       \
+        T a_ = (T)(a);                                                         \
+        T b_ = (T)(b);                                                         \
+        EXPECT(a_ < b_, "Expected %s<%s but " fmt ">=" fmt, #a, #b, a_, b_);   \
+    } while (0)
