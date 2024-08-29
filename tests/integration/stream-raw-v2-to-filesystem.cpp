@@ -15,22 +15,26 @@ namespace {
 const std::string test_path =
   (fs::temp_directory_path() / (TEST ".zarr")).string();
 
-const uint32_t array_width = 1920, array_height = 1080, array_channels = 1,
-               array_timepoints = 256;
-const uint32_t chunk_width = array_width / 2, chunk_height = array_height / 2,
-               chunk_channels = array_channels,
-               chunk_timepoints = array_timepoints / 2;
+const unsigned int array_width = 64, array_height = 48, array_planes = 6,
+                   array_channels = 8, array_timepoints = 10;
 
-const unsigned int chunks_in_x = (array_width + chunk_width - 1) / chunk_width;
+const unsigned int chunk_width = 16, chunk_height = 16, chunk_planes = 2,
+                   chunk_channels = 4, chunk_timepoints = 5;
+
+const unsigned int chunks_in_x =
+  (array_width + chunk_width - 1) / chunk_width; // 4 chunks
 const unsigned int chunks_in_y =
-  (array_height + chunk_height - 1) / chunk_height;
+  (array_height + chunk_height - 1) / chunk_height; // 3 chunks
+const unsigned int chunks_in_z =
+  (array_planes + chunk_planes - 1) / chunk_planes; // 3 chunks
 const unsigned int chunks_in_c =
-  (array_channels + chunk_channels - 1) / chunk_channels;
+  (array_channels + chunk_channels - 1) / chunk_channels; // 2 chunks
 const unsigned int chunks_in_t =
   (array_timepoints + chunk_timepoints - 1) / chunk_timepoints;
 
-const size_t nbytes_px = sizeof(uint16_t);
-const uint32_t frames_to_acquire = array_channels * array_timepoints;
+const size_t nbytes_px = sizeof(int32_t);
+const uint32_t frames_to_acquire =
+  array_planes * array_channels * array_timepoints;
 const size_t bytes_of_frame = array_width * array_height * nbytes_px;
 } // namespace/s
 
@@ -41,9 +45,9 @@ setup()
 
     ZarrStreamSettings_set_store_path(
       settings, test_path.c_str(), test_path.size() + 1);
-    ZarrStreamSettings_set_data_type(settings, ZarrDataType_uint16);
+    ZarrStreamSettings_set_data_type(settings, ZarrDataType_int32);
 
-    ZarrStreamSettings_reserve_dimensions(settings, 4);
+    ZarrStreamSettings_reserve_dimensions(settings, 5);
     ZarrStreamSettings_set_dimension(settings,
                                      0,
                                      SIZED("t"),
@@ -60,13 +64,20 @@ setup()
                                      0);
     ZarrStreamSettings_set_dimension(settings,
                                      2,
+                                     SIZED("z"),
+                                     ZarrDimensionType_Space,
+                                     array_planes,
+                                     chunk_planes,
+                                     0);
+    ZarrStreamSettings_set_dimension(settings,
+                                     3,
                                      SIZED("y"),
                                      ZarrDimensionType_Space,
                                      array_height,
                                      chunk_height,
                                      0);
     ZarrStreamSettings_set_dimension(settings,
-                                     3,
+                                     4,
                                      SIZED("x"),
                                      ZarrDimensionType_Space,
                                      array_width,
@@ -82,7 +93,7 @@ validate_base_metadata(const nlohmann::json& meta)
     const auto multiscales = meta["multiscales"][0];
 
     const auto axes = multiscales["axes"];
-    EXPECT_EQ(size_t, "%zu", axes.size(), 4);
+    EXPECT_EQ(size_t, "%zu", axes.size(), 5);
     std::string name, type, unit;
 
     name = axes[0]["name"];
@@ -100,7 +111,14 @@ validate_base_metadata(const nlohmann::json& meta)
 
     name = axes[2]["name"];
     type = axes[2]["type"];
-    unit = axes[2]["unit"];
+    EXPECT(name == "z", "Expected name to be 'z', but got '%s'", name.c_str());
+    EXPECT(type == "space",
+           "Expected type to be 'space', but got '%s'",
+           type.c_str());
+
+    name = axes[3]["name"];
+    type = axes[3]["type"];
+    unit = axes[3]["unit"];
     EXPECT(name == "y", "Expected name to be 'y', but got '%s'", name.c_str());
     EXPECT(type == "space",
            "Expected type to be 'space', but got '%s'",
@@ -109,9 +127,9 @@ validate_base_metadata(const nlohmann::json& meta)
            "Expected unit to be 'micrometer', but got '%s'",
            unit.c_str());
 
-    name = axes[3]["name"];
-    type = axes[3]["type"];
-    unit = axes[3]["unit"];
+    name = axes[4]["name"];
+    type = axes[4]["type"];
+    unit = axes[4]["unit"];
     EXPECT(name == "x", "Expected name to be 'x', but got '%s'", name.c_str());
     EXPECT(type == "space",
            "Expected type to be 'space', but got '%s'",
@@ -133,11 +151,12 @@ validate_base_metadata(const nlohmann::json& meta)
            type.c_str());
 
     const auto scale = coordinate_transformations["scale"];
-    EXPECT_EQ(size_t, "%zu", scale.size(), 4);
+    EXPECT_EQ(size_t, "%zu", scale.size(), 5);
     EXPECT_EQ(int, "%f", scale[0].get<double>(), 1.0);
     EXPECT_EQ(int, "%f", scale[1].get<double>(), 1.0);
     EXPECT_EQ(int, "%f", scale[2].get<double>(), 1.0);
     EXPECT_EQ(int, "%f", scale[3].get<double>(), 1.0);
+    EXPECT_EQ(int, "%f", scale[4].get<double>(), 1.0);
 }
 
 void
@@ -151,29 +170,31 @@ void
 validate_array_metadata(const nlohmann::json& meta)
 {
     const auto shape = meta["shape"];
-    EXPECT_EQ(size_t, "%zu", shape.size(), 4);
+    EXPECT_EQ(size_t, "%zu", shape.size(), 5);
     EXPECT_EQ(int, "%d", shape[0].get<int>(), array_timepoints);
     EXPECT_EQ(int, "%d", shape[1].get<int>(), array_channels);
-    EXPECT_EQ(int, "%d", shape[2].get<int>(), array_height);
-    EXPECT_EQ(int, "%d", shape[3].get<int>(), array_width);
+    EXPECT_EQ(int, "%d", shape[2].get<int>(), array_planes);
+    EXPECT_EQ(int, "%d", shape[3].get<int>(), array_height);
+    EXPECT_EQ(int, "%d", shape[4].get<int>(), array_width);
 
     const auto chunks = meta["chunks"];
-    EXPECT_EQ(size_t, "%zu", chunks.size(), 4);
+    EXPECT_EQ(size_t, "%zu", chunks.size(), 5);
     EXPECT_EQ(int, "%d", chunks[0].get<int>(), chunk_timepoints);
     EXPECT_EQ(int, "%d", chunks[1].get<int>(), chunk_channels);
-    EXPECT_EQ(int, "%d", chunks[2].get<int>(), chunk_height);
-    EXPECT_EQ(int, "%d", chunks[3].get<int>(), chunk_width);
+    EXPECT_EQ(int, "%d", chunks[2].get<int>(), chunk_planes);
+    EXPECT_EQ(int, "%d", chunks[3].get<int>(), chunk_height);
+    EXPECT_EQ(int, "%d", chunks[4].get<int>(), chunk_width);
 
     const auto dtype = meta["dtype"];
-    EXPECT(dtype.get<std::string>() == "<u2",
-           "Expected dtype to be '<u2', but got '%s'",
+    EXPECT(dtype.get<std::string>() == "<i4",
+           "Expected dtype to be '<i4', but got '%s'",
            dtype.get<std::string>().c_str());
 }
 
 void
 validate_file_data()
 {
-    const auto expected_file_size = chunk_width * chunk_height *
+    const auto expected_file_size = chunk_width * chunk_height * chunk_planes *
                                     chunk_channels * chunk_timepoints *
                                     nbytes_px;
 
@@ -188,22 +209,29 @@ validate_file_data()
             const auto c_dir = t_dir / std::to_string(c);
             CHECK(fs::is_directory(c_dir));
 
-            for (auto y = 0; y < chunks_in_y; ++y) {
-                const auto y_dir = c_dir / std::to_string(y);
-                CHECK(fs::is_directory(y_dir));
+            for (auto z = 0; z < chunks_in_z; ++z) {
+                const auto z_dir = c_dir / std::to_string(z);
+                CHECK(fs::is_directory(z_dir));
 
-                for (auto x = 0; x < chunks_in_x; ++x) {
-                    const auto x_file = y_dir / std::to_string(x);
-                    CHECK(fs::is_regular_file(x_file));
-                    const auto file_size = fs::file_size(x_file);
-                    EXPECT_EQ(size_t, "%zu", file_size, expected_file_size);
+                for (auto y = 0; y < chunks_in_y; ++y) {
+                    const auto y_dir = z_dir / std::to_string(y);
+                    CHECK(fs::is_directory(y_dir));
+
+                    for (auto x = 0; x < chunks_in_x; ++x) {
+                        const auto x_file = y_dir / std::to_string(x);
+                        CHECK(fs::is_regular_file(x_file));
+                        const auto file_size = fs::file_size(x_file);
+                        EXPECT_EQ(size_t, "%zu", file_size, expected_file_size);
+                    }
+
+                    CHECK(!fs::is_regular_file(y_dir /
+                                               std::to_string(chunks_in_x)));
                 }
 
-                CHECK(
-                  !fs::is_regular_file(y_dir / std::to_string(chunks_in_x)));
+                CHECK(!fs::is_directory(z_dir / std::to_string(chunks_in_y)));
             }
 
-            CHECK(!fs::is_directory(c_dir / std::to_string(chunks_in_y)));
+            CHECK(!fs::is_directory(c_dir / std::to_string(chunks_in_z)));
         }
 
         CHECK(!fs::is_directory(t_dir / std::to_string(chunks_in_c)));
@@ -248,7 +276,7 @@ int
 main()
 {
     auto* stream = setup();
-    std::vector<uint16_t> frame(array_width * array_height, 0);
+    std::vector<int32_t> frame(array_width * array_height, 0);
 
     int retval = 1;
 
