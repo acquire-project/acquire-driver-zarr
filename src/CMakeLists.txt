@@ -43,7 +43,20 @@ target_link_libraries(${tgt} PRIVATE
         miniocpp::miniocpp
 )
 
-install(TARGETS ${tgt} LIBRARY DESTINATION lib)
+set_target_properties(${tgt} PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+)
+
+install(TARGETS ${tgt}
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+)
+
+# Install public header files
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+        DESTINATION include
+        FILES_MATCHING PATTERN "*.h"
+)
 
 #if (NOT TARGET acquire-core-logger)
 #    add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
@@ -95,8 +108,5 @@ install(TARGETS ${tgt} LIBRARY DESTINATION lib)
 #        nlohmann_json::nlohmann_json
 #        miniocpp::miniocpp
 #)
-set_target_properties(${tgt} PROPERTIES
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-)
 #
 #install(TARGETS ${tgt-driver} LIBRARY DESTINATION lib)
