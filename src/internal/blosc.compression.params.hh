@@ -28,12 +28,13 @@ compression_codec_as_string<ZarrCompressionCodec_BloscLZ4>()
 
 struct BloscCompressionParams
 {
-    static constexpr char id[] = "blosc";
     std::string codec_id;
-    int clevel;
-    int shuffle;
+    uint8_t clevel;
+    uint8_t shuffle;
 
     BloscCompressionParams();
-    BloscCompressionParams(std::string_view codec_id, int clevel, int shuffle);
+    BloscCompressionParams(std::string_view codec_id,
+                           uint8_t clevel,
+                           uint8_t shuffle);
 };
 } // namespace zarr

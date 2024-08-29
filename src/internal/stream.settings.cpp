@@ -1,8 +1,11 @@
-#include <cstring> // memcpy
-
 #include "stream.settings.hh"
 #include "zarr.h"
 #include "logger.hh"
+#include "zarr.common.hh"
+
+#include <blosc.h>
+
+#include <cstring> // memcpy
 
 #define EXPECT_VALID_ARGUMENT(e, ...)                                          \
     do {                                                                       \
@@ -52,21 +55,6 @@ compressor_to_string(ZarrCompressor compressor)
             return "blosc2";
         case ZarrCompressor_Zstd:
             return "zstd";
-        default:
-            return "(unknown)";
-    }
-}
-
-const char*
-codec_to_string(ZarrCompressionCodec codec)
-{
-    switch (codec) {
-        case ZarrCompressionCodec_None:
-            return "none";
-        case ZarrCompressionCodec_BloscLZ4:
-            return "blosc-lz4";
-        case ZarrCompressionCodec_BloscZstd:
-            return "blosc-zstd";
         default:
             return "(unknown)";
     }
@@ -207,9 +195,43 @@ ZarrStreamSettings_set_compression_codec(ZarrStreamSettings* settings,
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
     EXPECT_VALID_ARGUMENT(codec < ZarrCompressionCodecCount,
                           "Invalid codec: %s",
-                          codec_to_string(codec));
+                          zarr::compression_codec_to_string(codec));
 
     settings->compression_codec = codec;
+    return ZarrError_Success;
+}
+
+ZarrError
+ZarrStreamSettings_set_compression_level(ZarrStreamSettings* settings,
+                                         uint8_t level)
+{
+    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
+    EXPECT_VALID_ARGUMENT(level >= 0 && level <= 9,
+                          "Invalid level: %d. Must be between 0 (no "
+                          "compression) and 9 (maximum compression).",
+                          level);
+
+    settings->compression_level = level;
+
+    return ZarrError_Success;
+}
+
+ZarrError
+ZarrStreamSettings_set_compression_shuffle(ZarrStreamSettings* settings,
+                                           uint8_t shuffle)
+{
+    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
+    EXPECT_VALID_ARGUMENT(shuffle == BLOSC_NOSHUFFLE ||
+                            shuffle == BLOSC_SHUFFLE ||
+                            shuffle == BLOSC_BITSHUFFLE,
+                          "Invalid shuffle: %d. Must be %d (no shuffle), %d "
+                          "(byte shuffle), or %d (bit shuffle)",
+                          shuffle,
+                          BLOSC_NOSHUFFLE,
+                          BLOSC_SHUFFLE,
+                          BLOSC_BITSHUFFLE);
+
+    settings->compression_shuffle = shuffle;
     return ZarrError_Success;
 }
 
@@ -345,6 +367,26 @@ ZarrStreamSettings_get_compression_codec(ZarrStreamSettings* settings)
         return ZarrCompressionCodec_None;
     }
     return static_cast<ZarrCompressionCodec>(settings->compression_codec);
+}
+
+uint8_t
+ZarrStreamSettings_get_compression_level(ZarrStreamSettings* settings)
+{
+    if (!settings) {
+        LOG_WARNING("Null pointer: settings. Returning 0.");
+        return 0;
+    }
+    return settings->compression_level;
+}
+
+uint8_t
+ZarrStreamSettings_get_compression_shuffle(ZarrStreamSettings* settings)
+{
+    if (!settings) {
+        LOG_WARNING("Null pointer: settings. Returning 0.");
+        return 0;
+    }
+    return settings->compression_shuffle;
 }
 
 size_t

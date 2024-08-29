@@ -22,7 +22,7 @@ class TestWriter : public zarr::ArrayWriter
 int
 main()
 {
-    const auto base_dir = fs::temp_directory_path() / "acquire";
+    const auto base_dir = fs::temp_directory_path() / TEST;
     int retval = 1;
 
     const unsigned int array_width = 64, array_height = 48, array_planes = 2,

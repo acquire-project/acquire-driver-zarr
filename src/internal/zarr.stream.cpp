@@ -1,10 +1,11 @@
-#include <filesystem>
-#include <string_view>
-
 #include "zarr.stream.hh"
 #include "zarr.h"
 #include "logger.hh"
+#include "zarr.common.hh"
 #include "s3.connection.hh"
+
+#include <filesystem>
+#include <string_view>
 
 #define EXPECT_VALID_ARGUMENT(e, ...)                                          \
     do {                                                                       \
@@ -398,9 +399,12 @@ ZarrStream_s::create_writers_()
 
     // construct Blosc compression parameters
     std::optional<zarr::BloscCompressionParams> blosc_compression_params;
-    if (settings_.compressor != ZarrCompressor_None) {
+    if (settings_.compressor == ZarrCompressor_Blosc1) {
         blosc_compression_params = zarr::BloscCompressionParams(
-          settings_.compressor, settings_.compression_codec);
+          zarr::compression_codec_to_string(
+            static_cast<ZarrCompressionCodec>(settings_.compression_codec)),
+          settings_.compression_level,
+          settings_.compression_shuffle);
     }
 
     zarr::ArrayWriterConfig config = {

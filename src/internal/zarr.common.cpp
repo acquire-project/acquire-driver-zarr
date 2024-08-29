@@ -315,3 +315,18 @@ zarr::shard_internal_index(size_t chunk_idx,
 
     return index;
 }
+
+const char*
+zarr::compression_codec_to_string(ZarrCompressionCodec codec)
+{
+    switch (codec) {
+        case ZarrCompressionCodec_None:
+            return "none";
+        case ZarrCompressionCodec_BloscLZ4:
+            return "blosc-lz4";
+        case ZarrCompressionCodec_BloscZstd:
+            return "blosc-zstd";
+        default:
+            return "(unknown)";
+    }
+}

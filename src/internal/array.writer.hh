@@ -3,7 +3,7 @@
 #include "stream.settings.hh"
 #include "thread.pool.hh"
 #include "s3.connection.hh"
-#include "blosc.compressor.hh"
+#include "blosc.compression.params.hh"
 #include "file.sink.hh"
 
 #include <condition_variable>

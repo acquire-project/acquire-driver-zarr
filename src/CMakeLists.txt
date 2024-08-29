@@ -14,8 +14,8 @@ add_library(${tgt} STATIC
         internal/thread.pool.cpp
         internal/s3.connection.hh
         internal/s3.connection.cpp
-        internal/blosc.compressor.hh
-        internal/blosc.compressor.cpp
+        internal/blosc.compression.params.hh
+        internal/blosc.compression.params.cpp
         internal/sink.hh
         internal/file.sink.hh
         internal/file.sink.cpp

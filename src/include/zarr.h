@@ -163,6 +163,12 @@ extern "C"
     ZarrError ZarrStreamSettings_set_compression_codec(
       ZarrStreamSettings* settings,
       ZarrCompressionCodec codec);
+    ZarrError ZarrStreamSettings_set_compression_level(
+      ZarrStreamSettings* settings,
+      uint8_t compression_level);
+    ZarrError ZarrStreamSettings_set_compression_shuffle(
+      ZarrStreamSettings* settings,
+      uint8_t shuffle);
 
     ZarrError ZarrStreamSettings_reserve_dimensions(
       ZarrStreamSettings* settings,
@@ -201,6 +207,10 @@ extern "C"
     ZarrCompressor ZarrStreamSettings_get_compressor(
       ZarrStreamSettings* settings);
     ZarrCompressionCodec ZarrStreamSettings_get_compression_codec(
+      ZarrStreamSettings* settings);
+    uint8_t ZarrStreamSettings_get_compression_level(
+      ZarrStreamSettings* settings);
+    uint8_t ZarrStreamSettings_get_compression_shuffle(
       ZarrStreamSettings* settings);
 
     size_t ZarrStreamSettings_get_dimension_count(ZarrStreamSettings* settings);

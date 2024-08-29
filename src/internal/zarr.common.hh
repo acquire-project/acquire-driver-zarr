@@ -129,4 +129,7 @@ shard_index_for_chunk(size_t chunk_index,
 size_t
 shard_internal_index(size_t chunk_index,
                      const std::vector<Dimension>& dimensions);
+
+const char*
+compression_codec_to_string(ZarrCompressionCodec codec);
 } // namespace zarr

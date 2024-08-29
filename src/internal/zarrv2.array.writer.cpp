@@ -83,23 +83,25 @@ zarr::ZarrV2ArrayWriter::flush_impl_()
         for (auto i = 0; i < data_sinks_.size(); ++i) {
             auto& chunk = chunk_buffers_.at(i);
             EXPECT(thread_pool_->push_to_job_queue(
-              std::move([&sink = data_sinks_.at(i),
-                         data = chunk.data(),
-                         size = chunk.size(),
-                         &latch](std::string& err) -> bool {
-                  bool success = false;
-                  try {
-                      CHECK(sink->write(0, data, size));
-                      success = true;
-                  } catch (const std::exception& exc) {
-                      err = "Failed to write chunk: " + std::string(exc.what());
-                  } catch (...) {
-                      err = "Failed to write chunk: (unknown)";
-                  }
+                     std::move([&sink = data_sinks_.at(i),
+                                data = chunk.data(),
+                                size = chunk.size(),
+                                &latch](std::string& err) -> bool {
+                         bool success = false;
+                         try {
+                             CHECK(sink->write(0, data, size));
+                             success = true;
+                         } catch (const std::exception& exc) {
+                             err = "Failed to write chunk: " +
+                                   std::string(exc.what());
+                         } catch (...) {
+                             err = "Failed to write chunk: (unknown)";
+                         }
 
-                  latch.count_down();
-                  return success;
-              })), "Failed to push job to thread pool");
+                         latch.count_down();
+                         return success;
+                     })),
+                   "Failed to push job to thread pool");
         }
     }
 
@@ -140,7 +142,8 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
          dim < config_.dimensions.rend() - 1;
          ++dim) {
         CHECK(dim->array_size_px);
-        append_size = (append_size + dim->array_size_px - 1) / dim->array_size_px;
+        append_size =
+          (append_size + dim->array_size_px - 1) / dim->array_size_px;
     }
     array_shape.push_back(append_size);
 
@@ -164,11 +167,10 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
 
     if (config_.compression_params) {
         const BloscCompressionParams bcp = *config_.compression_params;
-        metadata["compressor"] =
-          json{ { "id", std::string(BloscCompressionParams::id) },
-                { "cname", bcp.codec_id },
-                { "clevel", bcp.clevel },
-                { "shuffle", bcp.shuffle } };
+        metadata["compressor"] = json{ { "id", "blosc" },
+                                       { "cname", bcp.codec_id },
+                                       { "clevel", bcp.clevel },
+                                       { "shuffle", bcp.shuffle } };
     } else {
         metadata["compressor"] = nullptr;
     }

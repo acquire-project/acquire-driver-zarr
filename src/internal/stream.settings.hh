@@ -27,8 +27,11 @@ struct ZarrStreamSettings_s
 
     uint8_t dtype; /* Data type of the base array */
 
-    uint8_t compressor; /* Compression library to use */
-    uint8_t compression_codec; /* Compression codec to use */
+    uint8_t compressor;          /* Compression library to use */
+    uint8_t compression_codec;   /* Compression codec to use */
+    uint8_t compression_level;   /* Compression level to use */
+    uint8_t compression_shuffle; /* Whether and how to shuffle the data before
+                                  compressing */
 
     std::vector<ZarrDimension_s> dimensions; /* Dimensions of the base array */
 
