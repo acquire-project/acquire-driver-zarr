@@ -37,8 +37,6 @@ struct ZarrStream_s
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>>
       metadata_sinks_;
 
-    std::string dataset_root_() const;
-
     /**
      * @brief Set an error message.
      * @param msg The error message to set.

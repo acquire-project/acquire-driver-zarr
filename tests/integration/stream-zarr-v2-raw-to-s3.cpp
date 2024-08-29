@@ -4,13 +4,9 @@
 #include <nlohmann/json.hpp>
 #include <miniocpp/client.h>
 
-#include <filesystem>
-#include <fstream>
 #include <vector>
 
 #define SIZED(str) str, sizeof(str)
-
-namespace fs = std::filesystem;
 
 namespace {
 std::string s3_endpoint, s3_bucket_name, s3_access_key_id, s3_secret_access_key;
@@ -95,21 +91,6 @@ get_object_size(minio::s3::Client& client, const std::string& object_name)
     }
 
     return response.size;
-}
-
-bool
-download_object(minio::s3::Client& client,
-                const std::string& object_name,
-                const std::string& file_path)
-{
-    minio::s3::DownloadObjectArgs args;
-    args.bucket = s3_bucket_name;
-    args.object = object_name;
-    args.filename = file_path;
-
-    minio::s3::DownloadObjectResponse resp = client.DownloadObject(args);
-
-    return (bool)resp;
 }
 
 std::string
@@ -339,84 +320,91 @@ validate_array_metadata(const nlohmann::json& meta)
 }
 
 void
-validate_file_data()
-{
-//    const auto expected_file_size = chunk_width * chunk_height * chunk_planes *
-//                                    chunk_channels * chunk_timepoints *
-//                                    nbytes_px;
-//
-//    fs::path data_root = fs::path(test_path) / "0";
-//
-//    CHECK(fs::is_directory(data_root));
-//    for (auto t = 0; t < chunks_in_t; ++t) {
-//        const auto t_dir = data_root / std::to_string(t);
-//        CHECK(fs::is_directory(t_dir));
-//
-//        for (auto c = 0; c < chunks_in_c; ++c) {
-//            const auto c_dir = t_dir / std::to_string(c);
-//            CHECK(fs::is_directory(c_dir));
-//
-//            for (auto z = 0; z < chunks_in_z; ++z) {
-//                const auto z_dir = c_dir / std::to_string(z);
-//                CHECK(fs::is_directory(z_dir));
-//
-//                for (auto y = 0; y < chunks_in_y; ++y) {
-//                    const auto y_dir = z_dir / std::to_string(y);
-//                    CHECK(fs::is_directory(y_dir));
-//
-//                    for (auto x = 0; x < chunks_in_x; ++x) {
-//                        const auto x_file = y_dir / std::to_string(x);
-//                        CHECK(fs::is_regular_file(x_file));
-//                        const auto file_size = fs::file_size(x_file);
-//                        EXPECT_EQ(size_t, "%zu", file_size, expected_file_size);
-//                    }
-//
-//                    CHECK(!fs::is_regular_file(y_dir /
-//                                               std::to_string(chunks_in_x)));
-//                }
-//
-//                CHECK(!fs::is_directory(z_dir / std::to_string(chunks_in_y)));
-//            }
-//
-//            CHECK(!fs::is_directory(c_dir / std::to_string(chunks_in_z)));
-//        }
-//
-//        CHECK(!fs::is_directory(t_dir / std::to_string(chunks_in_c)));
-//    }
-//
-//    CHECK(!fs::is_directory(data_root / std::to_string(chunks_in_t)));
-}
-
-void
 validate_and_cleanup()
 {
-//    CHECK(std::filesystem::is_directory(test_path));
-//
-//    {
-//        fs::path base_metadata_path = fs::path(test_path) / ".zattrs";
-//        std::ifstream f(base_metadata_path);
-//        nlohmann::json base_metadata = nlohmann::json::parse(f);
-//
-//        validate_base_metadata(base_metadata);
-//    }
-//
-//    {
-//        fs::path group_metadata_path = fs::path(test_path) / ".zgroup";
-//        std::ifstream f = std::ifstream(group_metadata_path);
-//        nlohmann::json group_metadata = nlohmann::json::parse(f);
-//
-//        validate_group_metadata(group_metadata);
-//    }
-//
-//    {
-//        fs::path array_metadata_path = fs::path(test_path) / "0" / ".zarray";
-//        std::ifstream f = std::ifstream(array_metadata_path);
-//        nlohmann::json array_metadata = nlohmann::json::parse(f);
-//
-//        validate_array_metadata(array_metadata);
-//    }
-//
-//    validate_file_data();
+    minio::s3::BaseUrl url(s3_endpoint);
+    url.https = s3_endpoint.starts_with("https://");
+
+    minio::creds::StaticProvider provider(s3_access_key_id,
+                                          s3_secret_access_key);
+
+    std::string base_metadata_path = TEST "/.zattrs";
+    std::string group_metadata_path = TEST "/.zgroup";
+    std::string array_metadata_path = TEST "/0/.zarray";
+
+    minio::s3::Client client(url, &provider);
+    {
+        EXPECT(object_exists(client, base_metadata_path),
+               "Object does not exist: %s",
+               base_metadata_path.c_str());
+        std::string contents = get_object_contents(client, base_metadata_path);
+        nlohmann::json base_metadata = nlohmann::json::parse(contents);
+
+        validate_base_metadata(base_metadata);
+    }
+
+    {
+        EXPECT(object_exists(client, group_metadata_path),
+               "Object does not exist: %s",
+               group_metadata_path.c_str());
+        std::string contents = get_object_contents(client, group_metadata_path);
+        nlohmann::json group_metadata = nlohmann::json::parse(contents);
+
+        validate_group_metadata(group_metadata);
+    }
+
+    {
+        EXPECT(object_exists(client, array_metadata_path),
+               "Object does not exist: %s",
+               array_metadata_path.c_str());
+        std::string contents = get_object_contents(client, array_metadata_path);
+        nlohmann::json array_metadata = nlohmann::json::parse(contents);
+
+        validate_array_metadata(array_metadata);
+    }
+
+    CHECK(remove_items(
+      client,
+      { base_metadata_path, group_metadata_path, array_metadata_path }));
+
+    const auto expected_file_size = chunk_width * chunk_height * chunk_planes *
+                                    chunk_channels * chunk_timepoints *
+                                    nbytes_px;
+
+    // validate and clean up data files
+    std::vector<std::string> data_files;
+    std::string data_root = TEST "/0";
+
+    for (auto t = 0; t < chunks_in_t; ++t) {
+        const auto t_dir = data_root + "/" + std::to_string(t);
+
+        for (auto c = 0; c < chunks_in_c; ++c) {
+            const auto c_dir = t_dir + "/" + std::to_string(c);
+
+            for (auto z = 0; z < chunks_in_z; ++z) {
+                const auto z_dir = c_dir + "/" + std::to_string(z);
+
+                for (auto y = 0; y < chunks_in_y; ++y) {
+                    const auto y_dir = z_dir + "/" + std::to_string(y);
+
+                    for (auto x = 0; x < chunks_in_x; ++x) {
+                        const auto x_file = y_dir + "/" + std::to_string(x);
+                        EXPECT(object_exists(client, x_file),
+                               "Object does not exist: %s",
+                               x_file.c_str());
+                        const auto file_size = get_object_size(client, x_file);
+                        EXPECT_EQ(size_t, "%zu", file_size, expected_file_size);
+                        data_files.push_back(x_file);
+                    }
+
+                    CHECK(!object_exists(
+                      client, y_dir + "/" + std::to_string(chunks_in_x)));
+                }
+            }
+        }
+    }
+
+    CHECK(remove_items(client, data_files));
 }
 
 int

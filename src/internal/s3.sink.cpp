@@ -21,12 +21,12 @@ zarr::S3Sink::S3Sink(std::string_view bucket_name,
 
 zarr::S3Sink::~S3Sink()
 {
-    if (!is_multipart_upload_() && n_bytes_buffered_ > 0) {
+    if (!is_multipart_upload_() && nbytes_buffered_ > 0) {
         if (!put_object_()) {
             LOG_ERROR("Failed to upload object: %s", object_key_.c_str());
         }
     } else if (is_multipart_upload_()) {
-        if (n_bytes_buffered_ > 0 && !flush_part_()) {
+        if (nbytes_buffered_ > 0 && !flush_part_()) {
             LOG_ERROR("Failed to upload part %zu of object %s",
                       parts_.size() + 1,
                       object_key_.c_str());
@@ -39,26 +39,34 @@ zarr::S3Sink::~S3Sink()
 }
 
 bool
-zarr::S3Sink::write(size_t _, const uint8_t* data, size_t bytes_of_data)
+zarr::S3Sink::write(size_t offset, const uint8_t* data, size_t bytes_of_data)
 {
     EXPECT(data, "Null pointer: data");
     if (bytes_of_data == 0) {
         return true;
     }
 
+    if (offset < nbytes_flushed_) {
+        LOG_ERROR("Cannot write data at offset %zu, already flushed to %zu",
+                  offset,
+                  nbytes_flushed_);
+        return false;
+    }
+    nbytes_buffered_ = offset - nbytes_flushed_;
+
     while (bytes_of_data > 0) {
         const auto bytes_to_write =
-          std::min(bytes_of_data, part_buffer_.size() - n_bytes_buffered_);
+          std::min(bytes_of_data, part_buffer_.size() - nbytes_buffered_);
 
         if (bytes_to_write) {
             std::copy_n(
-              data, bytes_to_write, part_buffer_.begin() + n_bytes_buffered_);
-            n_bytes_buffered_ += bytes_to_write;
+              data, bytes_to_write, part_buffer_.begin() + nbytes_buffered_);
+            nbytes_buffered_ += bytes_to_write;
             data += bytes_to_write;
             bytes_of_data -= bytes_to_write;
         }
 
-        if (n_bytes_buffered_ == part_buffer_.size() && !flush_part_()) {
+        if (nbytes_buffered_ == part_buffer_.size() && !flush_part_()) {
             return false;
         }
     }
@@ -69,7 +77,7 @@ zarr::S3Sink::write(size_t _, const uint8_t* data, size_t bytes_of_data)
 bool
 zarr::S3Sink::put_object_()
 {
-    if (n_bytes_buffered_ == 0) {
+    if (nbytes_buffered_ == 0) {
         return false;
     }
 
@@ -80,7 +88,7 @@ zarr::S3Sink::put_object_()
         std::string etag =
           connection->put_object(bucket_name_,
                                  object_key_,
-                                 { part_buffer_.data(), n_bytes_buffered_ });
+                                 { part_buffer_.data(), nbytes_buffered_ });
         EXPECT(
           !etag.empty(), "Failed to upload object: %s", object_key_.c_str());
 
@@ -91,7 +99,8 @@ zarr::S3Sink::put_object_()
 
     // cleanup
     connection_pool_->return_connection(std::move(connection));
-    n_bytes_buffered_ = 0;
+    nbytes_flushed_ = nbytes_buffered_;
+    nbytes_buffered_ = 0;
 
     return retval;
 }
@@ -117,7 +126,7 @@ zarr::S3Sink::get_multipart_upload_id_()
 bool
 zarr::S3Sink::flush_part_()
 {
-    if (n_bytes_buffered_ == 0) {
+    if (nbytes_buffered_ == 0) {
         return false;
     }
 
@@ -128,7 +137,7 @@ zarr::S3Sink::flush_part_()
         minio::s3::Part part;
         part.number = static_cast<unsigned int>(parts_.size()) + 1;
 
-        std::span<uint8_t> data(part_buffer_.data(), n_bytes_buffered_);
+        std::span<uint8_t> data(part_buffer_.data(), nbytes_buffered_);
         part.etag =
           connection->upload_multipart_object_part(bucket_name_,
                                                    object_key_,
@@ -149,7 +158,8 @@ zarr::S3Sink::flush_part_()
 
     // cleanup
     connection_pool_->return_connection(std::move(connection));
-    n_bytes_buffered_ = 0;
+    nbytes_flushed_ += nbytes_buffered_;
+    nbytes_buffered_ = 0;
 
     return retval;
 }

@@ -441,17 +441,6 @@ ZarrStream_s::append(const void* data, size_t nbytes)
     return bytes_written;
 }
 
-std::string
-ZarrStream_s::dataset_root_() const
-{
-    if (is_s3_acquisition(&settings_)) {
-        return settings_.s3_endpoint + "/" + settings_.s3_bucket_name + "/" +
-               settings_.store_path;
-    } else {
-        return settings_.store_path;
-    }
-}
-
 void
 ZarrStream_s::set_error_(const std::string& msg)
 {
@@ -692,41 +681,39 @@ ZarrStream_s::make_multiscale_metadata_() const
     }
 
     // spatial multiscale metadata
-    if (writers_.empty()) {
-        std::vector<double> scales(dimensions.size(), 1.0);
-        multiscales[0]["datasets"] = {
+    std::vector<double> scales(dimensions.size(), 1.0);
+    multiscales[0]["datasets"] = {
+        {
+          { "path", "0" },
+          { "coordinateTransformations",
             {
-              { "path", "0" },
-              { "coordinateTransformations",
-                {
-                  {
-                    { "type", "scale" },
-                    { "scale", scales },
-                  },
-                } },
-            },
-        };
-    } else {
-        for (auto i = 0; i < writers_.size(); ++i) {
-            std::vector<double> scales;
-            scales.push_back(std::pow(2, i)); // append
-            for (auto k = 0; k < dimensions.size() - 3; ++k) {
-                scales.push_back(1.);
-            }
-            scales.push_back(std::pow(2, i)); // y
-            scales.push_back(std::pow(2, i)); // x
+              {
+                { "type", "scale" },
+                { "scale", scales },
+              },
+            } },
+        },
+    };
 
-            multiscales[0]["datasets"].push_back({
-              { "path", std::to_string(i) },
-              { "coordinateTransformations",
-                {
-                  {
-                    { "type", "scale" },
-                    { "scale", scales },
-                  },
-                } },
-            });
+    for (auto i = 1; i < writers_.size(); ++i) {
+        scales.clear();
+        scales.push_back(std::pow(2, i)); // append
+        for (auto k = 0; k < dimensions.size() - 3; ++k) {
+            scales.push_back(1.);
         }
+        scales.push_back(std::pow(2, i)); // y
+        scales.push_back(std::pow(2, i)); // x
+
+        multiscales[0]["datasets"].push_back({
+          { "path", std::to_string(i) },
+          { "coordinateTransformations",
+            {
+              {
+                { "type", "scale" },
+                { "scale", scales },
+              },
+            } },
+        });
 
         // downsampling metadata
         multiscales[0]["type"] = "local_mean";
