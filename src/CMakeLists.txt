@@ -6,12 +6,12 @@ add_library(${tgt} STATIC
         include/zarr.h
         internal/logger.hh
         internal/logger.cpp
-        internal/zarr.common.hh
-        internal/zarr.common.cpp
         internal/stream.settings.hh
         internal/stream.settings.cpp
         internal/zarr.stream.hh
         internal/zarr.stream.cpp
+        internal/zarr.common.hh
+        internal/zarr.common.cpp
         internal/thread.pool.hh
         internal/thread.pool.cpp
         internal/s3.connection.hh
@@ -38,10 +38,6 @@ target_include_directories(${tgt}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>
-)
-
-target_include_directories(${tgt-driver} PRIVATE
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
 )
 
 target_link_libraries(${tgt} PRIVATE
@@ -104,6 +100,10 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 #        zarr.driver.c
 #)
 #
+#target_include_directories(${tgt-driver} PRIVATE
+#        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+#)
+#
 #target_enable_simd(${tgt-driver})
 #target_link_libraries(${tgt-driver} PRIVATE
 #        acquire-core-logger
@@ -114,6 +114,7 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 #        nlohmann_json::nlohmann_json
 #        miniocpp::miniocpp
 #)
+#
 #set_target_properties(${tgt-driver} PROPERTIES
 #        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 #)

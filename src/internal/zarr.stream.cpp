@@ -1,7 +1,6 @@
 #include "zarr.stream.hh"
 #include "zarr.h"
 #include "logger.hh"
-#include "zarr.common.hh"
 #include "s3.connection.hh"
 #include "zarrv2.array.writer.hh"
 #include "zarrv3.array.writer.hh"
@@ -162,7 +161,55 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
 
     return true;
 }
-} // end ::{anonymous} namespace
+
+const char*
+dimension_type_to_string(ZarrDimensionType type)
+{
+    switch (type) {
+        case ZarrDimensionType_Time:
+            return "time";
+        case ZarrDimensionType_Channel:
+            return "channel";
+        case ZarrDimensionType_Space:
+            return "space";
+        case ZarrDimensionType_Other:
+            return "other";
+        default:
+            return "(unknown)";
+    }
+}
+} // namespace
+
+size_t
+zarr::bytes_of_type(ZarrDataType data_type)
+{
+    switch (data_type) {
+        case ZarrDataType_int8:
+        case ZarrDataType_uint8:
+            return 1;
+        case ZarrDataType_int16:
+        case ZarrDataType_uint16:
+        case ZarrDataType_float16:
+            return 2;
+        case ZarrDataType_int32:
+        case ZarrDataType_uint32:
+        case ZarrDataType_float32:
+            return 4;
+        case ZarrDataType_int64:
+        case ZarrDataType_uint64:
+        case ZarrDataType_float64:
+            return 8;
+        default:
+            throw std::runtime_error("Invalid data type.");
+    }
+}
+
+size_t
+zarr::bytes_of_frame(const std::vector<Dimension>& dims, ZarrDataType type)
+{
+    return bytes_of_type(type) * dims.back().array_size_px *
+           dims[dims.size() - 2].array_size_px;
+}
 
 ZarrStream*
 ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
@@ -666,7 +713,7 @@ ZarrStream_s::make_multiscale_metadata_() const
 
     auto& axes = multiscales[0]["axes"];
     for (auto dim = dimensions.begin(); dim != dimensions.end(); ++dim) {
-        std::string type = zarr::dimension_type_to_string(
+        std::string type = dimension_type_to_string(
           static_cast<ZarrDimensionType>(dim->kind));
 
         if (dim < dimensions.end() - 2) {

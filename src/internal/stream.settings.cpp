@@ -1,7 +1,6 @@
 #include "stream.settings.hh"
 #include "zarr.h"
 #include "logger.hh"
-#include "zarr.common.hh"
 
 #include <blosc.h>
 
@@ -60,6 +59,21 @@ compressor_to_string(ZarrCompressor compressor)
     }
 }
 
+const char*
+compression_codec_to_string(ZarrCompressionCodec codec)
+{
+    switch (codec) {
+        case ZarrCompressionCodec_None:
+            return "none";
+        case ZarrCompressionCodec_BloscLZ4:
+            return "blosc-lz4";
+        case ZarrCompressionCodec_BloscZstd:
+            return "blosc-zstd";
+        default:
+            return "(unknown)";
+    }
+}
+
 inline std::string
 trim(const char* s, size_t bytes_of_s)
 {
@@ -79,7 +93,7 @@ trim(const char* s, size_t bytes_of_s)
 
     return trimmed;
 }
-} // end ::{anonymous} namespace
+} // namespace
 
 /* Create and destroy */
 ZarrStreamSettings*
@@ -178,7 +192,7 @@ ZarrStreamSettings_set_compression_codec(ZarrStreamSettings* settings,
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
     EXPECT_VALID_ARGUMENT(codec < ZarrCompressionCodecCount,
                           "Invalid codec: %s",
-                          zarr::compression_codec_to_string(codec));
+                          compression_codec_to_string(codec));
 
     settings->compression_codec = codec;
     return ZarrError_Success;

@@ -1,39 +1,7 @@
 #include "logger.hh"
 #include "zarr.common.hh"
-#include "zarr.h"
 
 #include <stdexcept>
-
-size_t
-zarr::bytes_of_type(ZarrDataType data_type)
-{
-    switch (data_type) {
-        case ZarrDataType_int8:
-        case ZarrDataType_uint8:
-            return 1;
-        case ZarrDataType_int16:
-        case ZarrDataType_uint16:
-        case ZarrDataType_float16:
-            return 2;
-        case ZarrDataType_int32:
-        case ZarrDataType_uint32:
-        case ZarrDataType_float32:
-            return 4;
-        case ZarrDataType_int64:
-        case ZarrDataType_uint64:
-        case ZarrDataType_float64:
-            return 8;
-        default:
-            throw std::runtime_error("Invalid data type.");
-    }
-}
-
-size_t
-zarr::bytes_of_frame(const std::vector<Dimension>& dims, ZarrDataType type)
-{
-    return bytes_of_type(type) * dims.back().array_size_px *
-           dims[dims.size() - 2].array_size_px;
-}
 
 size_t
 zarr::chunks_along_dimension(const Dimension& dimension)
@@ -316,36 +284,4 @@ zarr::shard_internal_index(size_t chunk_idx,
     }
 
     return index;
-}
-
-const char*
-zarr::compression_codec_to_string(ZarrCompressionCodec codec)
-{
-    switch (codec) {
-        case ZarrCompressionCodec_None:
-            return "none";
-        case ZarrCompressionCodec_BloscLZ4:
-            return "blosc-lz4";
-        case ZarrCompressionCodec_BloscZstd:
-            return "blosc-zstd";
-        default:
-            return "(unknown)";
-    }
-}
-
-const char*
-zarr::dimension_type_to_string(ZarrDimensionType type)
-{
-    switch (type) {
-        case ZarrDimensionType_Time:
-            return "time";
-        case ZarrDimensionType_Channel:
-            return "channel";
-        case ZarrDimensionType_Space:
-            return "space";
-        case ZarrDimensionType_Other:
-            return "other";
-        default:
-            return "(unknown)";
-    }
 }

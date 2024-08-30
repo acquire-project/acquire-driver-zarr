@@ -1,28 +1,12 @@
 #pragma once
 
 #include "stream.settings.hh"
+#include "zarr.stream.hh"
+
 #include "zarr.h"
 
 namespace zarr {
 using Dimension = ZarrDimension_s;
-
-/**
- * @brief Get the number of bytes for a given data type.
- * @param data_type The data type.
- * @return The number of bytes for the data type.
- */
-size_t
-bytes_of_type(ZarrDataType data_type);
-
-/**
- * @brief Get the number of bytes for a frame with the given dimensions and
- * data type.
- * @param dims The dimensions of the full array.
- * @param type The data type of the array.
- * @return The number of bytes for a single frame.
- */
-size_t
-bytes_of_frame(const std::vector<Dimension>& dims, ZarrDataType type);
 
 /**
  * @brief Get the number of chunks along a dimension.
@@ -129,20 +113,4 @@ shard_index_for_chunk(size_t chunk_index,
 size_t
 shard_internal_index(size_t chunk_index,
                      const std::vector<Dimension>& dimensions);
-
-/**
- * @brief Get the string representation of a compression codec.
- * @param codec The compression codec.
- * @return The string representation of the codec.
- */
-const char*
-compression_codec_to_string(ZarrCompressionCodec codec);
-
-/**
- * @brief Get the string representation of a dimension type.
- * @param type The dimension type.
- * @return The string representation of the dimension type.
- */
-const char*
-dimension_type_to_string(ZarrDimensionType type);
 } // namespace zarr

@@ -8,6 +8,26 @@
 #include <cstddef> // size_t
 #include <memory>  // unique_ptr
 
+namespace zarr {
+/**
+ * @brief Get the number of bytes for a given data type.
+ * @param data_type The data type.
+ * @return The number of bytes for the data type.
+ */
+size_t
+bytes_of_type(ZarrDataType data_type);
+
+/**
+ * @brief Get the number of bytes for a frame with the given dimensions and
+ * data type.
+ * @param dims The dimensions of the full array.
+ * @param type The data type of the array.
+ * @return The number of bytes for a single frame.
+ */
+size_t
+bytes_of_frame(const std::vector<ZarrDimension_s>& dims, ZarrDataType type);
+} // namespace
+
 struct ZarrStream_s
 {
   public:

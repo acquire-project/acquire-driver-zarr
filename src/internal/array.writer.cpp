@@ -1,5 +1,6 @@
 #include "array.writer.hh"
 #include "zarr.common.hh"
+#include "zarr.stream.hh"
 #include "sink.creator.hh"
 #include "logger.hh"
 

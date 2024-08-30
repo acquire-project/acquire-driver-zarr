@@ -46,7 +46,7 @@ sample_type_to_dtype(ZarrDataType t)
                                      std::to_string(static_cast<int>(t)));
     }
 }
-} // end ::{anonymous} namespace
+} // namespace
 
 zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
   const ArrayWriterConfig& array_spec,
