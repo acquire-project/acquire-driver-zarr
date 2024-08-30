@@ -1,6 +1,6 @@
-#include "zarr.common.hh"
-#include "zarr_errors.h"
 #include "logger.hh"
+#include "zarr.common.hh"
+#include "zarr.h"
 
 #include <stdexcept>
 

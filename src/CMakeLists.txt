@@ -1,7 +1,6 @@
 set(tgt acquire-zarr)
 add_library(${tgt} STATIC
         include/zarr.h
-        include/zarr_errors.h
         internal/logger.hh
         internal/logger.cpp
         internal/zarr.common.hh

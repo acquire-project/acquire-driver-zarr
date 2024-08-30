@@ -4,8 +4,6 @@
 #include <stddef.h> // size_t
 #include <stdint.h> // uint8_t
 
-#include "zarr_errors.h"
-
 #ifdef __cplusplus
 extern "C"
 {
@@ -112,6 +110,27 @@ extern "C"
         ZarrDimensionType_Other,
         ZarrDimensionTypeCount
     } ZarrDimensionType;
+
+
+    /***************************************************************************
+     * Error handling
+     *
+     * The ZarrError enum lists the available error codes. The Zarr_get_error_message
+     * function returns a human-readable error message for the given error code.
+     **************************************************************************/
+    typedef enum
+    {
+        ZarrError_Success = 0,
+        ZarrError_InvalidArgument,
+        ZarrError_Overflow,
+        ZarrError_InvalidIndex,
+        ZarrError_NotYetImplemented,
+        ZarrError_Failure,
+        ZarrError_InternalError,
+        ZarrErrorCount,
+    } ZarrError;
+
+    const char* Zarr_get_error_message(ZarrError error);
 
     /***************************************************************************
      * Functions for creating and destroying a Zarr stream settings struct.
