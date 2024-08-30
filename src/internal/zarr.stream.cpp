@@ -211,199 +211,208 @@ zarr::bytes_of_frame(const std::vector<Dimension>& dims, ZarrDataType type)
            dims[dims.size() - 2].array_size_px;
 }
 
-ZarrStream*
-ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
+extern "C"
 {
-    if (!validate_settings(settings, version)) {
-        return nullptr;
+    ZarrStream* ZarrStream_create(struct ZarrStreamSettings_s* settings,
+                                  ZarrVersion version)
+    {
+        if (!validate_settings(settings, version)) {
+            return nullptr;
+        }
+
+        // initialize the stream
+        ZarrStream_s* stream;
+
+        try {
+            stream = new ZarrStream(settings, version);
+        } catch (const std::bad_alloc&) {
+            LOG_ERROR("Failed to allocate memory for Zarr stream");
+            return nullptr;
+        } catch (const std::exception& e) {
+            LOG_ERROR("Error creating Zarr stream: %s", e.what());
+            return nullptr;
+        }
+        ZarrStreamSettings_destroy(settings);
+
+        return stream;
     }
 
-    // initialize the stream
-    ZarrStream_s* stream;
-
-    try {
-        stream = new ZarrStream(settings, version);
-    } catch (const std::bad_alloc&) {
-        LOG_ERROR("Failed to allocate memory for Zarr stream");
-        return nullptr;
-    } catch (const std::exception& e) {
-        LOG_ERROR("Error creating Zarr stream: %s", e.what());
-        return nullptr;
-    }
-    ZarrStreamSettings_destroy(settings);
-
-    return stream;
-}
-
-void
-ZarrStream_destroy(ZarrStream* stream)
-{
-    delete stream;
-}
-
-/* Appending data */
-
-ZarrError
-ZarrStream_append(ZarrStream* stream,
-                  const void* data,
-                  size_t bytes_in,
-                  size_t* bytes_out)
-{
-    EXPECT_VALID_ARGUMENT(stream, "Null pointer: stream");
-    EXPECT_VALID_ARGUMENT(data, "Null pointer: data");
-    EXPECT_VALID_ARGUMENT(bytes_out, "Null pointer: bytes_out");
-
-    try {
-        *bytes_out = stream->append(data, bytes_in);
-    } catch (const std::exception& e) {
-        LOG_ERROR("Error appending data: %s", e.what());
-        return ZarrError_InternalError;
+    void ZarrStream_destroy(ZarrStream* stream)
+    {
+        delete stream;
     }
 
-    return ZarrError_Success;
-}
+    /* Appending data */
 
-/* Getters */
+    ZarrError ZarrStream_append(ZarrStream* stream,
+                                const void* data,
+                                size_t bytes_in,
+                                size_t* bytes_out)
+    {
+        EXPECT_VALID_ARGUMENT(stream, "Null pointer: stream");
+        EXPECT_VALID_ARGUMENT(data, "Null pointer: data");
+        EXPECT_VALID_ARGUMENT(bytes_out, "Null pointer: bytes_out");
 
-ZarrVersion
-ZarrStream_get_version(const ZarrStream* stream)
-{
-    if (!stream) {
-        LOG_WARNING("Null pointer: stream. Returning ZarrVersion_2");
-        return ZarrVersion_2;
-    }
-    return static_cast<ZarrVersion>(stream->version());
-}
+        try {
+            *bytes_out = stream->append(data, bytes_in);
+        } catch (const std::exception& e) {
+            LOG_ERROR("Error appending data: %s", e.what());
+            return ZarrError_InternalError;
+        }
 
-const char*
-ZarrStream_get_store_path(const ZarrStream* stream)
-{
-    STREAM_GET_STRING(stream, store_path);
-}
-
-const char*
-ZarrStream_get_s3_endpoint(const ZarrStream* stream)
-{
-    STREAM_GET_STRING(stream, s3_endpoint);
-}
-
-const char*
-ZarrStream_get_s3_bucket_name(const ZarrStream* stream)
-{
-    STREAM_GET_STRING(stream, s3_bucket_name);
-}
-
-const char*
-ZarrStream_get_s3_access_key_id(const ZarrStream* stream)
-{
-    STREAM_GET_STRING(stream, s3_access_key_id);
-}
-
-const char*
-ZarrStream_get_s3_secret_access_key(const ZarrStream* stream)
-{
-    STREAM_GET_STRING(stream, s3_secret_access_key);
-}
-
-ZarrCompressor
-ZarrStream_get_compressor(const ZarrStream* stream)
-{
-    if (!stream) {
-        LOG_WARNING("Null pointer: stream. Returning ZarrCompressor_None");
-        return ZarrCompressor_None;
-    }
-    return ZarrStreamSettings_get_compressor(&stream->settings());
-}
-
-ZarrCompressionCodec
-ZarrStream_get_compression_codec(const ZarrStream* stream)
-{
-    if (!stream) {
-        LOG_WARNING(
-          "Null pointer: stream. Returning ZarrCompressionCodec_None");
-        return ZarrCompressionCodec_None;
-    }
-    return ZarrStreamSettings_get_compression_codec(&stream->settings());
-}
-
-uint8_t
-ZarrStream_get_compression_level(const ZarrStream* stream)
-{
-    if (!stream) {
-        LOG_WARNING("Null pointer: stream. Returning 0");
-        return 0;
-    }
-    return ZarrStreamSettings_get_compression_level(&stream->settings());
-}
-
-uint8_t
-ZarrStream_get_compression_shuffle(const ZarrStream* stream)
-{
-    if (!stream) {
-        LOG_WARNING("Null pointer: stream. Returning 0");
-        return 0;
-    }
-    return ZarrStreamSettings_get_compression_shuffle(&stream->settings());
-}
-
-size_t
-ZarrStream_get_dimension_count(const ZarrStream* stream)
-{
-    if (!stream) {
-        LOG_WARNING("Null pointer: stream. Returning 0");
-        return 0;
-    }
-    return ZarrStreamSettings_get_dimension_count(&stream->settings());
-}
-
-ZarrError
-ZarrStream_get_dimension(const ZarrStream* stream,
-                         size_t index,
-                         char* name,
-                         size_t bytes_of_name,
-                         ZarrDimensionType* kind,
-                         size_t* array_size_px,
-                         size_t* chunk_size_px,
-                         size_t* shard_size_chunks)
-{
-    EXPECT_VALID_ARGUMENT(stream, "Null pointer: stream");
-    return ZarrStreamSettings_get_dimension(&stream->settings(),
-                                            index,
-                                            name,
-                                            bytes_of_name,
-                                            kind,
-                                            array_size_px,
-                                            chunk_size_px,
-                                            shard_size_chunks);
-}
-
-uint8_t
-ZarrStream_get_multiscale(const ZarrStream* stream)
-{
-    if (!stream) {
-        LOG_WARNING("Null pointer: stream. Returning 0");
-        return 0;
-    }
-    return ZarrStreamSettings_get_multiscale(&stream->settings());
-}
-
-/* Logging */
-
-ZarrError
-Zarr_set_log_level(LogLevel level)
-{
-    if (level < LogLevel_Debug || level >= LogLevelCount) {
-        return ZarrError_InvalidArgument;
+        return ZarrError_Success;
     }
 
-    Logger::set_log_level(level);
-    return ZarrError_Success;
-}
+    /* Getters */
 
-LogLevel
-Zarr_get_log_level()
-{
-    return Logger::get_log_level();
+    ZarrVersion ZarrStream_get_version(const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING("Null pointer: stream. Returning ZarrVersion_2");
+            return ZarrVersion_2;
+        }
+        return static_cast<ZarrVersion>(stream->version());
+    }
+
+    const char* ZarrStream_get_store_path(const ZarrStream* stream)
+    {
+        STREAM_GET_STRING(stream, store_path);
+    }
+
+    const char* ZarrStream_get_s3_endpoint(const ZarrStream* stream)
+    {
+        STREAM_GET_STRING(stream, s3_endpoint);
+    }
+
+    const char* ZarrStream_get_s3_bucket_name(const ZarrStream* stream)
+    {
+        STREAM_GET_STRING(stream, s3_bucket_name);
+    }
+
+    const char* ZarrStream_get_s3_access_key_id(const ZarrStream* stream)
+    {
+        STREAM_GET_STRING(stream, s3_access_key_id);
+    }
+
+    const char* ZarrStream_get_s3_secret_access_key(const ZarrStream* stream)
+    {
+        STREAM_GET_STRING(stream, s3_secret_access_key);
+    }
+
+    ZarrCompressor ZarrStream_get_compressor(const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING("Null pointer: stream. Returning ZarrCompressor_None");
+            return ZarrCompressor_None;
+        }
+        return ZarrStreamSettings_get_compressor(&stream->settings());
+    }
+
+    ZarrCompressionCodec ZarrStream_get_compression_codec(
+      const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING(
+              "Null pointer: stream. Returning ZarrCompressionCodec_None");
+            return ZarrCompressionCodec_None;
+        }
+        return ZarrStreamSettings_get_compression_codec(&stream->settings());
+    }
+
+    uint8_t ZarrStream_get_compression_level(const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING("Null pointer: stream. Returning 0");
+            return 0;
+        }
+        return ZarrStreamSettings_get_compression_level(&stream->settings());
+    }
+
+    uint8_t ZarrStream_get_compression_shuffle(const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING("Null pointer: stream. Returning 0");
+            return 0;
+        }
+        return ZarrStreamSettings_get_compression_shuffle(&stream->settings());
+    }
+
+    size_t ZarrStream_get_dimension_count(const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING("Null pointer: stream. Returning 0");
+            return 0;
+        }
+        return ZarrStreamSettings_get_dimension_count(&stream->settings());
+    }
+
+    ZarrError ZarrStream_get_dimension(const ZarrStream* stream,
+                                       size_t index,
+                                       char* name,
+                                       size_t bytes_of_name,
+                                       ZarrDimensionType* kind,
+                                       size_t* array_size_px,
+                                       size_t* chunk_size_px,
+                                       size_t* shard_size_chunks)
+    {
+        EXPECT_VALID_ARGUMENT(stream, "Null pointer: stream");
+        return ZarrStreamSettings_get_dimension(&stream->settings(),
+                                                index,
+                                                name,
+                                                bytes_of_name,
+                                                kind,
+                                                array_size_px,
+                                                chunk_size_px,
+                                                shard_size_chunks);
+    }
+
+    uint8_t ZarrStream_get_multiscale(const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING("Null pointer: stream. Returning 0");
+            return 0;
+        }
+        return ZarrStreamSettings_get_multiscale(&stream->settings());
+    }
+
+    /* Logging */
+
+    ZarrError Zarr_set_log_level(LogLevel level)
+    {
+        if (level < LogLevel_Debug || level >= LogLevelCount) {
+            return ZarrError_InvalidArgument;
+        }
+
+        Logger::set_log_level(level);
+        return ZarrError_Success;
+    }
+
+    LogLevel Zarr_get_log_level()
+    {
+        return Logger::get_log_level();
+    }
+
+    /* Error handling */
+
+    const char* Zarr_get_error_message(ZarrError error)
+    {
+        switch (error) {
+            case ZarrError_Success:
+                return "Success";
+            case ZarrError_InvalidArgument:
+                return "Invalid argument";
+            case ZarrError_Overflow:
+                return "Overflow";
+            case ZarrError_InvalidIndex:
+                return "Invalid index";
+            case ZarrError_NotYetImplemented:
+                return "Not yet implemented";
+            case ZarrError_InternalError:
+                return "Internal error";
+            default:
+                return "Unknown error";
+        }
+    }
 }
 
 /* ZarrStream_s implementation */

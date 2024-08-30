@@ -122,27 +122,6 @@ zarr::chunk_internal_offset(size_t frame_id,
     return offset * tile_size;
 }
 
-extern "C" const char*
-Zarr_get_error_message(ZarrError error)
-{
-    switch (error) {
-        case ZarrError_Success:
-            return "Success";
-        case ZarrError_InvalidArgument:
-            return "Invalid argument";
-        case ZarrError_Overflow:
-            return "Overflow";
-        case ZarrError_InvalidIndex:
-            return "Invalid index";
-        case ZarrError_NotYetImplemented:
-            return "Not yet implemented";
-        case ZarrError_InternalError:
-            return "Internal error";
-        default:
-            return "Unknown error";
-    }
-}
-
 size_t
 zarr::number_of_chunks_in_memory(const std::vector<Dimension>& dimensions)
 {
