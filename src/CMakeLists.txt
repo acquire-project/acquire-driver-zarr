@@ -4,6 +4,37 @@ set(tgt acquire-zarr)
 
 add_library(${tgt} STATIC
         include/zarr.h
+        internal/logger.hh
+        internal/logger.cpp
+        internal/stream.settings.hh
+        internal/stream.settings.cpp
+)
+
+target_include_directories(${tgt}
+        PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>
+)
+
+target_link_libraries(${tgt} PRIVATE
+        blosc_static
+        miniocpp::miniocpp
+)
+
+set_target_properties(${tgt} PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+)
+
+install(TARGETS ${tgt}
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+)
+
+# Install public header files
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+        DESTINATION include
+        FILES_MATCHING PATTERN "*.h"
 )
 
 ####### Acquire Zarr Driver #######
