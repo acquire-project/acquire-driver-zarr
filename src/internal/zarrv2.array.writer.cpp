@@ -44,7 +44,8 @@ sample_type_to_dtype(ZarrDataType t)
                                      std::to_string(static_cast<int>(t)));
     }
 }
-} end ::{anonymous} namespace
+} // end ::{anonymous} namespace
+
 zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
   const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,

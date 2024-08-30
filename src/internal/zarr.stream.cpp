@@ -162,7 +162,8 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
 
     return true;
 }
-} end ::{anonymous} namespace
+} // end ::{anonymous} namespace
+
 ZarrStream*
 ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
 {
