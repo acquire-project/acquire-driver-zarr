@@ -8,10 +8,9 @@
       "name": "nlohmann-json",
       "version>=": "3.11.3"
     },
-    { "name": "curlpp" },
-    { "name": "inih", "features": ["cpp"] },
-    { "name": "openssl" },
-    { "name": "pugixml" },
-    { "name": "zlib", "platform": "windows" }
+    {
+      "name": "minio-cpp",
+      "version>=": "0.3.0"
+    }
   ]
 }
