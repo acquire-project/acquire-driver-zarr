@@ -168,6 +168,8 @@ Zarr_get_error_message(ZarrError error)
             return "Invalid index";
         case ZarrError_NotYetImplemented:
             return "Not yet implemented";
+        case ZarrError_InternalError:
+            return "Internal error";
         default:
             return "Unknown error";
     }

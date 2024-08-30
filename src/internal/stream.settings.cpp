@@ -143,13 +143,13 @@ ZarrStreamSettings_set_s3_secret_access_key(
 
 ZarrError
 ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
-                                 ZarrDataType pixel_type)
+                                 ZarrDataType data_type)
 {
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
     EXPECT_VALID_ARGUMENT(
-      pixel_type < ZarrDataTypeCount, "Invalid pixel type: %d", pixel_type);
+      data_type < ZarrDataTypeCount, "Invalid pixel type: %d", data_type);
 
-    settings->dtype = pixel_type;
+    settings->dtype = data_type;
     return ZarrError_Success;
 }
 
@@ -292,37 +292,37 @@ ZarrStreamSettings_set_multiscale(ZarrStreamSettings* settings,
 
 /* Getters */
 const char*
-ZarrStreamSettings_get_store_path(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_store_path(const ZarrStreamSettings* settings)
 {
     SETTINGS_GET_STRING(settings, store_path);
 }
 
 const char*
-ZarrStreamSettings_get_s3_endpoint(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_s3_endpoint(const ZarrStreamSettings* settings)
 {
     SETTINGS_GET_STRING(settings, s3_endpoint);
 }
 
 const char*
-ZarrStreamSettings_get_s3_bucket_name(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_s3_bucket_name(const ZarrStreamSettings* settings)
 {
     SETTINGS_GET_STRING(settings, s3_bucket_name);
 }
 
 const char*
-ZarrStreamSettings_get_s3_access_key_id(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_s3_access_key_id(const ZarrStreamSettings* settings)
 {
     SETTINGS_GET_STRING(settings, s3_access_key_id);
 }
 
 const char*
-ZarrStreamSettings_get_s3_secret_access_key(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_s3_secret_access_key(const ZarrStreamSettings* settings)
 {
     SETTINGS_GET_STRING(settings, s3_secret_access_key);
 }
 
 ZarrDataType
-ZarrStreamSettings_get_data_type(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_data_type(const ZarrStreamSettings* settings)
 {
     if (!settings) {
         LOG_WARNING("Null pointer: settings. Returning DataType_uint8.");
@@ -332,7 +332,7 @@ ZarrStreamSettings_get_data_type(ZarrStreamSettings* settings)
 }
 
 ZarrCompressor
-ZarrStreamSettings_get_compressor(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_compressor(const ZarrStreamSettings* settings)
 {
     if (!settings) {
         LOG_WARNING("Null pointer: settings. Returning ZarrCompressor_None.");
@@ -342,7 +342,7 @@ ZarrStreamSettings_get_compressor(ZarrStreamSettings* settings)
 }
 
 ZarrCompressionCodec
-ZarrStreamSettings_get_compression_codec(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_compression_codec(const ZarrStreamSettings* settings)
 {
     if (!settings) {
         LOG_WARNING(
@@ -353,7 +353,7 @@ ZarrStreamSettings_get_compression_codec(ZarrStreamSettings* settings)
 }
 
 uint8_t
-ZarrStreamSettings_get_compression_level(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_compression_level(const ZarrStreamSettings* settings)
 {
     if (!settings) {
         LOG_WARNING("Null pointer: settings. Returning 0.");
@@ -363,7 +363,7 @@ ZarrStreamSettings_get_compression_level(ZarrStreamSettings* settings)
 }
 
 uint8_t
-ZarrStreamSettings_get_compression_shuffle(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_compression_shuffle(const ZarrStreamSettings* settings)
 {
     if (!settings) {
         LOG_WARNING("Null pointer: settings. Returning 0.");
@@ -373,7 +373,7 @@ ZarrStreamSettings_get_compression_shuffle(ZarrStreamSettings* settings)
 }
 
 size_t
-ZarrStreamSettings_get_dimension_count(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_dimension_count(const ZarrStreamSettings* settings)
 {
     if (!settings) {
         LOG_WARNING("Null pointer: settings. Returning 0.");
@@ -383,7 +383,7 @@ ZarrStreamSettings_get_dimension_count(ZarrStreamSettings* settings)
 }
 
 ZarrError
-ZarrStreamSettings_get_dimension(ZarrStreamSettings* settings,
+ZarrStreamSettings_get_dimension(const ZarrStreamSettings* settings,
                                  size_t index,
                                  char* name,
                                  size_t bytes_of_name,
@@ -406,7 +406,7 @@ ZarrStreamSettings_get_dimension(ZarrStreamSettings* settings,
         return ZarrError_InvalidIndex;
     }
 
-    struct ZarrDimension_s* dim = &settings->dimensions[index];
+    const struct ZarrDimension_s* dim = &settings->dimensions[index];
 
     if (bytes_of_name < dim->name.length() + 1) {
         LOG_ERROR("Insufficient buffer size: %zu. Need at least %zu",
@@ -425,7 +425,7 @@ ZarrStreamSettings_get_dimension(ZarrStreamSettings* settings,
 }
 
 uint8_t
-ZarrStreamSettings_get_multiscale(ZarrStreamSettings* settings)
+ZarrStreamSettings_get_multiscale(const ZarrStreamSettings* settings)
 {
     if (!settings) {
         LOG_WARNING("Null pointer: settings. Returning 0.");

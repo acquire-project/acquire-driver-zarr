@@ -219,7 +219,7 @@ ZarrStream_append(ZarrStream* stream,
 /* Getters */
 
 ZarrVersion
-ZarrStream_get_version(ZarrStream* stream)
+ZarrStream_get_version(const ZarrStream* stream)
 {
     if (!stream) {
         LOG_WARNING("Null pointer: stream. Returning ZarrVersion_2");
@@ -229,37 +229,37 @@ ZarrStream_get_version(ZarrStream* stream)
 }
 
 const char*
-ZarrStream_get_store_path(ZarrStream* stream)
+ZarrStream_get_store_path(const ZarrStream* stream)
 {
     STREAM_GET_STRING(stream, store_path);
 }
 
 const char*
-ZarrStream_get_s3_endpoint(ZarrStream* stream)
+ZarrStream_get_s3_endpoint(const ZarrStream* stream)
 {
     STREAM_GET_STRING(stream, s3_endpoint);
 }
 
 const char*
-ZarrStream_get_s3_bucket_name(ZarrStream* stream)
+ZarrStream_get_s3_bucket_name(const ZarrStream* stream)
 {
     STREAM_GET_STRING(stream, s3_bucket_name);
 }
 
 const char*
-ZarrStream_get_s3_access_key_id(ZarrStream* stream)
+ZarrStream_get_s3_access_key_id(const ZarrStream* stream)
 {
     STREAM_GET_STRING(stream, s3_access_key_id);
 }
 
 const char*
-ZarrStream_get_s3_secret_access_key(ZarrStream* stream)
+ZarrStream_get_s3_secret_access_key(const ZarrStream* stream)
 {
     STREAM_GET_STRING(stream, s3_secret_access_key);
 }
 
 ZarrCompressor
-ZarrStream_get_compressor(ZarrStream* stream)
+ZarrStream_get_compressor(const ZarrStream* stream)
 {
     if (!stream) {
         LOG_WARNING("Null pointer: stream. Returning ZarrCompressor_None");
@@ -269,7 +269,7 @@ ZarrStream_get_compressor(ZarrStream* stream)
 }
 
 ZarrCompressionCodec
-ZarrStream_get_compression_codec(ZarrStream* stream)
+ZarrStream_get_compression_codec(const ZarrStream* stream)
 {
     if (!stream) {
         LOG_WARNING(
@@ -280,7 +280,7 @@ ZarrStream_get_compression_codec(ZarrStream* stream)
 }
 
 uint8_t
-ZarrStream_get_compression_level(ZarrStream* stream)
+ZarrStream_get_compression_level(const ZarrStream* stream)
 {
     if (!stream) {
         LOG_WARNING("Null pointer: stream. Returning 0");
@@ -290,7 +290,7 @@ ZarrStream_get_compression_level(ZarrStream* stream)
 }
 
 uint8_t
-ZarrStream_get_compression_shuffle(ZarrStream* stream)
+ZarrStream_get_compression_shuffle(const ZarrStream* stream)
 {
     if (!stream) {
         LOG_WARNING("Null pointer: stream. Returning 0");
@@ -300,7 +300,7 @@ ZarrStream_get_compression_shuffle(ZarrStream* stream)
 }
 
 size_t
-ZarrStream_get_dimension_count(ZarrStream* stream)
+ZarrStream_get_dimension_count(const ZarrStream* stream)
 {
     if (!stream) {
         LOG_WARNING("Null pointer: stream. Returning 0");
@@ -310,7 +310,7 @@ ZarrStream_get_dimension_count(ZarrStream* stream)
 }
 
 ZarrError
-ZarrStream_get_dimension(ZarrStream* stream,
+ZarrStream_get_dimension(const ZarrStream* stream,
                          size_t index,
                          char* name,
                          size_t bytes_of_name,
@@ -331,7 +331,7 @@ ZarrStream_get_dimension(ZarrStream* stream,
 }
 
 uint8_t
-ZarrStream_get_multiscale(ZarrStream* stream)
+ZarrStream_get_multiscale(const ZarrStream* stream)
 {
     if (!stream) {
         LOG_WARNING("Null pointer: stream. Returning 0");

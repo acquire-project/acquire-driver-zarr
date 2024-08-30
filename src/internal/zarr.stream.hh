@@ -23,7 +23,7 @@ struct ZarrStream_s
     size_t append(const void* data, size_t nbytes);
 
     size_t version() const { return version_; }
-    ZarrStreamSettings_s& settings() { return settings_; }
+    const ZarrStreamSettings_s& settings() const { return settings_; }
 
   private:
     struct ZarrStreamSettings_s settings_;
