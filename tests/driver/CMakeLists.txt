@@ -1,6 +1,5 @@
 set(NOTEST "TRUE")
-add_subdirectory(../../acquire-common/acquire-driver-common ${CMAKE_CURRENT_BINARY_DIR}/acquire-driver-common)
-add_subdirectory(../../acquire-common/acquire-video-runtime ${CMAKE_CURRENT_BINARY_DIR}/acquire-video-runtime)
+add_subdirectory(${CMAKE_SOURCE_DIR}/acquire-common ${CMAKE_CURRENT_BINARY_DIR}/acquire-common)
 set(NOTEST "FALSE")
 
 #
