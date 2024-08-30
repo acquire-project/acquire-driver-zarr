@@ -54,32 +54,19 @@ zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
 {
 }
 
+ZarrVersion
+zarr::ZarrV2ArrayWriter::version_() const
+{
+    return ZarrVersion_2;
+}
+
 bool
 zarr::ZarrV2ArrayWriter::flush_impl_()
 {
     // create chunk files
     CHECK(data_sinks_.empty());
-    const std::string data_root = config_.store_path + "/" +
-                                  std::to_string(config_.level_of_detail) +
-                                  "/" + std::to_string(append_chunk_index_);
-
-    {
-        SinkCreator creator(thread_pool_, s3_connection_pool_);
-
-        if (config_.bucket_name) {
-            if (!creator.make_data_sinks(*config_.bucket_name,
-                                         data_root,
-                                         config_.dimensions,
-                                         chunks_along_dimension,
-                                         data_sinks_)) {
-                return false;
-            }
-        } else if (!creator.make_data_sinks(data_root,
-                                            config_.dimensions,
-                                            chunks_along_dimension,
-                                            data_sinks_)) {
-            return false;
-        }
+    if (!make_data_sinks_()) {
+        return false;
     }
 
     CHECK(data_sinks_.size() == chunk_buffers_.size());
@@ -121,24 +108,8 @@ zarr::ZarrV2ArrayWriter::flush_impl_()
 bool
 zarr::ZarrV2ArrayWriter::write_array_metadata_()
 {
-    if (!metadata_sink_) {
-        const std::string metadata_path =
-          config_.store_path + "/" + std::to_string(config_.level_of_detail) +
-          "/.zarray";
-
-        if (config_.bucket_name) {
-            SinkCreator creator(thread_pool_, s3_connection_pool_);
-            metadata_sink_ =
-              creator.make_sink(*config_.bucket_name, metadata_path);
-        } else {
-            metadata_sink_ = zarr::SinkCreator::make_sink(metadata_path);
-        }
-
-        if (!metadata_sink_) {
-            LOG_ERROR("Failed to create metadata sink: %s",
-                      metadata_path.c_str());
-            return false;
-        }
+    if (!make_metadata_sink_()) {
+        return false;
     }
 
     using json = nlohmann::json;

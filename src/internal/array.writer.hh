@@ -68,15 +68,24 @@ class ArrayWriter
 
     std::shared_ptr<S3ConnectionPool> s3_connection_pool_;
 
+    virtual ZarrVersion version_() const = 0;
+
+    [[nodiscard]] bool make_data_sinks_();
+    [[nodiscard]] bool make_metadata_sink_();
     void make_buffers_() noexcept;
-    size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
+
     bool should_flush_() const;
+    virtual bool should_rollover_() const = 0;
+
+    size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
     void compress_buffers_();
+
     void flush_();
     [[nodiscard]] virtual bool flush_impl_() = 0;
-    [[nodiscard]] virtual bool write_array_metadata_() = 0;
-    virtual bool should_rollover_() const = 0;
-    void close_sinks_();
     void rollover_();
+
+    [[nodiscard]] virtual bool write_array_metadata_() = 0;
+
+    void close_sinks_();
 };
 } // namespace acquire::sink::zarr

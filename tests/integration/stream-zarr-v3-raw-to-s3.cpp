@@ -2,18 +2,14 @@
 #include "test.logger.hh"
 
 #include <nlohmann/json.hpp>
+#include <miniocpp/client.h>
 
-#include <fstream>
-#include <filesystem>
 #include <vector>
 
 #define SIZED(str) str, sizeof(str)
 
-namespace fs = std::filesystem;
-
 namespace {
-const std::string test_path =
-  (fs::temp_directory_path() / (TEST ".zarr")).string();
+std::string s3_endpoint, s3_bucket_name, s3_access_key_id, s3_secret_access_key;
 
 const unsigned int array_width = 64, array_height = 48, array_planes = 6,
                    array_channels = 8, array_timepoints = 10;
@@ -52,15 +48,142 @@ const size_t nbytes_px = sizeof(uint16_t);
 const uint32_t frames_to_acquire =
   array_planes * array_channels * array_timepoints;
 const size_t bytes_of_frame = array_width * array_height * nbytes_px;
-} // namespace/s
+
+bool
+get_credentials()
+{
+    char* env = nullptr;
+    if (!(env = std::getenv("ZARR_S3_ENDPOINT"))) {
+        LOG_ERROR("ZARR_S3_ENDPOINT not set.");
+        return false;
+    }
+    s3_endpoint = env;
+
+    if (!(env = std::getenv("ZARR_S3_BUCKET_NAME"))) {
+        LOG_ERROR("ZARR_S3_BUCKET_NAME not set.");
+        return false;
+    }
+    s3_bucket_name = env;
+
+    if (!(env = std::getenv("ZARR_S3_ACCESS_KEY_ID"))) {
+        LOG_ERROR("ZARR_S3_ACCESS_KEY_ID not set.");
+        return false;
+    }
+    s3_access_key_id = env;
+
+    if (!(env = std::getenv("ZARR_S3_SECRET_ACCESS_KEY"))) {
+        LOG_ERROR("ZARR_S3_SECRET_ACCESS_KEY not set.");
+        return false;
+    }
+    s3_secret_access_key = env;
+
+    return true;
+}
+
+bool
+object_exists(minio::s3::Client& client, const std::string& object_name)
+{
+    minio::s3::StatObjectArgs args;
+    args.bucket = s3_bucket_name;
+    args.object = object_name;
+
+    minio::s3::StatObjectResponse response = client.StatObject(args);
+
+    return (bool)response;
+}
+
+size_t
+get_object_size(minio::s3::Client& client, const std::string& object_name)
+{
+    minio::s3::StatObjectArgs args;
+    args.bucket = s3_bucket_name;
+    args.object = object_name;
+
+    minio::s3::StatObjectResponse response = client.StatObject(args);
+
+    if (!response) {
+        LOG_ERROR("Failed to get object size: %s", object_name.c_str());
+        return 0;
+    }
+
+    return response.size;
+}
+
+std::string
+get_object_contents(minio::s3::Client& client, const std::string& object_name)
+{
+    std::stringstream ss;
+
+    minio::s3::GetObjectArgs args;
+    args.bucket = s3_bucket_name;
+    args.object = object_name;
+    args.datafunc = [&ss](minio::http::DataFunctionArgs args) -> bool {
+        ss << args.datachunk;
+        return true;
+    };
+
+    // Call get object.
+    minio::s3::GetObjectResponse resp = client.GetObject(args);
+
+    return ss.str();
+}
+
+bool
+remove_items(minio::s3::Client& client,
+             const std::vector<std::string>& item_keys)
+{
+    std::list<minio::s3::DeleteObject> objects;
+    for (const auto& key : item_keys) {
+        minio::s3::DeleteObject object;
+        object.name = key;
+        objects.push_back(object);
+    }
+
+    minio::s3::RemoveObjectsArgs args;
+    args.bucket = s3_bucket_name;
+
+    auto it = objects.begin();
+
+    args.func = [&objects = objects,
+                 &i = it](minio::s3::DeleteObject& obj) -> bool {
+        if (i == objects.end())
+            return false;
+        obj = *i;
+        i++;
+        return true;
+    };
+
+    minio::s3::RemoveObjectsResult result = client.RemoveObjects(args);
+    for (; result; result++) {
+        minio::s3::DeleteError err = *result;
+        if (!err) {
+            LOG_ERROR("Failed to delete object %s: %s",
+                      err.object_name.c_str(),
+                      err.message.c_str());
+            return false;
+        }
+    }
+
+    return true;
+}
+} // namespace
 
 ZarrStream*
 setup()
 {
     auto* settings = ZarrStreamSettings_create();
 
-    ZarrStreamSettings_set_store_path(
-      settings, test_path.c_str(), test_path.size() + 1);
+    ZarrStreamSettings_set_store_path(settings, SIZED(TEST));
+
+    ZarrStreamSettings_set_s3_endpoint(
+      settings, s3_endpoint.c_str(), s3_endpoint.size() + 1);
+    ZarrStreamSettings_set_s3_bucket_name(
+      settings, s3_bucket_name.c_str(), s3_bucket_name.size() + 1);
+    ZarrStreamSettings_set_s3_access_key_id(
+      settings, s3_access_key_id.c_str(), s3_access_key_id.size() + 1);
+    ZarrStreamSettings_set_s3_secret_access_key(
+      settings, s3_secret_access_key.c_str(), s3_secret_access_key.size() + 1);
+
     ZarrStreamSettings_set_data_type(settings, ZarrDataType_uint16);
 
     ZarrStreamSettings_reserve_dimensions(settings, 5);
@@ -239,8 +362,53 @@ verify_array_metadata(const nlohmann::json& meta)
 }
 
 void
-verify_file_data()
+verify_and_cleanup()
 {
+    minio::s3::BaseUrl url(s3_endpoint);
+    url.https = s3_endpoint.starts_with("https://");
+
+    minio::creds::StaticProvider provider(s3_access_key_id,
+                                          s3_secret_access_key);
+    minio::s3::Client client(url, &provider);
+
+    std::string base_metadata_path = TEST "/zarr.json";
+    std::string group_metadata_path = TEST "/meta/root.group.json";
+    std::string array_metadata_path = TEST "/meta/root/0.array.json";
+
+    {
+        EXPECT(object_exists(client, base_metadata_path),
+               "Object does not exist: %s",
+               base_metadata_path.c_str());
+        std::string contents = get_object_contents(client, base_metadata_path);
+        nlohmann::json base_metadata = nlohmann::json::parse(contents);
+
+        verify_base_metadata(base_metadata);
+    }
+
+    {
+        EXPECT(object_exists(client, group_metadata_path),
+               "Object does not exist: %s",
+               group_metadata_path.c_str());
+        std::string contents = get_object_contents(client, group_metadata_path);
+        nlohmann::json group_metadata = nlohmann::json::parse(contents);
+
+        verify_group_metadata(group_metadata);
+    }
+
+    {
+        EXPECT(object_exists(client, array_metadata_path),
+               "Object does not exist: %s",
+               array_metadata_path.c_str());
+        std::string contents = get_object_contents(client, array_metadata_path);
+        nlohmann::json array_metadata = nlohmann::json::parse(contents);
+
+        verify_array_metadata(array_metadata);
+    }
+
+    CHECK(remove_items(
+      client,
+      { base_metadata_path, group_metadata_path, array_metadata_path }));
+
     const auto chunk_size = chunk_width * chunk_height * chunk_planes *
                             chunk_channels * chunk_timepoints * nbytes_px;
     const auto index_size = chunks_per_shard *
@@ -251,85 +419,44 @@ verify_file_data()
                                       chunk_size +
                                     index_size;
 
-    fs::path data_root = fs::path(test_path) / "data" / "root" / "0";
+    // verify and clean up data files
+    std::vector<std::string> data_files;
+    std::string data_root = TEST "/data/root/0";
 
-    CHECK(fs::is_directory(data_root));
     for (auto t = 0; t < shards_in_t; ++t) {
-        const auto t_dir = data_root / ("c" + std::to_string(t));
-        CHECK(fs::is_directory(t_dir));
+        const auto t_dir = data_root + "/" + ("c" + std::to_string(t));
 
         for (auto c = 0; c < shards_in_c; ++c) {
-            const auto c_dir = t_dir / std::to_string(c);
-            CHECK(fs::is_directory(c_dir));
+            const auto c_dir = t_dir + "/" + std::to_string(c);
 
             for (auto z = 0; z < shards_in_z; ++z) {
-                const auto z_dir = c_dir / std::to_string(z);
-                CHECK(fs::is_directory(z_dir));
+                const auto z_dir = c_dir + "/" + std::to_string(z);
 
                 for (auto y = 0; y < shards_in_y; ++y) {
-                    const auto y_dir = z_dir / std::to_string(y);
-                    CHECK(fs::is_directory(y_dir));
+                    const auto y_dir = z_dir + "/" + std::to_string(y);
 
                     for (auto x = 0; x < shards_in_x; ++x) {
-                        const auto x_file = y_dir / std::to_string(x);
-                        CHECK(fs::is_regular_file(x_file));
-                        const auto file_size = fs::file_size(x_file);
+                        const auto x_file = y_dir + "/" + std::to_string(x);
+                        EXPECT(object_exists(client, x_file),
+                               "Object does not exist: %s",
+                               x_file.c_str());
+                        const auto file_size = get_object_size(client, x_file);
                         EXPECT_EQ(size_t, "%zu", file_size, expected_file_size);
                     }
-
-                    CHECK(!fs::is_regular_file(y_dir /
-                                               std::to_string(shards_in_x)));
                 }
-
-                CHECK(!fs::is_directory(z_dir / std::to_string(shards_in_y)));
             }
-
-            CHECK(!fs::is_directory(c_dir / std::to_string(shards_in_z)));
         }
-
-        CHECK(!fs::is_directory(t_dir / std::to_string(shards_in_c)));
     }
-
-    CHECK(!fs::is_directory(data_root / ("c" + std::to_string(shards_in_t))));
-}
-
-void
-verify()
-{
-    CHECK(std::filesystem::is_directory(test_path));
-
-    {
-        fs::path base_metadata_path = fs::path(test_path) / "zarr.json";
-        std::ifstream f(base_metadata_path);
-        nlohmann::json base_metadata = nlohmann::json::parse(f);
-
-        verify_base_metadata(base_metadata);
-    }
-
-    {
-        fs::path group_metadata_path =
-          fs::path(test_path) / "meta" / "root.group.json";
-        std::ifstream f = std::ifstream(group_metadata_path);
-        nlohmann::json group_metadata = nlohmann::json::parse(f);
-
-        verify_group_metadata(group_metadata);
-    }
-
-    {
-        fs::path array_metadata_path =
-          fs::path(test_path) / "meta" / "root" / "0.array.json";
-        std::ifstream f = std::ifstream(array_metadata_path);
-        nlohmann::json array_metadata = nlohmann::json::parse(f);
-
-        verify_array_metadata(array_metadata);
-    }
-
-    verify_file_data();
 }
 
 int
 main()
 {
+    if (!get_credentials()) {
+        LOG_WARNING("Failed to get credentials. Skipping test.");
+        return 0;
+    }
+
     Zarr_set_log_level(LogLevel_Debug);
 
     auto* stream = setup();
@@ -351,10 +478,7 @@ main()
 
         ZarrStream_destroy(stream);
 
-        verify();
-
-        // Clean up
-        fs::remove_all(test_path);
+        verify_and_cleanup();
 
         retval = 0;
     } catch (const std::exception& e) {

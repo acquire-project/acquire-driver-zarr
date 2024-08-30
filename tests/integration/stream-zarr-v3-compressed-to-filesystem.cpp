@@ -110,7 +110,7 @@ setup()
 }
 
 void
-validate_base_metadata(const nlohmann::json& meta)
+verify_base_metadata(const nlohmann::json& meta)
 {
     const auto extensions = meta["extensions"];
     EXPECT_EQ(size_t, "%zu", extensions.size(), 0);
@@ -134,7 +134,7 @@ validate_base_metadata(const nlohmann::json& meta)
 }
 
 void
-validate_group_metadata(const nlohmann::json& meta)
+verify_group_metadata(const nlohmann::json& meta)
 {
     const auto multiscales = meta["attributes"]["multiscales"][0];
 
@@ -206,7 +206,7 @@ validate_group_metadata(const nlohmann::json& meta)
 }
 
 void
-validate_array_metadata(const nlohmann::json& meta)
+verify_array_metadata(const nlohmann::json& meta)
 {
     const auto& shape = meta["shape"];
     EXPECT_EQ(size_t, "%zu", shape.size(), 5);
@@ -258,7 +258,7 @@ validate_array_metadata(const nlohmann::json& meta)
 }
 
 void
-validate_file_data()
+verify_file_data()
 {
     const auto chunk_size = chunk_width * chunk_height * chunk_planes *
                             chunk_channels * chunk_timepoints * nbytes_px;
@@ -313,7 +313,7 @@ validate_file_data()
 }
 
 void
-validate()
+verify()
 {
     CHECK(std::filesystem::is_directory(test_path));
 
@@ -322,7 +322,7 @@ validate()
         std::ifstream f(base_metadata_path);
         nlohmann::json base_metadata = nlohmann::json::parse(f);
 
-        validate_base_metadata(base_metadata);
+        verify_base_metadata(base_metadata);
     }
 
     {
@@ -331,7 +331,7 @@ validate()
         std::ifstream f = std::ifstream(group_metadata_path);
         nlohmann::json group_metadata = nlohmann::json::parse(f);
 
-        validate_group_metadata(group_metadata);
+        verify_group_metadata(group_metadata);
     }
 
     {
@@ -340,10 +340,10 @@ validate()
         std::ifstream f = std::ifstream(array_metadata_path);
         nlohmann::json array_metadata = nlohmann::json::parse(f);
 
-        validate_array_metadata(array_metadata);
+        verify_array_metadata(array_metadata);
     }
 
-    validate_file_data();
+    verify_file_data();
 }
 
 int
@@ -370,7 +370,7 @@ main()
 
         ZarrStream_destroy(stream);
 
-        validate();
+        verify();
 
         // Clean up
         fs::remove_all(test_path);

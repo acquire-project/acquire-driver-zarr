@@ -150,7 +150,7 @@ remove_items(minio::s3::Client& client,
 
     return true;
 }
-} // namespace
+} // namespace/s
 
 ZarrStream*
 setup()
@@ -169,6 +169,12 @@ setup()
       settings, s3_secret_access_key.c_str(), s3_secret_access_key.size() + 1);
 
     ZarrStreamSettings_set_data_type(settings, ZarrDataType_int32);
+
+    ZarrStreamSettings_set_compressor(settings, ZarrCompressor_Blosc1);
+    ZarrStreamSettings_set_compression_codec(settings,
+                                             ZarrCompressionCodec_BloscZstd);
+    ZarrStreamSettings_set_compression_level(settings, 1);
+    ZarrStreamSettings_set_compression_shuffle(settings, 1);
 
     ZarrStreamSettings_reserve_dimensions(settings, 5);
     ZarrStreamSettings_set_dimension(settings,
@@ -314,14 +320,28 @@ verify_array_metadata(const nlohmann::json& meta)
            dtype.c_str());
 
     const auto& compressor = meta["compressor"];
-    EXPECT(compressor.is_null(),
-           "Expected compressor to be null, but got '%s'",
-           compressor.dump().c_str());
+
+    const auto compressor_id = compressor["id"].get<std::string>();
+    EXPECT(compressor_id == "blosc",
+           "Expected compressor id to be 'blosc', but got '%s'",
+           compressor_id.c_str());
+
+    const auto cname = compressor["cname"].get<std::string>();
+    EXPECT(cname == "zstd",
+           "Expected compressor cname to be 'zstd', but got '%s'",
+           cname.c_str());
+
+    const auto clevel = compressor["clevel"].get<int>();
+    EXPECT_EQ(int, "%d", clevel, 1);
+
+    const auto shuffle = compressor["shuffle"].get<int>();
+    EXPECT_EQ(int, "%d", shuffle, 1);
 }
 
 void
 verify_and_cleanup()
 {
+
     minio::s3::BaseUrl url(s3_endpoint);
     url.https = s3_endpoint.starts_with("https://");
 
@@ -393,7 +413,7 @@ verify_and_cleanup()
                                "Object does not exist: %s",
                                x_file.c_str());
                         const auto file_size = get_object_size(client, x_file);
-                        EXPECT_EQ(size_t, "%zu", file_size, expected_file_size);
+                        EXPECT_LT(size_t, "%zu", file_size, expected_file_size);
                         data_files.push_back(x_file);
                     }
 

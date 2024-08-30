@@ -65,23 +65,18 @@ zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
     }
 }
 
+ZarrVersion
+zarr::ZarrV3ArrayWriter::version_() const
+{
+    return ZarrVersion_3;
+}
+
 bool
 zarr::ZarrV3ArrayWriter::flush_impl_()
 {
     // create shard files if they don't exist
-    const std::string data_root = config_.store_path + "/data/root/" +
-                                  std::to_string(config_.level_of_detail) +
-                                  "/c" + std::to_string(append_chunk_index_);
-
-    {
-        SinkCreator creator(thread_pool_, s3_connection_pool_);
-        if (data_sinks_.empty() &&
-            !creator.make_data_sinks(data_root,
-                                     config_.dimensions,
-                                     shards_along_dimension,
-                                     data_sinks_)) {
-            return false;
-        }
+    if (data_sinks_.empty() && !make_data_sinks_()) {
+        return false;
     }
 
     const auto n_shards = number_of_shards(config_.dimensions);
@@ -169,27 +164,10 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
 bool
 zarr::ZarrV3ArrayWriter::write_array_metadata_()
 {
-    if (!metadata_sink_) {
-        const std::string metadata_path =
-          config_.store_path + "/meta/root/" +
-          std::to_string(config_.level_of_detail) + ".array.json";
-
-        if (config_.bucket_name) {
-            SinkCreator creator(thread_pool_, s3_connection_pool_);
-            metadata_sink_ =
-              creator.make_sink(*config_.bucket_name, metadata_path);
-        } else {
-            metadata_sink_ = zarr::SinkCreator::make_sink(metadata_path);
-        }
-
-        if (!metadata_sink_) {
-            LOG_ERROR("Failed to create metadata sink: %s",
-                      metadata_path.c_str());
-            return false;
-        }
+    if (!make_metadata_sink_()) {
+        return false;
     }
 
-    namespace fs = std::filesystem;
     using json = nlohmann::json;
 
     std::vector<size_t> array_shape, chunk_shape, shard_shape;

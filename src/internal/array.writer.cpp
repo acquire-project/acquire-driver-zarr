@@ -1,5 +1,6 @@
 #include "array.writer.hh"
 #include "zarr.common.hh"
+#include "sink.creator.hh"
 #include "logger.hh"
 
 #include <cmath>
@@ -114,6 +115,93 @@ zarr::ArrayWriter::finalize()
     flush_();
     close_sinks_();
     is_finalizing_ = false;
+}
+
+bool
+zarr::ArrayWriter::make_data_sinks_()
+{
+    std::string data_root;
+    std::function<size_t(const Dimension&)> parts_along_dimension;
+    switch (version_()) {
+        case ZarrVersion_2:
+            parts_along_dimension = chunks_along_dimension;
+            data_root = config_.store_path + "/" +
+                        std::to_string(config_.level_of_detail) + "/" +
+                        std::to_string(append_chunk_index_);
+            break;
+        case ZarrVersion_3:
+            parts_along_dimension = shards_along_dimension;
+            data_root = config_.store_path + "/data/root/" +
+                        std::to_string(config_.level_of_detail) + "/c" +
+                        std::to_string(append_chunk_index_);
+            break;
+        default:
+            LOG_ERROR("Unsupported Zarr version");
+            return false;
+    }
+
+    SinkCreator creator(thread_pool_, s3_connection_pool_);
+
+    if (config_.bucket_name && !creator.make_data_sinks(*config_.bucket_name,
+                                                        data_root,
+                                                        config_.dimensions,
+                                                        parts_along_dimension,
+                                                        data_sinks_)) {
+        LOG_ERROR("Failed to create data sinks in %s for bucket %s",
+                  data_root.c_str(),
+                  config_.bucket_name->c_str());
+        return false;
+    } else if (!config_.bucket_name &&
+               !creator.make_data_sinks(data_root,
+                                        config_.dimensions,
+                                        parts_along_dimension,
+                                        data_sinks_)) {
+        LOG_ERROR("Failed to create data sinks in %s", data_root.c_str());
+        return false;
+    }
+
+    return true;
+}
+
+bool
+zarr::ArrayWriter::make_metadata_sink_()
+{
+    if (metadata_sink_) {
+        return true;
+    }
+
+    std::string metadata_path;
+    switch (version_()) {
+        case ZarrVersion_2:
+            metadata_path = config_.store_path + "/" +
+                            std::to_string(config_.level_of_detail) +
+                            "/.zarray";
+            break;
+        case ZarrVersion_3:
+            metadata_path = config_.store_path + "/meta/root/" +
+                            std::to_string(config_.level_of_detail) +
+                            ".array.json";
+            break;
+        default:
+            LOG_ERROR("Unsupported Zarr version");
+            return false;
+    }
+
+    if (config_.bucket_name) {
+        SinkCreator creator(thread_pool_, s3_connection_pool_);
+        metadata_sink_ =
+          creator.make_sink(*config_.bucket_name, metadata_path);
+    } else {
+        metadata_sink_ = zarr::SinkCreator::make_sink(metadata_path);
+    }
+
+    if (!metadata_sink_) {
+        LOG_ERROR("Failed to create metadata sink: %s",
+                  metadata_path.c_str());
+        return false;
+    }
+
+    return true;
 }
 
 void
