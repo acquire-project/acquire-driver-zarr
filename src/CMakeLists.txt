@@ -1,4 +1,7 @@
+####### Acquire Zarr Streaming Library #######
+
 set(tgt acquire-zarr)
+
 add_library(${tgt} STATIC
         include/zarr.h
         internal/logger.hh
@@ -37,6 +40,10 @@ target_include_directories(${tgt}
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/internal>
 )
 
+target_include_directories(${tgt-driver} PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+)
+
 target_link_libraries(${tgt} PRIVATE
         blosc_static
         miniocpp::miniocpp
@@ -57,14 +64,18 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
         FILES_MATCHING PATTERN "*.h"
 )
 
+####### Acquire Zarr Driver #######
+
 #if (NOT TARGET acquire-core-logger)
 #    add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 #endif ()
-
+#
 #set(tgt-driver acquire-driver-zarr)
 #add_library(${tgt-driver} MODULE
 #        common/dimension.hh
 #        common/dimension.cpp
+#        common/thread.pool.hh
+#        common/thread.pool.cpp
 #        common/s3.connection.hh
 #        common/s3.connection.cpp
 #        common/utilities.hh
@@ -84,17 +95,13 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 #        writers/zarrv3.array.writer.cpp
 #        writers/blosc.compressor.hh
 #        writers/blosc.compressor.cpp
-#        driver/zarr.hh
-#        driver/zarr.cpp
-#        driver/zarr.v2.hh
-#        driver/zarr.v2.cpp
-#        driver/zarr.v3.hh
-#        driver/zarr.v3.cpp
-#        driver/zarr.driver.c
-#)
-#
-#target_include_directories(${tgt-driver} PRIVATE
-#        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
+#        zarr.hh
+#        zarr.cpp
+#        zarr.v2.hh
+#        zarr.v2.cpp
+#        zarr.v3.hh
+#        zarr.v3.cpp
+#        zarr.driver.c
 #)
 #
 #target_enable_simd(${tgt-driver})
@@ -106,6 +113,9 @@ install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
 #        blosc_static
 #        nlohmann_json::nlohmann_json
 #        miniocpp::miniocpp
+#)
+#set_target_properties(${tgt-driver} PROPERTIES
+#        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 #)
 #
 #install(TARGETS ${tgt-driver} LIBRARY DESTINATION lib)
