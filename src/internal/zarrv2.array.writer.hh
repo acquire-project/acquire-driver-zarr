@@ -11,7 +11,7 @@ class ZarrV2ArrayWriter final : public ArrayWriter
       std::shared_ptr<ThreadPool> thread_pool,
       std::shared_ptr<S3ConnectionPool> s3_connection_pool);
 
-    ~ZarrV2ArrayWriter() override = default;
+    ~ZarrV2ArrayWriter() override;
 
   private:
     ZarrVersion version_() const override;
@@ -19,4 +19,4 @@ class ZarrV2ArrayWriter final : public ArrayWriter
     bool write_array_metadata_() override;
     bool should_rollover_() const override;
 };
-} // namespace acquire::sink::zarr
+} // namespace zarr

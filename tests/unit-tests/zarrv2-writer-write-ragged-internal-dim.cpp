@@ -98,15 +98,16 @@ main()
             .compression_params = std::nullopt,
         };
 
-        zarr::ZarrV2ArrayWriter writer(config, thread_pool, nullptr);
+        {
+            zarr::ZarrV2ArrayWriter writer(config, thread_pool, nullptr);
 
-        const size_t frame_size = array_width * array_height * nbytes_px;
-        std::vector<uint8_t> data(frame_size, 0);
+            const size_t frame_size = array_width * array_height * nbytes_px;
+            std::vector<uint8_t> data(frame_size, 0);
 
-        for (auto i = 0; i < n_frames; ++i) { // 2 time points
-            CHECK(writer.write_frame(data.data(), frame_size));
+            for (auto i = 0; i < n_frames; ++i) { // 2 time points
+                CHECK(writer.write_frame(data.data(), frame_size));
+            }
         }
-        writer.finalize();
 
         check_json();
 

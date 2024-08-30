@@ -11,7 +11,7 @@ struct ZarrV3ArrayWriter final : public ArrayWriter
       std::shared_ptr<ThreadPool> thread_pool,
       std::shared_ptr<S3ConnectionPool> s3_connection_pool);
 
-    ~ZarrV3ArrayWriter() override = default;
+    ~ZarrV3ArrayWriter() override;
 
   private:
     std::vector<size_t> shard_file_offsets_;
@@ -22,4 +22,4 @@ struct ZarrV3ArrayWriter final : public ArrayWriter
     bool write_array_metadata_() override;
     bool should_rollover_() const override;
 };
-} // namespace acquire::sink::zarr
+} // namespace zarr

@@ -57,4 +57,4 @@ class S3Sink final : public Sink
     /// otherwise false.
     [[nodiscard]] bool finalize_multipart_upload_();
 };
-} // namespace acquire::sink::zarr
+} // namespace zarr

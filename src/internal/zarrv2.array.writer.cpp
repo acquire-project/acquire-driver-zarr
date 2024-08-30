@@ -44,14 +44,25 @@ sample_type_to_dtype(ZarrDataType t)
                                      std::to_string(static_cast<int>(t)));
     }
 }
-} // namespace
-
+} end ::{anonymous} namespace
 zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
   const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
   : ArrayWriter(config, thread_pool, s3_connection_pool)
 {
+}
+
+zarr::ZarrV2ArrayWriter::~ZarrV2ArrayWriter()
+{
+    is_finalizing_ = true;
+    try {
+        flush_();
+    } catch (const std::exception& exc) {
+        LOG_ERROR("Failed to finalize array writer: %s", exc.what());
+    } catch (...) {
+        LOG_ERROR("Failed to finalize array writer: (unknown)");
+    }
 }
 
 ZarrVersion

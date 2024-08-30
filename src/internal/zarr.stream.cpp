@@ -162,8 +162,7 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
 
     return true;
 }
-} // namespace
-
+} end ::{anonymous} namespace
 ZarrStream*
 ZarrStream_create(struct ZarrStreamSettings_s* settings, ZarrVersion version)
 {
@@ -401,9 +400,7 @@ ZarrStream_s::~ZarrStream_s()
         write_group_metadata_();
         metadata_sinks_.clear();
 
-        for (auto& writer : writers_) {
-            writer->finalize();
-        }
+        writers_.clear(); // flush before shutting down thread pool
         thread_pool_->await_stop();
     } catch (const std::exception& e) {
         LOG_ERROR("Error finalizing Zarr stream: %s", e.what());

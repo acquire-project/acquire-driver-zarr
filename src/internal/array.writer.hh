@@ -41,10 +41,15 @@ class ArrayWriter
                 std::shared_ptr<ThreadPool> thread_pool,
                 std::shared_ptr<S3ConnectionPool> s3_connection_pool);
 
-    virtual ~ArrayWriter() noexcept = default;
+    virtual ~ArrayWriter() = default;
 
+    /**
+     * @brief Write a frame to the array.
+     * @param data The frame data.
+     * @param nbytes The number of bytes in the frame.
+     * @return The number of bytes written.
+     */
     [[nodiscard]] size_t write_frame(const uint8_t* data, size_t nbytes);
-    void finalize();
 
   protected:
     ArrayWriterConfig config_;
@@ -88,4 +93,4 @@ class ArrayWriter
 
     void close_sinks_();
 };
-} // namespace acquire::sink::zarr
+} // namespace zarr

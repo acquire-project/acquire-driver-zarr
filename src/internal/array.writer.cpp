@@ -87,7 +87,13 @@ zarr::ArrayWriter::ArrayWriter(
 size_t
 zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
 {
-    if (bytes_of_frame(config_.dimensions, config_.dtype) != nbytes) {
+    const size_t nbytes_frame =
+      bytes_of_frame(config_.dimensions, config_.dtype);
+
+    if (nbytes_frame != nbytes) {
+        LOG_WARNING("Frame size mismatch: expected %zu, got %zu. Skipping",
+                    nbytes_frame,
+                    nbytes);
         return 0;
     }
 
@@ -98,6 +104,9 @@ zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
     // split the incoming frame into tiles and write_frame them to the chunk
     // buffers
     const auto bytes_written = write_frame_to_chunks_(data, nbytes);
+    EXPECT(bytes_written == nbytes, "Failed to write_frame frame to chunks");
+
+    LOG_DEBUG("Wrote %zu bytes of frame %zu", bytes_written, frames_written_);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
 
@@ -106,15 +115,6 @@ zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
     }
 
     return bytes_written;
-}
-
-void
-zarr::ArrayWriter::finalize()
-{
-    is_finalizing_ = true;
-    flush_();
-    close_sinks_();
-    is_finalizing_ = false;
 }
 
 bool
@@ -207,6 +207,8 @@ zarr::ArrayWriter::make_metadata_sink_()
 void
 zarr::ArrayWriter::make_buffers_() noexcept
 {
+    LOG_DEBUG("Creating chunk buffers");
+
     const size_t n_chunks = number_of_chunks_in_memory(config_.dimensions);
     chunk_buffers_.resize(n_chunks); // no-op if already the correct size
 

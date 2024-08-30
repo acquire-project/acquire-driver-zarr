@@ -180,4 +180,4 @@ class SinkCreator final
       std::vector<std::string>& object_keys,
       std::unordered_map<std::string, std::unique_ptr<Sink>>& sinks);
 };
-} // namespace acquire::sink::zarr
+} // namespace zarr

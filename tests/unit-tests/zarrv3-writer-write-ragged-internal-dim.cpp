@@ -128,15 +128,17 @@ main()
             .compression_params = std::nullopt,
         };
 
-        zarr::ZarrV3ArrayWriter writer(config, thread_pool, nullptr);
+        {
+            zarr::ZarrV3ArrayWriter writer(config, thread_pool, nullptr);
 
-        const size_t frame_size = array_width * array_height * nbytes_px;
-        std::vector<uint8_t> data(frame_size, 0);
+            const size_t frame_size = array_width * array_height * nbytes_px;
+            std::vector<uint8_t> data(frame_size, 0);
 
-        for (auto i = 0; i < n_frames; ++i) {
-            CHECK(writer.write_frame(data.data(), frame_size) == frame_size);
+            for (auto i = 0; i < n_frames; ++i) {
+                CHECK(writer.write_frame(data.data(), frame_size) ==
+                      frame_size);
+            }
         }
-        writer.finalize();
 
         const auto chunk_size = chunk_width * chunk_height * chunk_planes *
                                 chunk_timepoints * nbytes_px;

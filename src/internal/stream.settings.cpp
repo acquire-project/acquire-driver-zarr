@@ -79,8 +79,7 @@ trim(const char* s, size_t bytes_of_s)
 
     return trimmed;
 }
-} // namespace
-
+} end ::{anonymous} namespace
 /* Create and destroy */
 ZarrStreamSettings*
 ZarrStreamSettings_create()
