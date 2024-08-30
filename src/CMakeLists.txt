@@ -1,9 +1,19 @@
+####### Acquire Zarr Streaming Library #######
+
+set(tgt acquire-zarr)
+
+add_library(${tgt} STATIC
+        include/zarr.h
+)
+
+####### Acquire Zarr Driver #######
+
 if (NOT TARGET acquire-core-logger)
     add_subdirectory(../acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
-set(tgt acquire-driver-zarr)
-add_library(${tgt} MODULE
+set(tgt-driver acquire-driver-zarr)
+add_library(${tgt-driver} MODULE
         common/dimension.hh
         common/dimension.cpp
         common/thread.pool.hh
@@ -36,12 +46,12 @@ add_library(${tgt} MODULE
         zarr.driver.c
 )
 
-target_include_directories(${tgt} PRIVATE
+target_include_directories(${tgt-driver} PRIVATE
   $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/src>
 )
 
-target_enable_simd(${tgt})
-target_link_libraries(${tgt} PRIVATE
+target_enable_simd(${tgt-driver})
+target_link_libraries(${tgt-driver} PRIVATE
         acquire-core-logger
         acquire-core-platform
         acquire-device-kit
@@ -50,8 +60,8 @@ target_link_libraries(${tgt} PRIVATE
         nlohmann_json::nlohmann_json
         miniocpp::miniocpp
 )
-set_target_properties(${tgt} PROPERTIES
+set_target_properties(${tgt-driver} PROPERTIES
         MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
 )
 
-install(TARGETS ${tgt} LIBRARY DESTINATION lib)
+install(TARGETS ${tgt-driver} LIBRARY DESTINATION lib)
