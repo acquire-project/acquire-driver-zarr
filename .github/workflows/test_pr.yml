@@ -63,4 +63,6 @@ jobs:
 
       - name: Test
         working-directory: ${{github.workspace}}/build
-        run: ctest -C ${{env.BUILD_TYPE}} -L acquire-driver-zarr --output-on-failure
+        run: |
+          ctest -C ${{env.BUILD_TYPE}} -L acquire-driver-zarr --output-on-failure
+          ctest -C ${{env.BUILD_TYPE}} -L acquire-zarr --output-on-failure

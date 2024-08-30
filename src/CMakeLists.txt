@@ -8,6 +8,8 @@ add_library(${tgt} STATIC
         internal/logger.cpp
         internal/stream.settings.hh
         internal/stream.settings.cpp
+        internal/zarr.stream.hh
+        internal/zarr.stream.cpp
 )
 
 target_include_directories(${tgt}
