@@ -3,6 +3,7 @@
 #include "logger.hh"
 
 #include <blosc.h>
+#include <nlohmann/json.hpp>
 
 #include <cstring> // memcpy
 
@@ -160,8 +161,39 @@ ZarrStreamSettings_set_external_metadata(ZarrStreamSettings* settings,
                                          const char* external_metadata,
                                          size_t bytes_of_external_metadata)
 {
-    SETTINGS_SET_STRING(
-      settings, external_metadata, bytes_of_external_metadata);
+    if (!settings) {
+        LOG_ERROR("Null pointer: settings");
+        return ZarrError_InvalidArgument;
+    }
+
+    if (!external_metadata) {
+        LOG_ERROR("Null pointer: external_metadata");
+        return ZarrError_InvalidArgument;
+    }
+
+    if (bytes_of_external_metadata == 0) {
+        LOG_ERROR("Invalid length: %zu. Must be greater than 0",
+                  bytes_of_external_metadata);
+        return ZarrError_InvalidArgument;
+    }
+
+    const size_t nbytes =
+      strnlen(external_metadata, bytes_of_external_metadata);
+
+    auto val =  nlohmann::json::parse(external_metadata,
+                                        external_metadata + nbytes,
+                                        nullptr, // callback
+                                        false,    // allow exceptions
+                                        true     // ignore comments
+    );
+
+    if (val.is_discarded()) {
+        LOG_ERROR("Invalid JSON: %s", external_metadata);
+        return ZarrError_InvalidArgument;
+    }
+    settings->external_metadata = val.dump();
+
+    return ZarrError_Success;
 }
 
 ZarrError
