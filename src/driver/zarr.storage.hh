@@ -31,8 +31,6 @@ struct Zarr : public Storage
     uint8_t compression_level_;
     uint8_t shuffle_;
 
-    std::string external_metadata_json_;
-
     ZarrStreamSettings* stream_settings_;
     ZarrStream* stream_;
 };

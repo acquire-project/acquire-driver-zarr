@@ -120,11 +120,11 @@ main()
                   ));
 
                 CHECK(storage_properties_set_dimension(
-                  &props, 0, SIZED("x") + 1, DimensionType_Space, 64, 16, 2));
+                  &props, 0, SIZED("z") + 1, DimensionType_Space, 0, 6, 1));
                 CHECK(storage_properties_set_dimension(
                   &props, 1, SIZED("y") + 1, DimensionType_Space, 48, 16, 3));
                 CHECK(storage_properties_set_dimension(
-                  &props, 2, SIZED("z") + 1, DimensionType_Space, 0, 6, 1));
+                  &props, 2, SIZED("x") + 1, DimensionType_Space, 64, 16, 2));
 
                 props.enable_multiscale = true;
 
@@ -141,13 +141,13 @@ main()
                 CHECK(props.acquisition_dimensions.data != nullptr);
 
                 CHECK(0 == strcmp(props.acquisition_dimensions.data[0].name.str,
-                                  "x"));
+                                  "z"));
                 CHECK(DimensionType_Space ==
                       props.acquisition_dimensions.data[0].kind);
-                CHECK(props.acquisition_dimensions.data[0].array_size_px == 64);
-                CHECK(props.acquisition_dimensions.data[0].chunk_size_px == 16);
+                CHECK(props.acquisition_dimensions.data[0].array_size_px == 0);
+                CHECK(props.acquisition_dimensions.data[0].chunk_size_px == 6);
                 CHECK(props.acquisition_dimensions.data[0].shard_size_chunks ==
-                      2);
+                      1);
 
                 CHECK(0 == strcmp(props.acquisition_dimensions.data[1].name.str,
                                   "y"));
@@ -159,13 +159,13 @@ main()
                       3);
 
                 CHECK(0 == strcmp(props.acquisition_dimensions.data[2].name.str,
-                                  "z"));
+                                  "x"));
                 CHECK(DimensionType_Space ==
                       props.acquisition_dimensions.data[2].kind);
-                CHECK(props.acquisition_dimensions.data[2].array_size_px == 0);
-                CHECK(props.acquisition_dimensions.data[2].chunk_size_px == 6);
+                CHECK(props.acquisition_dimensions.data[2].array_size_px == 64);
+                CHECK(props.acquisition_dimensions.data[2].chunk_size_px == 16);
                 CHECK(props.acquisition_dimensions.data[2].shard_size_chunks ==
-                      1);
+                      2);
 
                 CHECK(props.first_frame_id == 0); // this is ignored
 

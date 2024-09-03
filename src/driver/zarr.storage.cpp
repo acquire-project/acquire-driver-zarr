@@ -572,12 +572,6 @@ sink::Zarr::set(const StorageProperties* props)
           props->secret_access_key.nbytes));
     }
 
-    if (props->external_metadata_json.str) {
-        external_metadata_json_ =
-          std::string(props->external_metadata_json.str,
-                      props->external_metadata_json.nbytes - 1);
-    }
-
     ZARR_OK(ZarrStreamSettings_reserve_dimensions(
       stream_settings_, props->acquisition_dimensions.size));
     for (auto i = 0; i < props->acquisition_dimensions.size; ++i) {
@@ -666,17 +660,17 @@ sink::Zarr::get(StorageProperties* props) const
     std::string uri;
     if (!s3_endpoint.empty() && !s3_bucket.empty() && !store_path.empty()) {
         uri = s3_endpoint + "/" + s3_bucket + "/" + store_path;
-    } else {
+    } else if (!store_path.empty()) {
         uri = "file://" + fs::absolute(store_path).string();
     }
 
     const size_t bytes_of_filename = uri.empty() ? 0 : uri.size() + 1;
 
-    const char* metadata = external_metadata_json_.empty()
+    const char* metadata = external_metadata_json.empty()
                              ? nullptr
-                             : external_metadata_json_.c_str();
+                             : external_metadata_json.c_str();
     const size_t bytes_of_metadata =
-      metadata ? external_metadata_json_.size() + 1 : 0;
+      metadata ? external_metadata_json.size() + 1 : 0;
 
     CHECK(storage_properties_init(props,
                                   0,
@@ -684,7 +678,7 @@ sink::Zarr::get(StorageProperties* props) const
                                   bytes_of_filename,
                                   metadata,
                                   bytes_of_metadata,
-                                  {},
+                                  {1, 1},
                                   ndims));
 
     // set access key and secret
@@ -741,10 +735,11 @@ sink::Zarr::get(StorageProperties* props) const
                                          std::to_string(kind_));
         }
 
+        const size_t nbytes = strnlen(name, sizeof(name)) + 1;
         CHECK(storage_properties_set_dimension(props,
                                                i,
                                                name,
-                                               sizeof(name),
+                                               nbytes,
                                                kind,
                                                array_size_px,
                                                chunk_size_px,
