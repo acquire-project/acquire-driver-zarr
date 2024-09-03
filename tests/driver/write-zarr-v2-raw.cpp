@@ -104,28 +104,28 @@ acquire(AcquireRuntime* runtime, const char* filename)
                             4);
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           0,
+                                           3,
                                            SIZED("x") + 1,
                                            DimensionType_Space,
                                            frame_width,
                                            frame_width,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           1,
+                                           2,
                                            SIZED("y") + 1,
                                            DimensionType_Space,
                                            frame_height,
                                            frame_height,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           2,
+                                           1,
                                            SIZED("c") + 1,
                                            DimensionType_Channel,
                                            1,
                                            1,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           3,
+                                           0,
                                            SIZED("t") + 1,
                                            DimensionType_Time,
                                            0,
