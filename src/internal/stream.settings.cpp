@@ -156,6 +156,15 @@ ZarrStreamSettings_set_s3_secret_access_key(
 }
 
 ZarrError
+ZarrStreamSettings_set_external_metadata(ZarrStreamSettings* settings,
+                                         const char* external_metadata,
+                                         size_t bytes_of_external_metadata)
+{
+    SETTINGS_SET_STRING(
+      settings, external_metadata, bytes_of_external_metadata);
+}
+
+ZarrError
 ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
                                  ZarrDataType data_type)
 {
@@ -333,6 +342,12 @@ const char*
 ZarrStreamSettings_get_s3_secret_access_key(const ZarrStreamSettings* settings)
 {
     SETTINGS_GET_STRING(settings, s3_secret_access_key);
+}
+
+const char*
+ZarrStreamSettings_get_external_metadata(const ZarrStreamSettings* settings)
+{
+    SETTINGS_GET_STRING(settings, external_metadata);
 }
 
 ZarrDataType

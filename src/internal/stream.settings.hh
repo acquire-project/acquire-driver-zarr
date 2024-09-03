@@ -25,6 +25,9 @@ struct ZarrStreamSettings_s
     std::string s3_access_key_id;     /* Access key ID for the S3 service */
     std::string s3_secret_access_key; /* Secret access key for the S3 service */
 
+    std::string external_metadata; /* JSON formatted external metadata for the
+                                      base array */
+
     uint8_t dtype; /* Data type of the base array */
 
     uint8_t compressor;          /* Compression library to use */

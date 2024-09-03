@@ -299,6 +299,11 @@ extern "C"
         STREAM_GET_STRING(stream, s3_secret_access_key);
     }
 
+    const char* ZarrStream_get_external_metadata(const ZarrStream* stream)
+    {
+        STREAM_GET_STRING(stream, external_metadata);
+    }
+
     ZarrCompressor ZarrStream_get_compressor(const ZarrStream* stream)
     {
         if (!stream) {
