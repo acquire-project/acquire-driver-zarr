@@ -234,6 +234,21 @@ extern "C"
       size_t bytes_of_s3_secret_access_key);
 
     /**
+     * @brief Set JSON-formatted external metadata for the Zarr stream.
+     * @details This metadata will be written to acquire-zarr.json in the
+     * metadata directory of the Zarr store. This parameter is optional.
+     * @param settings[in, out] settings The Zarr stream settings struct.
+     * @param external_metadata JSON-formatted external metadata.
+     * @param bytes_of_external_metadata The length of @p external_metadata in
+     * bytes, including the null terminator.
+     * @return ZarrError_Success on success, or an error code on failure.
+     */
+    ZarrError ZarrStreamSettings_set_external_metadata(
+      ZarrStreamSettings* settings,
+      const char* external_metadata,
+      size_t bytes_of_external_metadata);
+
+    /**
      * @brief Set the data type for the Zarr stream.
      * @param[in, out] settings The Zarr stream settings struct.
      * @param[in] data_type The data type.
@@ -357,6 +372,9 @@ extern "C"
     const char* ZarrStreamSettings_get_s3_secret_access_key(
       const ZarrStreamSettings* settings);
 
+    const char* ZarrStreamSettings_get_external_metadata(
+      const ZarrStreamSettings* settings);
+
     ZarrDataType ZarrStreamSettings_get_data_type(
       const ZarrStreamSettings* settings);
 
@@ -466,6 +484,8 @@ extern "C"
     const char* ZarrStream_get_s3_bucket_name(const ZarrStream* stream);
     const char* ZarrStream_get_s3_access_key_id(const ZarrStream* stream);
     const char* ZarrStream_get_s3_secret_access_key(const ZarrStream* stream);
+
+    const char* ZarrStream_get_external_metadata(const ZarrStream* stream);
 
     ZarrCompressor ZarrStream_get_compressor(const ZarrStream* stream);
     ZarrCompressionCodec ZarrStream_get_compression_codec(
