@@ -106,8 +106,8 @@ extern "C"
     typedef enum
     {
         ZarrDimensionType_Space = 0,
-        ZarrDimensionType_Time,
         ZarrDimensionType_Channel,
+        ZarrDimensionType_Time,
         ZarrDimensionType_Other,
         ZarrDimensionTypeCount
     } ZarrDimensionType;
