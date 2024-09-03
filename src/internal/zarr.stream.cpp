@@ -453,6 +453,11 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version)
     EXPECT(write_group_metadata_(),
            "Error creating Zarr stream: %s",
            error_.c_str());
+
+    // write external metadata
+    EXPECT(write_external_metadata_(),
+           "Error creating Zarr stream: %s",
+           error_.c_str());
 }
 
 ZarrStream_s::~ZarrStream_s()
@@ -712,6 +717,40 @@ ZarrStream_s::write_group_metadata_()
     const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
     if (!sink->write(0, metadata_bytes, metadata_str.size())) {
         set_error_("Error writing group metadata");
+        return false;
+    }
+
+    return true;
+}
+
+bool
+ZarrStream_s::write_external_metadata_()
+{
+    if (settings_.external_metadata.empty()) {
+        return true;
+    }
+
+    auto metadata = nlohmann::json::parse(settings_.external_metadata,
+                                          nullptr, // callback
+                                          false,   // allow exceptions
+                                          true     // ignore comments
+    );
+    std::string metadata_key = "acquire.json";
+
+    if (version_ == 3) {
+        metadata_key = "meta/" + metadata_key;
+    }
+
+    const std::unique_ptr<zarr::Sink>& sink = metadata_sinks_.at(metadata_key);
+    if (!sink) {
+        set_error_("Metadata sink '" + metadata_key + "'not found");
+        return false;
+    }
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    if (!sink->write(0, metadata_bytes, metadata_str.size())) {
+        set_error_("Error writing external metadata");
         return false;
     }
 

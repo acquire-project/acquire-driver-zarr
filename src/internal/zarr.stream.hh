@@ -78,6 +78,9 @@ struct ZarrStream_s
     /** @brief Write Zarr group metadata. */
     bool write_group_metadata_();
 
+    /** @brief Write external metadata. */
+    bool write_external_metadata_();
+
     /** @brief Construct OME metadata pertaining to the multiscale pyramid. */
     nlohmann::json make_multiscale_metadata_() const;
 };

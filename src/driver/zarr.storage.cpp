@@ -71,9 +71,11 @@ as_path(const StorageProperties* props)
     return uri;
 }
 
-/// \brief Check that the JSON string is valid. (Valid can mean empty.)
-/// \param str Putative JSON metadata string.
-/// \param nbytes Size of the JSON metadata char array
+/**
+ * @brief Check that the JSON string is valid. (Valid can mean empty.)
+ * @param str Putative JSON metadata string.
+ * @param nbytes Size of the JSON metadata char array.
+ */
 void
 validate_json(const char* str, size_t nbytes)
 {
@@ -487,6 +489,17 @@ sink::Zarr::set(const StorageProperties* props)
         CHECK(stream_settings_);
     }
 
+    // check that the external metadata is valid
+    if (props->external_metadata_json.str) {
+        validate_json(props->external_metadata_json.str,
+                      props->external_metadata_json.nbytes);
+
+        ZARR_OK(ZarrStreamSettings_set_external_metadata(
+          stream_settings_,
+          props->external_metadata_json.str,
+          props->external_metadata_json.nbytes));
+    }
+
     EXPECT(props->uri.str, "URI string is NULL.");
     EXPECT(props->uri.nbytes > 1, "URI string is empty.");
     std::string uri(props->uri.str, props->uri.nbytes - 1);
@@ -614,6 +627,8 @@ sink::Zarr::get(StorageProperties* props) const
 
     std::string s3_endpoint, s3_bucket, store_path;
     std::string access_key_id, secret_access_key;
+    std::string external_metadata_json;
+
     uint8_t multiscale;
     size_t ndims;
 
@@ -625,6 +640,8 @@ sink::Zarr::get(StorageProperties* props) const
         access_key_id = ZarrStream_get_s3_access_key_id(stream_);
         secret_access_key = ZarrStream_get_s3_secret_access_key(stream_);
 
+        external_metadata_json = ZarrStream_get_external_metadata(stream_);
+
         ndims = ZarrStream_get_dimension_count(stream_);
 
         multiscale = ZarrStream_get_multiscale(stream_);
@@ -632,6 +649,9 @@ sink::Zarr::get(StorageProperties* props) const
         s3_endpoint = ZarrStreamSettings_get_s3_endpoint(stream_settings_);
         s3_bucket = ZarrStreamSettings_get_s3_bucket_name(stream_settings_);
         store_path = ZarrStreamSettings_get_store_path(stream_settings_);
+
+        external_metadata_json =
+          ZarrStreamSettings_get_external_metadata(stream_settings_);
 
         access_key_id =
           ZarrStreamSettings_get_s3_access_key_id(stream_settings_);
