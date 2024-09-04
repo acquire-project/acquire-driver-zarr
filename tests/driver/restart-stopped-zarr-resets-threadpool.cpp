@@ -95,11 +95,11 @@ configure(struct Storage* zarr)
       &props, 0, SIZED(TEST ".zarr"), nullptr, 0, { 0 }, 3);
 
     CHECK(storage_properties_set_dimension(
-      &props, 0, SIZED("x") + 1, DimensionType_Space, 64, 64, 0));
+      &props, 2, SIZED("x") + 1, DimensionType_Space, 64, 64, 0));
     CHECK(storage_properties_set_dimension(
       &props, 1, SIZED("y") + 1, DimensionType_Space, 48, 48, 0));
     CHECK(storage_properties_set_dimension(
-      &props, 2, SIZED("t") + 1, DimensionType_Time, 0, 1, 0));
+      &props, 0, SIZED("t") + 1, DimensionType_Time, 0, 1, 0));
 
     CHECK(DeviceState_Armed == zarr->set(zarr, &props));
 

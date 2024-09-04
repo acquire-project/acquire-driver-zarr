@@ -208,9 +208,10 @@ ZarrStreamSettings_set_external_metadata(ZarrStreamSettings* settings,
         return ZarrError_InvalidArgument;
     }
 
-    const size_t nbytes =
+    size_t nbytes =
       strnlen(external_metadata, bytes_of_external_metadata);
     if (nbytes < 2) {
+        settings->external_metadata = "{}";
         return ZarrError_Success;
     }
 

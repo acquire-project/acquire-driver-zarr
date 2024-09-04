@@ -314,7 +314,7 @@ zarr_set(Storage* self_, const StorageProperties* props) noexcept
         return DeviceState_AwaitingConfiguration;
     }
 
-    return DeviceState_Armed;
+    return self_->state;
 }
 
 void
@@ -572,6 +572,18 @@ sink::Zarr::set(const StorageProperties* props)
           props->secret_access_key.nbytes));
     }
 
+    // set compression settings
+    if (compression_codec_ > ZarrCompressionCodec_None) {
+        ZARR_OK(ZarrStreamSettings_set_compressor(stream_settings_,
+                                                  ZarrCompressor_Blosc1));
+        ZARR_OK(ZarrStreamSettings_set_compression_codec(stream_settings_,
+                                                         compression_codec_));
+        ZARR_OK(ZarrStreamSettings_set_compression_level(stream_settings_,
+                                                         compression_level_));
+        ZARR_OK(ZarrStreamSettings_set_compression_shuffle(stream_settings_,
+                                                           shuffle_));
+    }
+
     ZARR_OK(ZarrStreamSettings_reserve_dimensions(
       stream_settings_, props->acquisition_dimensions.size));
     for (auto i = 0; i < props->acquisition_dimensions.size; ++i) {
@@ -609,6 +621,8 @@ sink::Zarr::set(const StorageProperties* props)
 
     ZARR_OK(ZarrStreamSettings_set_multiscale(stream_settings_,
                                               props->enable_multiscale));
+
+    state = DeviceState_Armed;
 }
 
 void
@@ -784,8 +798,12 @@ void
 sink::Zarr::stop() noexcept
 {
     if (DeviceState_Running == state) {
+        // make a copy of current settings before destroying the stream
+        stream_settings_ = ZarrStream_get_settings(stream_);
         state = DeviceState_Armed;
+
         ZarrStream_destroy(stream_);
+        stream_ = nullptr;
     }
 }
 
@@ -822,9 +840,7 @@ sink::Zarr::append(const VideoFrame* frames, size_t nbytes)
 void
 sink::Zarr::reserve_image_shape(const ImageShape* shape)
 {
-    EXPECT(state != DeviceState_Running,
-           "Cannot reserve image shape while running.");
-
+    EXPECT(state == DeviceState_Armed, "Device is not armed.");
     EXPECT(stream_settings_, "No stream settings.");
 
     // `shape` should be verified nonnull in storage_reserve_image_shape, but
