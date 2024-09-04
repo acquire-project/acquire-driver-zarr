@@ -54,10 +54,11 @@ sink_creator_make_v2_metadata_sinks(
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>> metadata_sinks;
     CHECK(sink_creator.make_metadata_sinks(2, test_dir, metadata_sinks));
 
-    CHECK(metadata_sinks.size() == 3);
+    CHECK(metadata_sinks.size() == 4);
     CHECK(metadata_sinks.contains(".zattrs"));
     CHECK(metadata_sinks.contains(".zgroup"));
     CHECK(metadata_sinks.contains("0/.zattrs"));
+    CHECK(metadata_sinks.contains("acquire.json"));
 
     for (auto& [key, sink] : metadata_sinks) {
         CHECK(sink);
@@ -84,10 +85,11 @@ sink_creator_make_v2_metadata_sinks(
     CHECK(
       sink_creator.make_metadata_sinks(2, bucket_name, test_dir, metadata_sinks));
 
-    CHECK(metadata_sinks.size() == 3);
+    CHECK(metadata_sinks.size() == 4);
     CHECK(metadata_sinks.contains(".zattrs"));
     CHECK(metadata_sinks.contains(".zgroup"));
     CHECK(metadata_sinks.contains("0/.zattrs"));
+    CHECK(metadata_sinks.contains("acquire.json"));
 
     auto conn = connection_pool->get_connection();
 
@@ -116,9 +118,10 @@ sink_creator_make_v3_metadata_sinks(
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>> metadata_sinks;
     CHECK(sink_creator.make_metadata_sinks(3, test_dir, metadata_sinks));
 
-    CHECK(metadata_sinks.size() == 2);
+    CHECK(metadata_sinks.size() == 3);
     CHECK(metadata_sinks.contains("zarr.json"));
     CHECK(metadata_sinks.contains("meta/root.group.json"));
+    CHECK(metadata_sinks.contains("meta/acquire.json"));
 
     for (auto& [key, sink] : metadata_sinks) {
         CHECK(sink);
@@ -145,9 +148,10 @@ sink_creator_make_v3_metadata_sinks(
     CHECK(
       sink_creator.make_metadata_sinks(3, bucket_name, test_dir, metadata_sinks));
 
-    CHECK(metadata_sinks.size() == 2);
+    CHECK(metadata_sinks.size() == 3);
     CHECK(metadata_sinks.contains("zarr.json"));
     CHECK(metadata_sinks.contains("meta/root.group.json"));
+    CHECK(metadata_sinks.contains("meta/acquire.json"));
 
     auto conn = connection_pool->get_connection();
 

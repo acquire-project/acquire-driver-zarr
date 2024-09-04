@@ -435,29 +435,22 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version)
       [this](const std::string& err) { this->set_error_(err); });
 
     // create the data store
-    EXPECT(create_store_(), "Error creating Zarr stream: %s", error_.c_str());
+    EXPECT(create_store_(), "%s", error_.c_str());
 
     // allocate writers
-    EXPECT(create_writers_(), "Error creating Zarr stream: %s", error_.c_str());
+    EXPECT(create_writers_(), "%s", error_.c_str());
 
     // allocate metadata sinks
-    EXPECT(create_metadata_sinks_(),
-           "Error creating Zarr stream: %s",
-           error_.c_str());
+    EXPECT(create_metadata_sinks_(), "%s", error_.c_str());
 
     // write base metadata
-    EXPECT(
-      write_base_metadata_(), "Error creating Zarr stream: %s", error_.c_str());
+    EXPECT(write_base_metadata_(), "%s", error_.c_str());
 
     // write group metadata
-    EXPECT(write_group_metadata_(),
-           "Error creating Zarr stream: %s",
-           error_.c_str());
+    EXPECT(write_group_metadata_(), "%s", error_.c_str());
 
     // write external metadata
-    EXPECT(write_external_metadata_(),
-           "Error creating Zarr stream: %s",
-           error_.c_str());
+    EXPECT(write_external_metadata_(), "%s", error_.c_str());
 }
 
 ZarrStream_s::~ZarrStream_s()
@@ -766,8 +759,8 @@ ZarrStream_s::make_multiscale_metadata_() const
 
     auto& axes = multiscales[0]["axes"];
     for (auto dim = dimensions.begin(); dim != dimensions.end(); ++dim) {
-        std::string type = dimension_type_to_string(
-          static_cast<ZarrDimensionType>(dim->kind));
+        std::string type =
+          dimension_type_to_string(static_cast<ZarrDimensionType>(dim->kind));
 
         if (dim < dimensions.end() - 2) {
             axes.push_back({ { "name", dim->name.c_str() }, { "type", type } });
