@@ -1,3 +1,5 @@
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 ####### Acquire Zarr Streaming Library #######
 
 set(tgt acquire-zarr)
