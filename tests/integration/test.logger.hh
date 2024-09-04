@@ -53,3 +53,15 @@ class Logger
         T b_ = (T)(b);                                                         \
         EXPECT(a_ < b_, "Expected %s<%s but " fmt ">=" fmt, #a, #b, a_, b_);   \
     } while (0)
+
+#define EXPECT_STR_EQ(a, b)                                                    \
+    do {                                                                       \
+        std::string a_ = (a) ? (a) : "";                                       \
+        std::string b_ = (b) ? (b) : "";                                       \
+        EXPECT(a_ == b_,                                                       \
+               "Expected %s==%s but \"%s\"!=\"%s\"",                           \
+               #a,                                                             \
+               #b,                                                             \
+               a_.c_str(),                                                     \
+               b_.c_str());                                                    \
+    } while (0)

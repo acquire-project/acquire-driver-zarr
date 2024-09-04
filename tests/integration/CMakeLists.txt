@@ -3,6 +3,7 @@ set(project acquire-zarr)
 set(tests
         set-and-get-params
         create-and-destroy-stream
+        copy-settings
 )
 
 foreach (name ${tests})

@@ -154,6 +154,10 @@ extern "C"
     /** @brief Destroy a Zarr stream settings struct. Consumes the pointer */
     void ZarrStreamSettings_destroy(ZarrStreamSettings* settings);
 
+    /** @brief Make a copy of the Zarr stream settings struct. */
+    ZarrStreamSettings* ZarrStreamSettings_copy(
+      const ZarrStreamSettings* settings);
+
     /***************************************************************************
      * Functions for setting parameters for a Zarr stream.
      *
@@ -522,6 +526,9 @@ extern "C"
                                        size_t* shard_size_chunks);
 
     uint8_t ZarrStream_get_multiscale(const ZarrStream* stream);
+
+    /** @brief Get a copy of the stream settings. */
+    ZarrStreamSettings* ZarrStream_get_settings(const ZarrStream* stream);
 
     /***************************************************************************
      * Logging
