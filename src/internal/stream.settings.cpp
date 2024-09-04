@@ -179,6 +179,9 @@ ZarrStreamSettings_set_external_metadata(ZarrStreamSettings* settings,
 
     const size_t nbytes =
       strnlen(external_metadata, bytes_of_external_metadata);
+    if (nbytes < 2) {
+        return ZarrError_Success;
+    }
 
     auto val =  nlohmann::json::parse(external_metadata,
                                         external_metadata + nbytes,
