@@ -113,6 +113,37 @@ ZarrStreamSettings_destroy(ZarrStreamSettings* settings)
     delete settings;
 }
 
+ZarrStreamSettings*
+ZarrStreamSettings_copy(const ZarrStreamSettings* settings)
+{
+    if (!settings) {
+        LOG_ERROR("Null pointer: settings");
+        return nullptr;
+    }
+
+    ZarrStreamSettings* copy = ZarrStreamSettings_create();
+    if (!copy) {
+        LOG_ERROR("Failed to allocate memory for copy");
+        return nullptr;
+    }
+
+    copy->store_path = settings->store_path;
+    copy->s3_endpoint = settings->s3_endpoint;
+    copy->s3_bucket_name = settings->s3_bucket_name;
+    copy->s3_access_key_id = settings->s3_access_key_id;
+    copy->s3_secret_access_key = settings->s3_secret_access_key;
+    copy->external_metadata = settings->external_metadata;
+    copy->dtype = settings->dtype;
+    copy->compressor = settings->compressor;
+    copy->compression_codec = settings->compression_codec;
+    copy->compression_level = settings->compression_level;
+    copy->compression_shuffle = settings->compression_shuffle;
+    copy->dimensions = settings->dimensions;
+    copy->multiscale = settings->multiscale;
+
+    return copy;
+}
+
 /* Setters */
 ZarrError
 ZarrStreamSettings_set_store_path(ZarrStreamSettings* settings,

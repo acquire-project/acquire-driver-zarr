@@ -3,6 +3,7 @@ set(project acquire-zarr)
 set(tests
         set-and-get-params
         create-and-destroy-stream
+        copy-settings
         stream-zarr-v2-raw-to-filesystem
         stream-zarr-v2-compressed-to-filesystem
         stream-zarr-v3-raw-to-filesystem

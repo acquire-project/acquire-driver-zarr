@@ -380,6 +380,16 @@ extern "C"
         return ZarrStreamSettings_get_multiscale(&stream->settings());
     }
 
+    ZarrStreamSettings* ZarrStream_get_settings(const ZarrStream* stream)
+    {
+        if (!stream) {
+            LOG_WARNING("Null pointer: stream. Returning nullptr");
+            return nullptr;
+        }
+
+        return ZarrStreamSettings_copy(&stream->settings());
+    }
+
     /* Logging */
 
     ZarrError Zarr_set_log_level(LogLevel level)
