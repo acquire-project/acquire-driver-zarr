@@ -53,6 +53,8 @@ zarr::downsample(const ArrayWriterConfig& config,
     downsampled_config.bucket_name = config.bucket_name;
     downsampled_config.store_path = config.store_path;
 
+    downsampled_config.dtype = config.dtype;
+
     // copy the Blosc compression parameters
     downsampled_config.compression_params = config.compression_params;
 

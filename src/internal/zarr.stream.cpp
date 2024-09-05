@@ -178,6 +178,89 @@ dimension_type_to_string(ZarrDimensionType type)
             return "(unknown)";
     }
 }
+
+template<typename T>
+uint8_t*
+scale_image(const uint8_t* const src,
+            size_t& bytes_of_src,
+            size_t& width,
+            size_t& height)
+{
+    CHECK(src);
+    
+    const size_t bytes_of_frame = width * height * sizeof(T);
+    EXPECT(bytes_of_src >= bytes_of_frame,
+           "Expecting at least %zu bytes, got %zu",
+           bytes_of_frame,
+           bytes_of_src);
+
+    const int downscale = 2;
+    constexpr size_t bytes_of_type = sizeof(T);
+    const double factor = 0.25;
+
+    const auto w_pad = width + (width % downscale);
+    const auto h_pad = height + (height % downscale);
+
+    const auto size_downscaled =
+      static_cast<uint32_t>(w_pad * h_pad * factor * bytes_of_type);
+
+    auto* dst = new uint8_t[size_downscaled];
+    EXPECT(dst,
+           "Failed to allocate %zu bytes for destination frame",
+           size_downscaled);
+
+    memset(dst, 0, size_downscaled);
+
+    size_t dst_idx = 0;
+    for (auto row = 0; row < height; row += downscale) {
+        const bool pad_height = (row == height - 1 && height != h_pad);
+
+        for (auto col = 0; col < width; col += downscale) {
+            size_t src_idx = row * width + col;
+            const bool pad_width = (col == width - 1 && width != w_pad);
+
+            double here = src[src_idx];
+            double right = src[src_idx + (1 - static_cast<int>(pad_width))];
+            double down =
+              src[src_idx + width * (1 - static_cast<int>(pad_height))];
+            double diag =
+              src[src_idx + width * (1 - static_cast<int>(pad_height)) +
+                  (1 - static_cast<int>(pad_width))];
+
+            dst[dst_idx++] =
+              static_cast<T>(factor * (here + right + down + diag));
+        }
+    }
+
+    bytes_of_src = size_downscaled;
+    width = w_pad / 2;
+    height = h_pad / 2;
+
+    return dst;
+}
+
+template<typename T>
+void
+average_two_frames(void* dst_,
+                   size_t bytes_of_dst,
+                   const void* src_,
+                   size_t bytes_of_src)
+{
+    CHECK(dst_);
+    CHECK(src_);
+    EXPECT(bytes_of_dst == bytes_of_src,
+           "Expecting %zu bytes in destination, got %zu",
+           bytes_of_src,
+           bytes_of_dst);
+
+    T* dst = static_cast<T*>(dst_);
+    const T* src = static_cast<const T*>(src_);
+
+    const auto num_pixels = bytes_of_src / sizeof(T);
+    for (auto i = 0; i < num_pixels; ++i) {
+        dst[i] = static_cast<T>(0.5 * (dst[i] + src[i]));
+    }
+}
 } // namespace
 
 size_t
@@ -200,7 +283,8 @@ zarr::bytes_of_type(ZarrDataType data_type)
         case ZarrDataType_float64:
             return 8;
         default:
-            throw std::runtime_error("Invalid data type.");
+            throw std::runtime_error("Invalid data type: " +
+                                     std::to_string(data_type));
     }
 }
 
@@ -450,6 +534,9 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version)
     // allocate writers
     EXPECT(create_writers_(), "%s", error_.c_str());
 
+    // allocate multiscale frame placeholders
+    create_scaled_frames_();
+
     // allocate metadata sinks
     EXPECT(create_metadata_sinks_(), "%s", error_.c_str());
 
@@ -472,13 +559,19 @@ ZarrStream_s::~ZarrStream_s()
 
         writers_.clear(); // flush before shutting down thread pool
         thread_pool_->await_stop();
+
+        for (auto& [_, frame] : scaled_frames_) {
+            if (frame) {
+                delete[] *frame;
+            }
+        }
     } catch (const std::exception& e) {
         LOG_ERROR("Error finalizing Zarr stream: %s", e.what());
     }
 }
 
 size_t
-ZarrStream_s::append(const void* data, size_t nbytes)
+ZarrStream_s::append(const void* data_, size_t nbytes)
 {
     EXPECT(error_.empty(), "Cannot append data: %s", error_.c_str());
 
@@ -494,13 +587,18 @@ ZarrStream_s::append(const void* data, size_t nbytes)
         return 0;
     }
 
+    auto* data = static_cast<const uint8_t*>(data_);
+
     size_t bytes_written = 0;
     while (nbytes - bytes_written >= bytes_of_frame) {
         const size_t bytes_written_this_frame =
-          writers_[0]->write_frame((uint8_t*)data, bytes_of_frame);
+          writers_[0]->write_frame(data, bytes_of_frame);
         if (bytes_written_this_frame == 0) {
             break;
         }
+
+        write_multiscale_frames_(data, bytes_written_this_frame);
+
         bytes_written += bytes_written_this_frame;
         data = (uint8_t*)data + bytes_written_this_frame;
     }
@@ -606,7 +704,6 @@ ZarrStream_s::create_writers_()
         zarr::ArrayWriterConfig downsampled_config;
 
         bool do_downsample = true;
-        //        int level = 1; // TODO (aliddell): get back to this
         while (do_downsample) {
             do_downsample = downsample(config, downsampled_config);
 
@@ -625,6 +722,16 @@ ZarrStream_s::create_writers_()
     }
 
     return true;
+}
+
+void
+ZarrStream_s::create_scaled_frames_()
+{
+    if (settings_.multiscale) {
+        for (size_t level = 1; level < writers_.size(); ++level) {
+            scaled_frames_.emplace(level, std::nullopt);
+        }
+    }
 }
 
 bool
@@ -832,4 +939,100 @@ ZarrStream_s::make_multiscale_metadata_() const
     }
 
     return multiscales;
+}
+
+void
+ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
+                                       size_t bytes_of_data)
+{
+    if (!settings_.multiscale) {
+        return;
+    }
+
+    std::function<uint8_t*(const uint8_t*, size_t&, size_t&, size_t&)> scale;
+    std::function<void(void*, size_t, const void*, size_t)> average2;
+
+    auto dtype = static_cast<ZarrDataType>(settings_.dtype);
+    switch (dtype) {
+        case ZarrDataType_uint8:
+            scale = scale_image<uint8_t>;
+            average2 = average_two_frames<uint8_t>;
+            break;
+        case ZarrDataType_uint16:
+            scale = scale_image<uint16_t>;
+            average2 = average_two_frames<uint16_t>;
+            break;
+        case ZarrDataType_uint32:
+            scale = scale_image<uint32_t>;
+            average2 = average_two_frames<uint32_t>;
+            break;
+        case ZarrDataType_uint64:
+            scale = scale_image<uint64_t>;
+            average2 = average_two_frames<uint64_t>;
+            break;
+        case ZarrDataType_int8:
+            scale = scale_image<int8_t>;
+            average2 = average_two_frames<int8_t>;
+            break;
+        case ZarrDataType_int16:
+            scale = scale_image<int16_t>;
+            average2 = average_two_frames<int16_t>;
+            break;
+        case ZarrDataType_int32:
+            scale = scale_image<int32_t>;
+            average2 = average_two_frames<int32_t>;
+            break;
+        case ZarrDataType_int64:
+            scale = scale_image<int64_t>;
+            average2 = average_two_frames<int64_t>;
+            break;
+        case ZarrDataType_float16:
+            scale = scale_image<uint16_t>;
+            average2 = average_two_frames<uint16_t>;
+            break;
+        case ZarrDataType_float32:
+            scale = scale_image<float>;
+            average2 = average_two_frames<float>;
+            break;
+        case ZarrDataType_float64:
+            scale = scale_image<double>;
+            average2 = average_two_frames<double>;
+            break;
+        default:
+            throw std::runtime_error("Invalid data type: " +
+                                     std::to_string(dtype));
+    }
+
+    const auto& dims = settings_.dimensions;
+    size_t frame_width = dims.back().array_size_px;
+    size_t frame_height = dims[dims.size() - 2].array_size_px;
+
+    uint8_t* dst;
+    for (auto i = 1; i < writers_.size(); ++i) {
+        dst = scale(data, bytes_of_data, frame_width, frame_height);
+
+        // bytes_of data is now downscaled
+        // frame_width and frame_height are now the new dimensions
+
+        if (scaled_frames_[i]) {
+            average2(dst, bytes_of_data, *scaled_frames_[i], bytes_of_data);
+            EXPECT(writers_[i]->write_frame(dst, bytes_of_data),
+                   "Failed to write frame to writer %zu",
+                   i);
+
+            // clean up this LOD
+            delete[] *scaled_frames_[i];
+            scaled_frames_[i].reset();
+
+            // set up for next iteration
+            if (i + 1 < writers_.size()) {
+                data = dst;
+            } else {
+                delete[] dst;
+            }
+        } else {
+            scaled_frames_[i] = dst;
+            break;
+        }
+    }
 }

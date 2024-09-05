@@ -57,6 +57,8 @@ struct ZarrStream_s
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>>
       metadata_sinks_;
 
+    std::unordered_map<size_t, std::optional<uint8_t*>> scaled_frames_;
+
     /**
      * @brief Set an error message.
      * @param msg The error message to set.
@@ -69,6 +71,9 @@ struct ZarrStream_s
     /** @brief Create the writers. */
     [[nodiscard]] bool create_writers_();
 
+    /** @brief Create placeholders for multiscale frames. */
+    void create_scaled_frames_();
+
     /** @brief Create the metadata sinks. */
     [[nodiscard]] bool create_metadata_sinks_();
 
@@ -79,8 +84,10 @@ struct ZarrStream_s
     bool write_group_metadata_();
 
     /** @brief Write external metadata. */
-    bool write_external_metadata_();
+    [[nodiscard]] bool write_external_metadata_();
 
     /** @brief Construct OME metadata pertaining to the multiscale pyramid. */
     nlohmann::json make_multiscale_metadata_() const;
+
+    void write_multiscale_frames_(const uint8_t* data, size_t bytes_of_data);
 };
