@@ -98,9 +98,9 @@ set_and_get_parameters(ZarrStreamSettings* stream)
     CHECK_EQ(str_param_value, "s3_secret_access_key");
 
     /* Set and get data type */
-    CHECK_EQ(ZarrStreamSettings_set_data_type(stream, ZarrDataType_float16),
+    CHECK_EQ(ZarrStreamSettings_set_data_type(stream, ZarrDataType_float32),
              ZarrError_Success);
-    CHECK_EQ(ZarrStreamSettings_get_data_type(stream), ZarrDataType_float16);
+    CHECK_EQ(ZarrStreamSettings_get_data_type(stream), ZarrDataType_float32);
 
     /* Set and get compressor */
     CHECK_EQ(ZarrStreamSettings_set_compressor(stream, ZarrCompressor_Blosc1),
