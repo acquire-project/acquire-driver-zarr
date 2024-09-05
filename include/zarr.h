@@ -77,8 +77,6 @@ extern "C"
     {
         ZarrCompressor_None = 0,
         ZarrCompressor_Blosc1,
-        ZarrCompressor_Blosc2, /* Blosc2 is not yet supported */
-        ZarrCompressor_Zstd,   /* Zstd is not yet supported */
         ZarrCompressorCount
     } ZarrCompressor;
 
@@ -125,7 +123,6 @@ extern "C"
         ZarrError_InvalidArgument,
         ZarrError_Overflow,
         ZarrError_InvalidIndex,
-        ZarrError_NotYetImplemented,
         ZarrError_InternalError,
         ZarrErrorCount,
     } ZarrError;

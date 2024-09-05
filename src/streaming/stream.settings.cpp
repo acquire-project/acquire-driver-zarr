@@ -51,10 +51,6 @@ compressor_to_string(ZarrCompressor compressor)
             return "none";
         case ZarrCompressor_Blosc1:
             return "blosc1";
-        case ZarrCompressor_Blosc2:
-            return "blosc2";
-        case ZarrCompressor_Zstd:
-            return "zstd";
         default:
             return "(unknown)";
     }
@@ -249,12 +245,6 @@ ZarrStreamSettings_set_compressor(ZarrStreamSettings* settings,
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
     EXPECT_VALID_ARGUMENT(
       compressor < ZarrCompressorCount, "Invalid compressor: %d", compressor);
-
-    if (compressor >= ZarrCompressor_Blosc2) {
-        LOG_ERROR("Compressor not yet implemented: %s",
-                  compressor_to_string(compressor));
-        return ZarrError_NotYetImplemented;
-    }
 
     settings->compressor = compressor;
     return ZarrError_Success;
