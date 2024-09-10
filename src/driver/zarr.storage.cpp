@@ -19,9 +19,9 @@
 
 #define ZARR_OK(e)                                                             \
     do {                                                                       \
-        ZarrError __err = (e);                                                 \
+        ZarrStatus __err = (e);                                                \
         EXPECT(                                                                \
-          __err == ZarrError_Success, "%s", Zarr_get_error_message(__err));    \
+          __err == ZarrStatus_Success, "%s", Zarr_get_error_message(__err));   \
     } while (0)
 
 namespace sink = acquire::sink;
@@ -507,23 +507,37 @@ sink::Zarr::set(const StorageProperties* props)
     std::string store_path;
 
     if (is_web_uri(uri)) {
+        EXPECT(props->access_key_id.str, "Access key ID is NULL.");
+        EXPECT(props->access_key_id.nbytes > 1, "Access key ID is empty.");
+        EXPECT(props->secret_access_key.str, "Secret access key is NULL.");
+        EXPECT(props->secret_access_key.nbytes > 1,
+               "Secret access key is empty.");
+
         auto components = split_uri(uri);
         EXPECT(components.size() > 3, "Invalid URI: %s", uri.c_str());
 
         std::string s3_endpoint = components[0] + "//" + components[1];
-        ZARR_OK(ZarrStreamSettings_set_s3_endpoint(
-          stream_settings_, s3_endpoint.c_str(), s3_endpoint.size() + 1));
-
         const std::string& s3_bucket_name = components[2];
-        ZARR_OK(ZarrStreamSettings_set_s3_bucket_name(
-          stream_settings_, s3_bucket_name.c_str(), s3_bucket_name.size() + 1));
+        ZarrS3Settings s3_settings{
+            .endpoint = s3_endpoint.c_str(),
+            .bytes_of_endpoint = s3_endpoint.size() + 1,
+            .bucket_name = s3_bucket_name.c_str(),
+            .bytes_of_bucket_name = s3_bucket_name.size() + 1,
+            .access_key_id = props->access_key_id.str,
+            .bytes_of_access_key_id = props->access_key_id.nbytes,
+            .secret_access_key = props->secret_access_key.str,
+            .bytes_of_secret_access_key = props->secret_access_key.nbytes,
+        };
 
         store_path = components[3];
         for (auto i = 4; i < components.size(); ++i) {
             store_path += "/" + components[i];
         }
-        ZARR_OK(ZarrStreamSettings_set_store_path(
-          stream_settings_, store_path.c_str(), store_path.size() + 1));
+
+        ZARR_OK(ZarrStreamSettings_set_store(stream_settings_,
+                                             store_path.c_str(),
+                                             store_path.size() + 1,
+                                             &s3_settings));
     } else {
         if (uri.find("file://") != std::string::npos) {
             uri = uri.substr(7); // strlen("file://") == 7
@@ -554,22 +568,8 @@ sink::Zarr::set(const StorageProperties* props)
                "Expected \"%s\" to have write permissions.",
                parent_path.c_str());
 
-        ZarrStreamSettings_set_store_path(
-          stream_settings_, store_path.c_str(), store_path.size() + 1);
-    }
-
-    if (props->access_key_id.str) {
-        ZARR_OK(
-          ZarrStreamSettings_set_s3_access_key_id(stream_settings_,
-                                                  props->access_key_id.str,
-                                                  props->access_key_id.nbytes));
-    }
-
-    if (props->secret_access_key.str) {
-        ZARR_OK(ZarrStreamSettings_set_s3_secret_access_key(
-          stream_settings_,
-          props->secret_access_key.str,
-          props->secret_access_key.nbytes));
+        ZarrStreamSettings_set_store(
+          stream_settings_, store_path.c_str(), store_path.size() + 1, nullptr);
     }
 
     // set compression settings
@@ -680,9 +680,8 @@ sink::Zarr::get(StorageProperties* props) const
 
     const size_t bytes_of_filename = uri.empty() ? 0 : uri.size() + 1;
 
-    const char* metadata = external_metadata_json.empty()
-                             ? nullptr
-                             : external_metadata_json.c_str();
+    const char* metadata =
+      external_metadata_json.empty() ? nullptr : external_metadata_json.c_str();
     const size_t bytes_of_metadata =
       metadata ? external_metadata_json.size() + 1 : 0;
 
@@ -692,7 +691,7 @@ sink::Zarr::get(StorageProperties* props) const
                                   bytes_of_filename,
                                   metadata,
                                   bytes_of_metadata,
-                                  {1, 1},
+                                  { 1, 1 },
                                   ndims));
 
     // set access key and secret

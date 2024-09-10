@@ -31,15 +31,15 @@ try_with_invalid_settings()
 
     // reserve 3 dimensions, but only set 2 of them
     CHECK_EQ(ZarrStreamSettings_reserve_dimensions(settings, 3),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     CHECK_EQ(ZarrStreamSettings_set_dimension(
                settings, 1, SIZED("y"), ZarrDimensionType_Space, 12, 3, 4),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     CHECK_EQ(ZarrStreamSettings_set_dimension(
                settings, 2, SIZED("x"), ZarrDimensionType_Space, 1, 1, 1),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     stream = ZarrStream_create(settings, ZarrVersion_2);
     CHECK(!stream);
@@ -61,23 +61,23 @@ try_with_valid_settings()
     CHECK(settings);
 
     CHECK_EQ(ZarrStreamSettings_reserve_dimensions(settings, 3),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     CHECK_EQ(ZarrStreamSettings_set_dimension(
                settings, 2, SIZED("x"), ZarrDimensionType_Space, 10, 5, 1),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     CHECK_EQ(ZarrStreamSettings_set_dimension(
                settings, 1, SIZED("y"), ZarrDimensionType_Space, 12, 3, 4),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     CHECK_EQ(ZarrStreamSettings_set_dimension(
                settings, 0, SIZED("t"), ZarrDimensionType_Time, 1, 1, 0),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
-    CHECK_EQ(ZarrStreamSettings_set_store_path(
-               settings, store_path.c_str(), store_path.size()),
-             ZarrError_Success);
+    CHECK_EQ(ZarrStreamSettings_set_store(
+               settings, store_path.c_str(), store_path.size() + 1, nullptr),
+             ZarrStatus_Success);
 
     stream = ZarrStream_create(settings, ZarrVersion_2);
     CHECK(stream);
@@ -108,7 +108,7 @@ try_with_valid_settings()
                                       &array_size_px,
                                       &chunk_size_px,
                                       &shard_size_chunks),
-             ZarrError_Success);
+             ZarrStatus_Success);
     CHECK_EQ(std::string(name), "t");
     CHECK_EQ(kind, ZarrDimensionType_Time);
     CHECK_EQ(array_size_px, 1);
@@ -123,7 +123,7 @@ try_with_valid_settings()
                                       &array_size_px,
                                       &chunk_size_px,
                                       &shard_size_chunks),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     CHECK_EQ(std::string(name), "y");
     CHECK_EQ(kind, ZarrDimensionType_Space);
@@ -139,7 +139,7 @@ try_with_valid_settings()
                                       &array_size_px,
                                       &chunk_size_px,
                                       &shard_size_chunks),
-             ZarrError_Success);
+             ZarrStatus_Success);
 
     CHECK_EQ(std::string(name), "x");
     CHECK_EQ(kind, ZarrDimensionType_Space);

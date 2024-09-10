@@ -59,8 +59,8 @@ setup()
 {
     auto* settings = ZarrStreamSettings_create();
 
-    ZarrStreamSettings_set_store_path(
-      settings, test_path.c_str(), test_path.size() + 1);
+    ZarrStreamSettings_set_store(
+      settings, test_path.c_str(), test_path.size() + 1, nullptr);
     ZarrStreamSettings_set_data_type(settings, ZarrDataType_uint16);
 
     ZarrStreamSettings_reserve_dimensions(settings, 5);
@@ -340,9 +340,9 @@ main()
     try {
         size_t bytes_out;
         for (auto i = 0; i < frames_to_acquire; ++i) {
-            ZarrError err = ZarrStream_append(
+            ZarrStatus err = ZarrStream_append(
               stream, frame.data(), bytes_of_frame, &bytes_out);
-            EXPECT(err == ZarrError_Success,
+            EXPECT(err == ZarrStatus_Success,
                    "Failed to append frame %d: %s",
                    i,
                    Zarr_get_error_message(err));

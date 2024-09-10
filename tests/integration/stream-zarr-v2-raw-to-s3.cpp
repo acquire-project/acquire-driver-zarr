@@ -157,16 +157,17 @@ setup()
 {
     auto* settings = ZarrStreamSettings_create();
 
-    ZarrStreamSettings_set_store_path(settings, SIZED(TEST));
-
-    ZarrStreamSettings_set_s3_endpoint(
-      settings, s3_endpoint.c_str(), s3_endpoint.size() + 1);
-    ZarrStreamSettings_set_s3_bucket_name(
-      settings, s3_bucket_name.c_str(), s3_bucket_name.size() + 1);
-    ZarrStreamSettings_set_s3_access_key_id(
-      settings, s3_access_key_id.c_str(), s3_access_key_id.size() + 1);
-    ZarrStreamSettings_set_s3_secret_access_key(
-      settings, s3_secret_access_key.c_str(), s3_secret_access_key.size() + 1);
+    ZarrS3Settings s3_settings{
+        .endpoint = s3_endpoint.c_str(),
+        .bytes_of_endpoint = s3_endpoint.size() + 1,
+        .bucket_name = s3_bucket_name.c_str(),
+        .bytes_of_bucket_name = s3_bucket_name.size() + 1,
+        .access_key_id = s3_access_key_id.c_str(),
+        .bytes_of_access_key_id = s3_access_key_id.size() + 1,
+        .secret_access_key = s3_secret_access_key.c_str(),
+        .bytes_of_secret_access_key = s3_secret_access_key.size() + 1,
+    };
+    ZarrStreamSettings_set_store(settings, SIZED(TEST), &s3_settings);
 
     ZarrStreamSettings_set_data_type(settings, ZarrDataType_int32);
 
@@ -425,9 +426,9 @@ main()
     try {
         size_t bytes_out;
         for (auto i = 0; i < frames_to_acquire; ++i) {
-            ZarrError err = ZarrStream_append(
+            ZarrStatus err = ZarrStream_append(
               stream, frame.data(), bytes_of_frame, &bytes_out);
-            EXPECT(err == ZarrError_Success,
+            EXPECT(err == ZarrStatus_Success,
                    "Failed to append frame %d: %s",
                    i,
                    Zarr_get_error_message(err));

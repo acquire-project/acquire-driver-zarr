@@ -15,7 +15,7 @@
     do {                                                                       \
         if (!(e)) {                                                            \
             LOG_ERROR(__VA_ARGS__);                                            \
-            return ZarrError_InvalidArgument;                                  \
+            return ZarrStatus_InvalidArgument;                                  \
         }                                                                      \
     } while (0)
 
@@ -328,7 +328,7 @@ extern "C"
 
     /* Appending data */
 
-    ZarrError ZarrStream_append(ZarrStream* stream,
+    ZarrStatus ZarrStream_append(ZarrStream* stream,
                                 const void* data,
                                 size_t bytes_in,
                                 size_t* bytes_out)
@@ -341,10 +341,10 @@ extern "C"
             *bytes_out = stream->append(data, bytes_in);
         } catch (const std::exception& e) {
             LOG_ERROR("Error appending data: %s", e.what());
-            return ZarrError_InternalError;
+            return ZarrStatus_InternalError;
         }
 
-        return ZarrError_Success;
+        return ZarrStatus_Success;
     }
 
     /* Getters */
@@ -435,7 +435,7 @@ extern "C"
         return ZarrStreamSettings_get_dimension_count(&stream->settings());
     }
 
-    ZarrError ZarrStream_get_dimension(const ZarrStream* stream,
+    ZarrStatus ZarrStream_get_dimension(const ZarrStream* stream,
                                        size_t index,
                                        char* name,
                                        size_t bytes_of_name,
@@ -476,14 +476,14 @@ extern "C"
 
     /* Logging */
 
-    ZarrError Zarr_set_log_level(LogLevel level)
+    ZarrStatus Zarr_set_log_level(LogLevel level)
     {
         if (level < LogLevel_Debug || level >= LogLevelCount) {
-            return ZarrError_InvalidArgument;
+            return ZarrStatus_InvalidArgument;
         }
 
         Logger::set_log_level(level);
-        return ZarrError_Success;
+        return ZarrStatus_Success;
     }
 
     LogLevel Zarr_get_log_level()
@@ -493,23 +493,23 @@ extern "C"
 
     /* Error handling */
 
-    const char* Zarr_get_error_message(ZarrError error)
+    const char* Zarr_get_error_message(ZarrStatus status)
     {
-        switch (error) {
-            case ZarrError_Success:
+        switch (status) {
+            case ZarrStatus_Success:
                 return "Success";
-            case ZarrError_InvalidArgument:
+            case ZarrStatus_InvalidArgument:
                 return "Invalid argument";
-            case ZarrError_Overflow:
+            case ZarrStatus_Overflow:
                 return "Overflow";
-            case ZarrError_InvalidIndex:
+            case ZarrStatus_InvalidIndex:
                 return "Invalid index";
-            case ZarrError_NotYetImplemented:
+            case ZarrStatus_NotYetImplemented:
                 return "Not yet implemented";
-            case ZarrError_InternalError:
-                return "Internal error";
+            case ZarrStatus_InternalError:
+                return "Internal status";
             default:
-                return "Unknown error";
+                return "Unknown status";
         }
     }
 }

@@ -19,84 +19,75 @@ test_ZarrStreamSettings_copy()
     const char* s3_secret_access_key = "secret_key_456";
     const char* external_metadata = "{\"key\":\"value\"}";
 
-    EXPECT_EQ(ZarrError,
+    ZarrS3Settings s3_settings = {
+        .endpoint = s3_endpoint,
+        .bytes_of_endpoint = strlen(s3_endpoint) + 1,
+        .bucket_name = s3_bucket_name,
+        .bytes_of_bucket_name = strlen(s3_bucket_name) + 1,
+        .access_key_id = s3_access_key_id,
+        .bytes_of_access_key_id = strlen(s3_access_key_id) + 1,
+        .secret_access_key = s3_secret_access_key,
+        .bytes_of_secret_access_key = strlen(s3_secret_access_key) + 1,
+    };
+
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
-              ZarrStreamSettings_set_store_path(
-                original, store_path, strlen(store_path) + 1));
-    EXPECT_EQ(ZarrError,
+              ZarrStatus_Success,
+              ZarrStreamSettings_set_store(
+                original, store_path, strlen(store_path) + 1, &s3_settings));
+
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
-              ZarrStreamSettings_set_s3_endpoint(
-                original, s3_endpoint, strlen(s3_endpoint) + 1));
-    EXPECT_EQ(ZarrError,
-              "%d",
-              ZarrError_Success,
-              ZarrStreamSettings_set_s3_bucket_name(
-                original, s3_bucket_name, strlen(s3_bucket_name) + 1));
-    EXPECT_EQ(ZarrError,
-              "%d",
-              ZarrError_Success,
-              ZarrStreamSettings_set_s3_access_key_id(
-                original, s3_access_key_id, strlen(s3_access_key_id) + 1));
-    EXPECT_EQ(
-      ZarrError,
-      "%d",
-      ZarrError_Success,
-      ZarrStreamSettings_set_s3_secret_access_key(
-        original, s3_secret_access_key, strlen(s3_secret_access_key) + 1));
-    EXPECT_EQ(ZarrError,
-              "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_external_metadata(
                 original, external_metadata, strlen(external_metadata) + 1));
 
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_data_type(original, ZarrDataType_float32));
     EXPECT_EQ(
-      ZarrError,
+      ZarrStatus,
       "%d",
-      ZarrError_Success,
+      ZarrStatus_Success,
       ZarrStreamSettings_set_compressor(original, ZarrCompressor_Blosc1));
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_compression_codec(
                 original, ZarrCompressionCodec_BloscLZ4));
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_compression_level(original, 5));
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_compression_shuffle(original, 1));
 
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_reserve_dimensions(original, 3));
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_dimension(
                 original, 0, "z", 2, ZarrDimensionType_Space, 100, 10, 1));
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_dimension(
                 original, 1, "y", 2, ZarrDimensionType_Space, 200, 20, 1));
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_dimension(
                 original, 2, "x", 2, ZarrDimensionType_Space, 300, 30, 1));
 
-    EXPECT_EQ(ZarrError,
+    EXPECT_EQ(ZarrStatus,
               "%d",
-              ZarrError_Success,
+              ZarrStatus_Success,
               ZarrStreamSettings_set_multiscale(original, 1));
 
     // Copy the settings
@@ -139,9 +130,9 @@ test_ZarrStreamSettings_copy()
         ZarrDimensionType kind;
         size_t array_size_px, chunk_size_px, shard_size_chunks;
 
-        EXPECT_EQ(ZarrError,
+        EXPECT_EQ(ZarrStatus,
                   "%d",
-                  ZarrError_Success,
+                  ZarrStatus_Success,
                   ZarrStreamSettings_get_dimension(copy,
                                                    i,
                                                    name,
