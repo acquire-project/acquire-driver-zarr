@@ -41,14 +41,6 @@ extern "C"
      * If the compressor is set to ZarrCompressor_None, the codec is ignored.
      **************************************************************************/
 
-    /***************************************************************************
-     * Error handling
-     *
-     * The ZarrStatus enum lists the available status codes. The
-     * Zarr_get_error_message function returns a human-readable status message
-     * for the given status code.
-     **************************************************************************/
-
     /**
      * @brief Get the message for the given status code.
      * @param status The status code.
@@ -103,8 +95,8 @@ extern "C"
                                             const ZarrS3Settings* s3_settings);
 
     /**
-     * @brief Set the data type, compressor, codec, compression_settings level, and
-     * shuffle for the Zarr stream.
+     * @brief Set the data type, compressor, codec, compression_settings level,
+     * and shuffle for the Zarr stream.
      * @param[in, out] settings The Zarr stream settings struct.
      * @param[in] compression_settings The compression_settings settings.
      * @return ZarrStatus_Success on success, or an error code on failure.
@@ -112,21 +104,6 @@ extern "C"
     ZarrStatus ZarrStreamSettings_set_compression(
       ZarrStreamSettings* settings,
       const ZarrCompressionSettings* compression_settings);
-
-    /**
-     * @brief Set JSON-formatted external metadata for the Zarr stream.
-     * @details This metadata will be written to acquire-zarr.json in the
-     * metadata directory of the Zarr store. This parameter is optional.
-     * @param settings[in, out] settings The Zarr stream settings struct.
-     * @param external_metadata JSON-formatted external metadata.
-     * @param bytes_of_external_metadata The length of @p external_metadata in
-     * bytes, including the null terminator.
-     * @return ZarrStatus_Success on success, or an error code on failure.
-     */
-    ZarrStatus ZarrStreamSettings_set_external_metadata(
-      ZarrStreamSettings* settings,
-      const char* external_metadata,
-      size_t bytes_of_external_metadata);
 
     /**
      * @brief Set the data type for the Zarr stream.
@@ -161,27 +138,12 @@ extern "C"
      * @param[in, out] settings The Zarr stream settings struct.
      * @param[in] index The index of the dimension to set. Must be less than the
      * number of dimensions reserved with ZarrStreamSettings_reserve_dimensions.
-     * @param[in] name The name of the dimension.
-     * @param[in] bytes_of_name The length of @p name in bytes, including the
-     * null terminator.
-     * @param[in] kind The dimension type.
-     * @param[in] array_size_px The size of the entire array along this
-     * dimension, in pixels. This value must be positive for all dimensions
-     * except the first (i.e., the slowest varying dimension).
-     * @param[in] chunk_size_px The size of the chunks along this dimension, in
-     * pixels. This value must be positive for all dimensions.
-     * @param[in] shard_size_chunks The number of chunks in a shard. This value
-     * must be positive for all dimensions but is ignored for Zarr V2 streams.
-     * @return ZarrStatus_Success on success, or an error code on failure.
+     * @param[in] dimension The dimension's settings.
      */
-    ZarrStatus ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
-                                                size_t index,
-                                                const char* name,
-                                                size_t bytes_of_name,
-                                                ZarrDimensionType kind,
-                                                uint32_t array_size_px,
-                                                uint32_t chunk_size_px,
-                                                uint32_t shard_size_chunks);
+    ZarrStatus ZarrStreamSettings_set_dimension(
+      ZarrStreamSettings* settings,
+      size_t index,
+      const ZarrDimensionSettings* dimension);
 
     /**
      * @brief Set the multiscale flag for the Zarr stream.
@@ -192,6 +154,21 @@ extern "C"
      */
     ZarrStatus ZarrStreamSettings_set_multiscale(ZarrStreamSettings* settings,
                                                  uint8_t multiscale);
+
+    /**
+     * @brief Set JSON-formatted custom metadata for the Zarr stream.
+     * @details This metadata will be written to acquire-zarr.json in the
+     * metadata directory of the Zarr store. This parameter is optional.
+     * @param settings[in, out] settings The Zarr stream settings struct.
+     * @param external_metadata JSON-formatted external metadata.
+     * @param bytes_of_external_metadata The length of @p external_metadata in
+     * bytes, including the null terminator.
+     * @return ZarrStatus_Success on success, or an error code on failure.
+     */
+    ZarrStatus ZarrStreamSettings_set_custom_metadata(
+      ZarrStreamSettings* settings,
+      const char* external_metadata,
+      size_t bytes_of_external_metadata);
 
     /***************************************************************************
      * Functions for getting parameters on the Zarr stream settings struct.

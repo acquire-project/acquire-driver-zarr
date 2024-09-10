@@ -39,7 +39,7 @@ test_ZarrStreamSettings_copy()
     EXPECT_EQ(ZarrStatus,
               "%d",
               ZarrStatus_Success,
-              ZarrStreamSettings_set_external_metadata(
+              ZarrStreamSettings_set_custom_metadata(
                 original, external_metadata, strlen(external_metadata) + 1));
 
     EXPECT_EQ(ZarrStatus,
@@ -64,21 +64,45 @@ test_ZarrStreamSettings_copy()
               "%d",
               ZarrStatus_Success,
               ZarrStreamSettings_reserve_dimensions(original, 3));
+
+    ZarrDimensionSettings dimension = {
+        .name = "z",
+        .bytes_of_name = strlen("z") + 1,
+        .kind = ZarrDimensionType_Space,
+        .array_size_px = 100,
+        .chunk_size_px = 10,
+        .shard_size_chunks = 1,
+    };
     EXPECT_EQ(ZarrStatus,
               "%d",
               ZarrStatus_Success,
-              ZarrStreamSettings_set_dimension(
-                original, 0, "z", 2, ZarrDimensionType_Space, 100, 10, 1));
+              ZarrStreamSettings_set_dimension(original, 0, &dimension));
+
+    dimension = {
+        .name = "y",
+        .bytes_of_name = strlen("y") + 1,
+        .kind = ZarrDimensionType_Space,
+        .array_size_px = 200,
+        .chunk_size_px = 20,
+        .shard_size_chunks = 1,
+    };
     EXPECT_EQ(ZarrStatus,
               "%d",
               ZarrStatus_Success,
-              ZarrStreamSettings_set_dimension(
-                original, 1, "y", 2, ZarrDimensionType_Space, 200, 20, 1));
+              ZarrStreamSettings_set_dimension(original, 1, &dimension));
+
+    dimension = {
+        .name = "x",
+        .bytes_of_name = strlen("x") + 1,
+        .kind = ZarrDimensionType_Space,
+        .array_size_px = 300,
+        .chunk_size_px = 30,
+        .shard_size_chunks = 1,
+    };
     EXPECT_EQ(ZarrStatus,
               "%d",
               ZarrStatus_Success,
-              ZarrStreamSettings_set_dimension(
-                original, 2, "x", 2, ZarrDimensionType_Space, 300, 30, 1));
+              ZarrStreamSettings_set_dimension(original, 2, &dimension));
 
     EXPECT_EQ(ZarrStatus,
               "%d",

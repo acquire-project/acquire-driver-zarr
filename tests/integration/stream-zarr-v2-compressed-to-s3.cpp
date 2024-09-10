@@ -7,6 +7,13 @@
 #include <vector>
 
 #define SIZED(str) str, sizeof(str)
+#define DIM(name_, kind_, array_size, chunk_size, shard_size)                  \
+    (ZarrDimensionSettings)                                                    \
+    {                                                                          \
+        .name = name_, .bytes_of_name = sizeof(name_), .kind = kind_,          \
+        .array_size_px = array_size, .chunk_size_px = chunk_size,              \
+        .shard_size_chunks = shard_size                                        \
+    }
 
 namespace {
 std::string s3_endpoint, s3_bucket_name, s3_access_key_id, s3_secret_access_key;
@@ -180,41 +187,26 @@ setup()
     ZarrStreamSettings_set_compression(settings, &compression_settings);
 
     ZarrStreamSettings_reserve_dimensions(settings, 5);
-    ZarrStreamSettings_set_dimension(settings,
-                                     0,
-                                     SIZED("t"),
-                                     ZarrDimensionType_Time,
-                                     array_timepoints,
-                                     chunk_timepoints,
-                                     0);
-    ZarrStreamSettings_set_dimension(settings,
-                                     1,
-                                     SIZED("c"),
-                                     ZarrDimensionType_Channel,
-                                     array_channels,
-                                     chunk_channels,
-                                     0);
-    ZarrStreamSettings_set_dimension(settings,
-                                     2,
-                                     SIZED("z"),
-                                     ZarrDimensionType_Space,
-                                     array_planes,
-                                     chunk_planes,
-                                     0);
-    ZarrStreamSettings_set_dimension(settings,
-                                     3,
-                                     SIZED("y"),
-                                     ZarrDimensionType_Space,
-                                     array_height,
-                                     chunk_height,
-                                     0);
-    ZarrStreamSettings_set_dimension(settings,
-                                     4,
-                                     SIZED("x"),
-                                     ZarrDimensionType_Space,
-                                     array_width,
-                                     chunk_width,
-                                     0);
+    ZarrDimensionSettings dimension;
+
+    dimension =
+      DIM("t", ZarrDimensionType_Time, array_timepoints, chunk_timepoints, 0);
+    ZarrStreamSettings_set_dimension(settings, 0, &dimension);
+
+    dimension =
+      DIM("c", ZarrDimensionType_Channel, array_channels, chunk_channels, 0);
+    ZarrStreamSettings_set_dimension(settings, 1, &dimension);
+
+    dimension =
+      DIM("z", ZarrDimensionType_Space, array_planes, chunk_planes, 0);
+    ZarrStreamSettings_set_dimension(settings, 2, &dimension);
+
+    dimension =
+      DIM("y", ZarrDimensionType_Space, array_height, chunk_height, 0);
+    ZarrStreamSettings_set_dimension(settings, 3, &dimension);
+
+    dimension = DIM("x", ZarrDimensionType_Space, array_width, chunk_width, 0);
+    ZarrStreamSettings_set_dimension(settings, 4, &dimension);
 
     return ZarrStream_create(settings, ZarrVersion_2);
 }

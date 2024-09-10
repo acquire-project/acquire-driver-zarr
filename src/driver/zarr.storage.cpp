@@ -494,7 +494,7 @@ sink::Zarr::set(const StorageProperties* props)
         validate_json(props->external_metadata_json.str,
                       props->external_metadata_json.nbytes);
 
-        ZARR_OK(ZarrStreamSettings_set_external_metadata(
+        ZARR_OK(ZarrStreamSettings_set_custom_metadata(
           stream_settings_,
           props->external_metadata_json.str,
           props->external_metadata_json.nbytes));
@@ -610,14 +610,16 @@ sink::Zarr::set(const StorageProperties* props)
                                          std::to_string(dim->kind));
         }
 
-        ZARR_OK(ZarrStreamSettings_set_dimension(stream_settings_,
-                                                 i,
-                                                 dim->name.str,
-                                                 dim->name.nbytes,
-                                                 kind,
-                                                 dim->array_size_px,
-                                                 dim->chunk_size_px,
-                                                 dim->shard_size_chunks));
+        ZarrDimensionSettings dimension = {
+            .name = dim->name.str,
+            .bytes_of_name = dim->name.nbytes,
+            .kind = kind,
+            .array_size_px = dim->array_size_px,
+            .chunk_size_px = dim->chunk_size_px,
+            .shard_size_chunks = dim->shard_size_chunks,
+        };
+        ZARR_OK(
+          ZarrStreamSettings_set_dimension(stream_settings_, i, &dimension));
     }
 
     ZARR_OK(ZarrStreamSettings_set_multiscale(stream_settings_,

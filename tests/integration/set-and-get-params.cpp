@@ -76,6 +76,8 @@ set_and_get_parameters(ZarrStreamSettings* settings)
         .shuffle = 1,
     };
 
+    ZarrDimensionSettings dimension;
+
     ZarrStatus status = ZarrStreamSettings_set_store(
       settings, "store_path", sizeof("store_path"), &s3_settings);
     CHECK_EQ(status, ZarrStatus_Success);
@@ -108,20 +110,60 @@ set_and_get_parameters(ZarrStreamSettings* settings)
     /* Set and get some dimensions */
     CHECK_EQ(ZarrStreamSettings_reserve_dimensions(settings, 5),
              ZarrStatus_Success);
-    CHECK_EQ(ZarrStreamSettings_set_dimension(
-               settings, 4, SIZED("x"), ZarrDimensionType_Space, 10, 5, 2),
+
+    dimension = {
+        .name = "t",
+        .bytes_of_name = sizeof("t"),
+        .kind = ZarrDimensionType_Time,
+        .array_size_px = 50,
+        .chunk_size_px = 25,
+        .shard_size_chunks = 6,
+    };
+    CHECK_EQ(ZarrStreamSettings_set_dimension(settings, 0, &dimension),
              ZarrStatus_Success);
-    CHECK_EQ(ZarrStreamSettings_set_dimension(
-               settings, 3, SIZED("y"), ZarrDimensionType_Space, 20, 10, 3),
+
+    dimension = {
+        .name = "c",
+        .bytes_of_name = sizeof("c"),
+        .kind = ZarrDimensionType_Channel,
+        .array_size_px = 40,
+        .chunk_size_px = 20,
+        .shard_size_chunks = 5,
+    };
+    CHECK_EQ(ZarrStreamSettings_set_dimension(settings, 1, &dimension),
              ZarrStatus_Success);
-    CHECK_EQ(ZarrStreamSettings_set_dimension(
-               settings, 2, SIZED("z"), ZarrDimensionType_Space, 30, 15, 4),
+
+    dimension = {
+        .name = "z",
+        .bytes_of_name = sizeof("z"),
+        .kind = ZarrDimensionType_Space,
+        .array_size_px = 30,
+        .chunk_size_px = 15,
+        .shard_size_chunks = 4,
+    };
+    CHECK_EQ(ZarrStreamSettings_set_dimension(settings, 2, &dimension),
              ZarrStatus_Success);
-    CHECK_EQ(ZarrStreamSettings_set_dimension(
-               settings, 1, SIZED("c"), ZarrDimensionType_Channel, 40, 20, 5),
+
+    dimension = {
+        .name = "y",
+        .bytes_of_name = sizeof("y"),
+        .kind = ZarrDimensionType_Space,
+        .array_size_px = 20,
+        .chunk_size_px = 10,
+        .shard_size_chunks = 3,
+    };
+    CHECK_EQ(ZarrStreamSettings_set_dimension(settings, 3, &dimension),
              ZarrStatus_Success);
-    CHECK_EQ(ZarrStreamSettings_set_dimension(
-               settings, 0, SIZED("t"), ZarrDimensionType_Time, 50, 25, 6),
+
+    dimension = {
+        .name = "x",
+        .bytes_of_name = sizeof("x"),
+        .kind = ZarrDimensionType_Space,
+        .array_size_px = 10,
+        .chunk_size_px = 5,
+        .shard_size_chunks = 2,
+    };
+    CHECK_EQ(ZarrStreamSettings_set_dimension(settings, 4, &dimension),
              ZarrStatus_Success);
 
     CHECK_EQ(ZarrStreamSettings_get_dimension_count(settings), 5);

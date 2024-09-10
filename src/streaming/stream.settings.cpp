@@ -15,6 +15,14 @@
         }                                                                      \
     } while (0)
 
+#define EXPECT_VALID_INDEX(e, ...)                                             \
+    do {                                                                       \
+        if (!(e)) {                                                            \
+            LOG_ERROR(__VA_ARGS__);                                            \
+            return ZarrStatus_InvalidIndex;                                    \
+        }                                                                      \
+    } while (0)
+
 #define ZARR_DIMENSION_MIN 3
 #define ZARR_DIMENSION_MAX 32
 
@@ -277,9 +285,9 @@ ZarrStreamSettings_set_s3_secret_access_key(
 }
 
 ZarrStatus
-ZarrStreamSettings_set_external_metadata(ZarrStreamSettings* settings,
-                                         const char* external_metadata,
-                                         size_t bytes_of_external_metadata)
+ZarrStreamSettings_set_custom_metadata(ZarrStreamSettings* settings,
+                                       const char* external_metadata,
+                                       size_t bytes_of_external_metadata)
 {
     if (!settings) {
         LOG_ERROR("Null pointer: settings");
@@ -409,14 +417,22 @@ ZarrStreamSettings_reserve_dimensions(ZarrStreamSettings* settings,
 ZarrStatus
 ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
                                  size_t index,
-                                 const char* name,
-                                 size_t bytes_of_name,
-                                 ZarrDimensionType kind,
-                                 uint32_t array_size_px,
-                                 uint32_t chunk_size_px,
-                                 uint32_t shard_size_chunks)
+                                 const ZarrDimensionSettings* dimension)
 {
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
+    EXPECT_VALID_ARGUMENT(dimension, "Null pointer: dimension");
+    EXPECT_VALID_INDEX(index < settings->dimensions.size(),
+                       "Invalid index: %zu. Must be less than %zu",
+                       index,
+                       settings->dimensions.size());
+
+    const char* name = dimension->name;
+    size_t bytes_of_name = dimension->bytes_of_name;
+    ZarrDimensionType kind = dimension->kind;
+    size_t array_size_px = dimension->array_size_px;
+    size_t chunk_size_px = dimension->chunk_size_px;
+    size_t shard_size_chunks = dimension->shard_size_chunks;
+
     EXPECT_VALID_ARGUMENT(name, "Null pointer: name");
     EXPECT_VALID_ARGUMENT(
       bytes_of_name > 0, "Invalid name length: %zu", bytes_of_name);

@@ -93,22 +93,28 @@ extern "C"
         size_t bytes_of_secret_access_key;
     } ZarrS3Settings;
 
+    /**
+     * @brief Compression settings for a Zarr array.
+     * @detail The compressor is not the same as the codec. A codec is
+     * a specific implementation of a compression algorithm, while a compressor
+     * is a library that implements one or more codecs.
+     */
     typedef struct
     {
-        ZarrCompressor compressor;
-        ZarrCompressionCodec codec;
-        uint8_t level;
-        uint8_t shuffle;
+        ZarrCompressor compressor; /**< Compressor to use */
+        ZarrCompressionCodec codec; /**< Codec to use */
+        uint8_t level; /**< Compression level */
+        uint8_t shuffle; /**< Whether to shuffle the data before compressing */
     } ZarrCompressionSettings;
 
     typedef struct
     {
-        const char* name;
-        size_t bytes_of_name;
-        ZarrDimensionType kind;
-        uint32_t array_size_px;
-        uint32_t chunk_size_px;
-        uint32_t shard_size_chunks;
+        const char* name; /**< Name of the dimension */
+        size_t bytes_of_name; /**< Length of the name, including null terminator */
+        ZarrDimensionType kind; /**< Type of the dimension */
+        uint32_t array_size_px; /**< Size of the array along this dimension in pixels */
+        uint32_t chunk_size_px; /**< Size of the chunks along this dimension in pixels */
+        uint32_t shard_size_chunks; /**< Number of chunks in a shard along this dimension */
     } ZarrDimensionSettings;
 
 #ifdef __cplusplus
