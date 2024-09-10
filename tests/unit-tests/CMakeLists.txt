@@ -32,8 +32,8 @@ foreach (name ${tests})
             MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
     )
     target_include_directories(${tgt} PRIVATE
-            ${CMAKE_SOURCE_DIR}/src/include
-            ${CMAKE_SOURCE_DIR}/src/internal)
+            ${CMAKE_SOURCE_DIR}/include
+            ${CMAKE_SOURCE_DIR}/src/streaming)
     target_link_libraries(${tgt} PRIVATE
             acquire-zarr
             miniocpp::miniocpp

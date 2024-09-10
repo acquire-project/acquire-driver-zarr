@@ -105,7 +105,7 @@ shard_index_for_chunk(size_t chunk_index,
                       const std::vector<Dimension>& dimensions);
 
 /**
- * @brief Get the internal index of a chunk within a shard.
+ * @brief Get the streaming index of a chunk within a shard.
  * @param chunk_index The index of the chunk.
  * @param dimensions The dimensions of the array.
  * @return The index of the chunk within the shard.
