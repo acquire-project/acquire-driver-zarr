@@ -69,6 +69,13 @@ set_and_get_parameters(ZarrStreamSettings* settings)
         .bytes_of_secret_access_key = sizeof("s3_secret_access_key"),
     };
 
+    ZarrCompressionSettings compression_settings{
+        .compressor = ZarrCompressor_Blosc1,
+        .codec = ZarrCompressionCodec_BloscLZ4,
+        .level = 5,
+        .shuffle = 1,
+    };
+
     ZarrStatus status = ZarrStreamSettings_set_store(
       settings, "store_path", sizeof("store_path"), &s3_settings);
     CHECK_EQ(status, ZarrStatus_Success);
@@ -93,14 +100,10 @@ set_and_get_parameters(ZarrStreamSettings* settings)
              ZarrStatus_Success);
     CHECK_EQ(ZarrStreamSettings_get_data_type(settings), ZarrDataType_float16);
 
-    /* Set and get compressor */
-    CHECK_EQ(ZarrStreamSettings_set_compressor(settings, ZarrCompressor_Blosc1),
-             ZarrStatus_Success);
-
-    /* Set and get compression codec */
-    CHECK_EQ(ZarrStreamSettings_set_compression_codec(
-               settings, ZarrCompressionCodec_BloscLZ4),
-             ZarrStatus_Success);
+    /* Set and get compression settings */
+    CHECK_EQ(
+      ZarrStreamSettings_set_compression(settings, &compression_settings),
+      ZarrStatus_Success);
 
     /* Set and get some dimensions */
     CHECK_EQ(ZarrStreamSettings_reserve_dimensions(settings, 5),

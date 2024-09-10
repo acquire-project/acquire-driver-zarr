@@ -89,11 +89,11 @@ extern "C"
     /**
      * @brief Set store path and S3 settings for the Zarr stream.
      * @param[in, out] settings
-     * @param store_path The store path for the Zarr stream. Directory path when
-     * acquiring to the filesystem, key prefix when acquiring to S3.
-     * @param bytes_of_store_path The length of @p store_path in bytes, including
-     * the null terminator.
-     * @param s3_settings Optional S3 settings. If NULL, the store path is
+     * @param[in] store_path The store path for the Zarr stream. Directory path
+     * when acquiring to the filesystem, key prefix when acquiring to S3.
+     * @param[in] bytes_of_store_path The length of @p store_path in bytes,
+     * including the null terminator.
+     * @param[in] s3_settings Optional S3 settings. If NULL, the store path is
      * assumed to be a directory path.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
@@ -101,6 +101,17 @@ extern "C"
                                             const char* store_path,
                                             size_t bytes_of_store_path,
                                             const ZarrS3Settings* s3_settings);
+
+    /**
+     * @brief Set the data type, compressor, codec, compression_settings level, and
+     * shuffle for the Zarr stream.
+     * @param[in, out] settings The Zarr stream settings struct.
+     * @param[in] compression_settings The compression_settings settings.
+     * @return ZarrStatus_Success on success, or an error code on failure.
+     */
+    ZarrStatus ZarrStreamSettings_set_compression(
+      ZarrStreamSettings* settings,
+      const ZarrCompressionSettings* compression_settings);
 
     /**
      * @brief Set JSON-formatted external metadata for the Zarr stream.
@@ -125,47 +136,6 @@ extern "C"
      */
     ZarrStatus ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
                                                 ZarrDataType data_type);
-
-    /**
-     * @brief Set the compressor for the Zarr stream.
-     * @param[in, out] settings The Zarr stream settings struct.
-     * @param[in] compressor Enum value for the compressor.
-     * @return ZarrStatus_Success on success, or an error code on failure.
-     */
-    ZarrStatus ZarrStreamSettings_set_compressor(ZarrStreamSettings* settings,
-                                                 ZarrCompressor compressor);
-
-    /**
-     * @brief Set the compression codec for the Zarr stream.
-     * @param[in, out] settings The Zarr stream settings struct.
-     * @param[in] codec Enum value for the compression codec.
-     * @return ZarrStatus_Success on success, or an error code on failure.
-     */
-    ZarrStatus ZarrStreamSettings_set_compression_codec(
-      ZarrStreamSettings* settings,
-      ZarrCompressionCodec codec);
-
-    /**
-     * @brief Set the compression level for the Zarr stream.
-     * @param[in, out] settings The Zarr stream settings struct.
-     * @param[in] compression_level A value between 0 and 9. Higher values
-     * indicate higher compression levels. Set to 0 for no compression.
-     * @return ZarrStatus_Success on success, or an error code on failure.
-     */
-    ZarrStatus ZarrStreamSettings_set_compression_level(
-      ZarrStreamSettings* settings,
-      uint8_t compression_level);
-
-    /**
-     * @brief Set the compression shuffle value for the Zarr stream
-     * @param[in, out] settings The Zarr stream settings struct.
-     * @param[in] shuffle A value of 0, 1, or (if using Blosc) 2. 0 indicates
-     * no shuffle, 1 indicates shuffle, and 2 indicates bitshuffle.
-     * @return ZarrStatus_Success on success, or an error code on failure.
-     */
-    ZarrStatus ZarrStreamSettings_set_compression_shuffle(
-      ZarrStreamSettings* settings,
-      uint8_t shuffle);
 
     /**
      * @brief Reserve space for dimensions in the Zarr stream settings struct.

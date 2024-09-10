@@ -574,14 +574,15 @@ sink::Zarr::set(const StorageProperties* props)
 
     // set compression settings
     if (compression_codec_ > ZarrCompressionCodec_None) {
-        ZARR_OK(ZarrStreamSettings_set_compressor(stream_settings_,
-                                                  ZarrCompressor_Blosc1));
-        ZARR_OK(ZarrStreamSettings_set_compression_codec(stream_settings_,
-                                                         compression_codec_));
-        ZARR_OK(ZarrStreamSettings_set_compression_level(stream_settings_,
-                                                         compression_level_));
-        ZARR_OK(ZarrStreamSettings_set_compression_shuffle(stream_settings_,
-                                                           shuffle_));
+        ZarrCompressionSettings compression_settings{
+            .compressor = ZarrCompressor_Blosc1,
+            .codec = compression_codec_,
+            .level = compression_level_,
+            .shuffle = shuffle_,
+        };
+
+        ZARR_OK(ZarrStreamSettings_set_compression(stream_settings_,
+                                                   &compression_settings));
     }
 
     ZARR_OK(ZarrStreamSettings_reserve_dimensions(

@@ -46,24 +46,19 @@ test_ZarrStreamSettings_copy()
               "%d",
               ZarrStatus_Success,
               ZarrStreamSettings_set_data_type(original, ZarrDataType_float32));
+
+    ZarrCompressionSettings compression_settings = {
+        .compressor = ZarrCompressor_Blosc1,
+        .codec = ZarrCompressionCodec_BloscLZ4,
+        .level = 5,
+        .shuffle = 1,
+    };
+
     EXPECT_EQ(
       ZarrStatus,
       "%d",
       ZarrStatus_Success,
-      ZarrStreamSettings_set_compressor(original, ZarrCompressor_Blosc1));
-    EXPECT_EQ(ZarrStatus,
-              "%d",
-              ZarrStatus_Success,
-              ZarrStreamSettings_set_compression_codec(
-                original, ZarrCompressionCodec_BloscLZ4));
-    EXPECT_EQ(ZarrStatus,
-              "%d",
-              ZarrStatus_Success,
-              ZarrStreamSettings_set_compression_level(original, 5));
-    EXPECT_EQ(ZarrStatus,
-              "%d",
-              ZarrStatus_Success,
-              ZarrStreamSettings_set_compression_shuffle(original, 1));
+      ZarrStreamSettings_set_compression(original, &compression_settings));
 
     EXPECT_EQ(ZarrStatus,
               "%d",

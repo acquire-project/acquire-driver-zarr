@@ -196,6 +196,53 @@ ZarrStreamSettings_set_store(ZarrStreamSettings* settings,
 }
 
 ZarrStatus
+ZarrStreamSettings_set_compression(
+  ZarrStreamSettings* settings,
+  const ZarrCompressionSettings* compression_settings)
+{
+    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
+    EXPECT_VALID_ARGUMENT(compression_settings,
+                          "Null pointer: compression_settings");
+
+    auto compressor = compression_settings->compressor;
+    auto codec = compression_settings->codec;
+    auto level = compression_settings->level;
+    auto shuffle = compression_settings->shuffle;
+
+    EXPECT_VALID_ARGUMENT(
+      compressor < ZarrCompressorCount, "Invalid compressor: %d", compressor);
+    EXPECT_VALID_ARGUMENT(
+      codec < ZarrCompressionCodecCount, "Invalid codec: %d", codec);
+
+    if (compressor != ZarrCompressor_None) {
+        EXPECT_VALID_ARGUMENT(codec != ZarrCompressionCodec_None,
+                              "Must specify a codec when using a compressor");
+    }
+
+    EXPECT_VALID_ARGUMENT(
+      level >= 0 && level <= 9,
+      "Invalid level: %d. Must be between 0 (no "
+      "compression_settings) and 9 (maximum compression_settings).",
+      level);
+    EXPECT_VALID_ARGUMENT(shuffle == BLOSC_NOSHUFFLE ||
+                            shuffle == BLOSC_SHUFFLE ||
+                            shuffle == BLOSC_BITSHUFFLE,
+                          "Invalid shuffle: %d. Must be %d (no shuffle), %d "
+                          "(byte shuffle), or %d (bit shuffle)",
+                          shuffle,
+                          BLOSC_NOSHUFFLE,
+                          BLOSC_SHUFFLE,
+                          BLOSC_BITSHUFFLE);
+
+    settings->compressor = compressor;
+    settings->compression_codec = codec;
+    settings->compression_level = level;
+    settings->compression_shuffle = shuffle;
+
+    return ZarrStatus_Success;
+}
+
+ZarrStatus
 ZarrStreamSettings_set_s3_endpoint(ZarrStreamSettings* settings,
                                    const char* s3_endpoint,
                                    size_t bytes_of_s3_endpoint)

@@ -187,11 +187,13 @@ setup()
 
     ZarrStreamSettings_set_data_type(settings, ZarrDataType_uint16);
 
-    ZarrStreamSettings_set_compressor(settings, ZarrCompressor_Blosc1);
-    ZarrStreamSettings_set_compression_codec(settings,
-                                             ZarrCompressionCodec_BloscLZ4);
-    ZarrStreamSettings_set_compression_level(settings, 3);
-    ZarrStreamSettings_set_compression_shuffle(settings, 1);
+    ZarrCompressionSettings compression_settings{
+        .compressor = ZarrCompressor_Blosc1,
+        .codec = ZarrCompressionCodec_BloscLZ4,
+        .level = 3,
+        .shuffle = 1,
+    };
+    ZarrStreamSettings_set_compression(settings, &compression_settings);
 
     ZarrStreamSettings_reserve_dimensions(settings, 5);
     ZarrStreamSettings_set_dimension(settings,
@@ -363,6 +365,7 @@ verify_array_metadata(const nlohmann::json& meta)
            dtype.c_str());
 
     const auto& compressor = meta["compressor"];
+    EXPECT(!compressor.is_null(), "Expected compressor to be non-null");
 
     const auto codec = compressor["codec"].get<std::string>();
     EXPECT(codec == "https://purl.org/zarr/spec/codec/blosc/1.0",
