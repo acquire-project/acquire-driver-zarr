@@ -1,6 +1,7 @@
 #ifndef H_ACQUIRE_ZARR_TYPES_V0
 #define H_ACQUIRE_ZARR_TYPES_V0
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -33,13 +34,13 @@ extern "C"
 
     typedef enum
     {
-        LogLevel_Debug,
-        LogLevel_Info,
-        LogLevel_Warning,
-        LogLevel_Error,
-        LogLevel_None,
-        LogLevelCount
-    } LogLevel;
+        ZarrLogLevel_Debug,
+        ZarrLogLevel_Info,
+        ZarrLogLevel_Warning,
+        ZarrLogLevel_Error,
+        ZarrLogLevel_None,
+        ZarrLogLevelCount
+    } ZarrLogLevel;
 
     typedef enum
     {
@@ -101,21 +102,25 @@ extern "C"
      */
     typedef struct
     {
-        ZarrCompressor compressor; /**< Compressor to use */
+        ZarrCompressor compressor;  /**< Compressor to use */
         ZarrCompressionCodec codec; /**< Codec to use */
-        uint8_t level; /**< Compression level */
+        uint8_t level;              /**< Compression level */
         uint8_t shuffle; /**< Whether to shuffle the data before compressing */
     } ZarrCompressionSettings;
 
     typedef struct
     {
         const char* name; /**< Name of the dimension */
-        size_t bytes_of_name; /**< Length of the name, including null terminator */
+        size_t
+          bytes_of_name; /**< Length of the name, including null terminator */
         ZarrDimensionType kind; /**< Type of the dimension */
-        uint32_t array_size_px; /**< Size of the array along this dimension in pixels */
-        uint32_t chunk_size_px; /**< Size of the chunks along this dimension in pixels */
-        uint32_t shard_size_chunks; /**< Number of chunks in a shard along this dimension */
-    } ZarrDimensionSettings;
+        uint32_t array_size_px; /**< Size of the array along this dimension in
+                                   pixels */
+        uint32_t chunk_size_px; /**< Size of the chunks along this dimension in
+                                   pixels */
+        uint32_t shard_size_chunks; /**< Number of chunks in a shard along this
+                                       dimension */
+    } ZarrDimensionProperties;
 
 #ifdef __cplusplus
 }

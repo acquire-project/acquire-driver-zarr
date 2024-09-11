@@ -475,6 +475,7 @@ sink::Zarr::Zarr(ZarrVersion version,
 sink::Zarr::~Zarr()
 {
     stop();
+    ZarrStreamSettings_destroy(stream_settings_);
 }
 
 void
@@ -610,7 +611,7 @@ sink::Zarr::set(const StorageProperties* props)
                                          std::to_string(dim->kind));
         }
 
-        ZarrDimensionSettings dimension = {
+        ZarrDimensionProperties dimension = {
             .name = dim->name.str,
             .bytes_of_name = dim->name.nbytes,
             .kind = kind,
@@ -640,39 +641,22 @@ sink::Zarr::get(StorageProperties* props) const
     std::string access_key_id, secret_access_key;
     std::string external_metadata_json;
 
-    uint8_t multiscale;
+    bool multiscale;
     size_t ndims;
 
-    if (stream_) {
-        s3_endpoint = ZarrStream_get_s3_endpoint(stream_);
-        s3_bucket = ZarrStream_get_s3_bucket_name(stream_);
-        store_path = ZarrStream_get_store_path(stream_);
+    store_path = ZarrStreamSettings_get_store_path(stream_settings_);
 
-        access_key_id = ZarrStream_get_s3_access_key_id(stream_);
-        secret_access_key = ZarrStream_get_s3_secret_access_key(stream_);
+    auto s3_settings = ZarrStreamSettings_get_s3_settings(stream_settings_);
+    s3_endpoint = s3_settings.endpoint;
+    s3_bucket = s3_settings.bucket_name;
+    access_key_id = s3_settings.access_key_id;
+    secret_access_key = s3_settings.secret_access_key;
 
-        external_metadata_json = ZarrStream_get_external_metadata(stream_);
+    external_metadata_json =
+      ZarrStreamSettings_get_custom_metadata(stream_settings_);
 
-        ndims = ZarrStream_get_dimension_count(stream_);
-
-        multiscale = ZarrStream_get_multiscale(stream_);
-    } else { // stream_settings_
-        s3_endpoint = ZarrStreamSettings_get_s3_endpoint(stream_settings_);
-        s3_bucket = ZarrStreamSettings_get_s3_bucket_name(stream_settings_);
-        store_path = ZarrStreamSettings_get_store_path(stream_settings_);
-
-        external_metadata_json =
-          ZarrStreamSettings_get_external_metadata(stream_settings_);
-
-        access_key_id =
-          ZarrStreamSettings_get_s3_access_key_id(stream_settings_);
-        secret_access_key =
-          ZarrStreamSettings_get_s3_secret_access_key(stream_settings_);
-
-        ndims = ZarrStreamSettings_get_dimension_count(stream_settings_);
-
-        multiscale = ZarrStreamSettings_get_multiscale(stream_settings_);
-    }
+    ndims = ZarrStreamSettings_get_dimension_count(stream_settings_);
+    multiscale = ZarrStreamSettings_get_multiscale(stream_settings_);
 
     std::string uri;
     if (!s3_endpoint.empty() && !s3_bucket.empty() && !store_path.empty()) {
@@ -708,32 +692,20 @@ sink::Zarr::get(StorageProperties* props) const
     }
 
     for (auto i = 0; i < ndims; ++i) {
-        char name[64];
-        ZarrDimensionType kind_;
+        ZarrDimensionType dimension_type;
         size_t array_size_px, chunk_size_px, shard_size_chunks;
 
-        if (stream_) {
-            ZARR_OK(ZarrStream_get_dimension(stream_,
-                                             i,
-                                             name,
-                                             sizeof(name),
-                                             &kind_,
-                                             &array_size_px,
-                                             &chunk_size_px,
-                                             &shard_size_chunks));
-        } else {
-            ZARR_OK(ZarrStreamSettings_get_dimension(stream_settings_,
-                                                     i,
-                                                     name,
-                                                     sizeof(name),
-                                                     &kind_,
-                                                     &array_size_px,
-                                                     &chunk_size_px,
-                                                     &shard_size_chunks));
-        }
+        ZarrDimensionProperties dimension =
+          ZarrStreamSettings_get_dimension(stream_settings_, i);
+
+        std::string dim_name = dimension.name;
+        dimension_type = dimension.kind;
+        array_size_px = dimension.array_size_px;
+        chunk_size_px = dimension.chunk_size_px;
+        shard_size_chunks = dimension.shard_size_chunks;
 
         DimensionType kind;
-        switch (kind_) {
+        switch (dimension_type) {
             case ZarrDimensionType_Space:
                 kind = DimensionType_Space;
                 break;
@@ -748,10 +720,12 @@ sink::Zarr::get(StorageProperties* props) const
                 break;
             default:
                 throw std::runtime_error("Invalid dimension type: " +
-                                         std::to_string(kind_));
+                                         std::to_string(dimension_type));
         }
 
-        const size_t nbytes = strnlen(name, sizeof(name)) + 1;
+        const char* name = dim_name.empty() ? nullptr : dim_name.c_str();
+        const size_t nbytes = name ? dim_name.size() + 1 : 0;
+
         CHECK(storage_properties_set_dimension(props,
                                                i,
                                                name,
@@ -791,7 +765,6 @@ sink::Zarr::start()
 
     stream_ = ZarrStream_create(stream_settings_, version_);
     CHECK(stream_);
-    stream_settings_ = nullptr;
 
     state = DeviceState_Running;
 }
@@ -853,29 +826,15 @@ sink::Zarr::reserve_image_shape(const ImageShape* shape)
 
     // check that the configured dimensions match the image shape
     {
-        char name[64];
-        ZarrDimensionType kind;
-        size_t array_size_px, chunk_size_px, shard_size_chunks;
+        ZarrDimensionProperties y_dim =
+          ZarrStreamSettings_get_dimension(stream_settings_, ndims - 2);
+        EXPECT(y_dim.array_size_px == shape->dims.height,
+               "Image height mismatch.");
 
-        ZARR_OK(ZarrStreamSettings_get_dimension(stream_settings_,
-                                                 ndims - 2,
-                                                 name,
-                                                 sizeof(name),
-                                                 &kind,
-                                                 &array_size_px,
-                                                 &chunk_size_px,
-                                                 &shard_size_chunks));
-        EXPECT(array_size_px == shape->dims.height, "Image height mismatch.");
-
-        ZARR_OK(ZarrStreamSettings_get_dimension(stream_settings_,
-                                                 ndims - 1,
-                                                 name,
-                                                 sizeof(name),
-                                                 &kind,
-                                                 &array_size_px,
-                                                 &chunk_size_px,
-                                                 &shard_size_chunks));
-        EXPECT(array_size_px == shape->dims.width, "Image width mismatch.");
+        ZarrDimensionProperties x_dim =
+          ZarrStreamSettings_get_dimension(stream_settings_, ndims - 1);
+        EXPECT(x_dim.array_size_px == shape->dims.width,
+               "Image width mismatch.");
     }
 
     ZarrDataType kind;

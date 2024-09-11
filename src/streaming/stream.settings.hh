@@ -1,5 +1,7 @@
 #pragma once
 
+#include "zarr.types.h"
+
 #include <cstddef> // size_t
 #include <cstdint> // uint8_t
 #include <string>
@@ -7,8 +9,8 @@
 
 struct ZarrDimension_s
 {
-    std::string name; /* Name of the dimension */
-    uint8_t kind;     /* Type of dimension */
+    std::string name;       /* Name of the dimension */
+    ZarrDimensionType kind; /* Type of dimension */
 
     uint32_t array_size_px;     /* Size of the array along this dimension */
     uint32_t chunk_size_px;     /* Size of a chunk along this dimension */
@@ -25,14 +27,14 @@ struct ZarrStreamSettings_s
     std::string s3_access_key_id;     /* Access key ID for the S3 service */
     std::string s3_secret_access_key; /* Secret access key for the S3 service */
 
-    std::string external_metadata; /* JSON formatted external metadata for the
+    std::string custom_metadata; /* JSON formatted external metadata for the
                                       base array */
 
-    uint8_t dtype; /* Data type of the base array */
+    ZarrDataType dtype; /* Data type of the base array */
 
-    uint8_t compressor;          /* Compression library to use */
-    uint8_t compression_codec;   /* Compression codec to use */
-    uint8_t compression_level;   /* Compression level to use */
+    ZarrCompressor compressor;              /* Compression library to use */
+    ZarrCompressionCodec compression_codec; /* Compression codec to use */
+    uint8_t compression_level;              /* Compression level to use */
     uint8_t compression_shuffle; /* Whether and how to shuffle the data before
                                   compressing */
 

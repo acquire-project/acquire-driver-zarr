@@ -16,35 +16,38 @@
 #define SIZED(name) name, sizeof(name)
 
 bool
-check_preconditions(ZarrStreamSettings* stream)
+check_preconditions(ZarrStreamSettings* settings)
 {
     std::string str_param_value;
+    ZarrS3Settings s3_settings;
+    ZarrCompressionSettings compression_settings;
 
-    str_param_value = ZarrStreamSettings_get_store_path(stream);
+    str_param_value = ZarrStreamSettings_get_store_path(settings);
     CHECK(str_param_value.empty());
 
-    str_param_value = ZarrStreamSettings_get_s3_endpoint(stream);
+    s3_settings = ZarrStreamSettings_get_s3_settings(settings);
+    str_param_value = s3_settings.endpoint;
     CHECK(str_param_value.empty());
 
-    str_param_value = ZarrStreamSettings_get_s3_bucket_name(stream);
+    str_param_value = s3_settings.bucket_name;
     CHECK(str_param_value.empty());
 
-    str_param_value = ZarrStreamSettings_get_s3_access_key_id(stream);
+    str_param_value = s3_settings.access_key_id;
     CHECK(str_param_value.empty());
 
-    str_param_value = ZarrStreamSettings_get_s3_secret_access_key(stream);
+    str_param_value = s3_settings.secret_access_key;
     CHECK(str_param_value.empty());
 
-    CHECK_EQ(ZarrStreamSettings_get_data_type(stream), ZarrDataType_uint8);
+    CHECK_EQ(ZarrStreamSettings_get_data_type(settings), ZarrDataType_uint8);
 
-    CHECK_EQ(ZarrStreamSettings_get_compressor(stream), ZarrCompressor_None);
+    compression_settings = ZarrStreamSettings_get_compression(settings);
+    CHECK_EQ(compression_settings.compressor, ZarrCompressor_None);
 
-    CHECK_EQ(ZarrStreamSettings_get_compression_codec(stream),
-             ZarrCompressionCodec_None);
+    CHECK_EQ(compression_settings.codec, ZarrCompressionCodec_None);
 
-    CHECK_EQ(ZarrStreamSettings_get_dimension_count(stream), 0);
+    CHECK_EQ(ZarrStreamSettings_get_dimension_count(settings), 0);
 
-    CHECK_EQ(ZarrStreamSettings_get_multiscale(stream), 0);
+    CHECK_EQ(ZarrStreamSettings_get_multiscale(settings), 0);
 
     return true;
 
@@ -58,7 +61,7 @@ set_and_get_parameters(ZarrStreamSettings* settings)
     std::string str_param_value;
 
     /* Set and get store */
-    ZarrS3Settings s3_settings{
+    ZarrS3Settings s3_settings_in{
         .endpoint = "s3_endpoint",
         .bytes_of_endpoint = sizeof("s3_endpoint"),
         .bucket_name = "s3_bucket_name",
@@ -68,33 +71,36 @@ set_and_get_parameters(ZarrStreamSettings* settings)
         .secret_access_key = "s3_secret_access_key",
         .bytes_of_secret_access_key = sizeof("s3_secret_access_key"),
     };
+    ZarrS3Settings s3_settings_out;
 
-    ZarrCompressionSettings compression_settings{
+    ZarrCompressionSettings compression_settings_in{
         .compressor = ZarrCompressor_Blosc1,
         .codec = ZarrCompressionCodec_BloscLZ4,
         .level = 5,
         .shuffle = 1,
     };
+    ZarrCompressionSettings compression_settings_out;
 
-    ZarrDimensionSettings dimension;
+    ZarrDimensionProperties dimension;
 
     ZarrStatus status = ZarrStreamSettings_set_store(
-      settings, "store_path", sizeof("store_path"), &s3_settings);
+      settings, "store_path", sizeof("store_path"), &s3_settings_in);
     CHECK_EQ(status, ZarrStatus_Success);
 
     str_param_value = ZarrStreamSettings_get_store_path(settings);
     CHECK_EQ(str_param_value, "store_path");
 
-    str_param_value = ZarrStreamSettings_get_s3_endpoint(settings);
+    s3_settings_out = ZarrStreamSettings_get_s3_settings(settings);
+    str_param_value = s3_settings_out.endpoint;
     CHECK_EQ(str_param_value, "s3_endpoint");
 
-    str_param_value = ZarrStreamSettings_get_s3_bucket_name(settings);
+    str_param_value = s3_settings_out.bucket_name;
     CHECK_EQ(str_param_value, "s3_bucket_name");
 
-    str_param_value = ZarrStreamSettings_get_s3_access_key_id(settings);
+    str_param_value = s3_settings_out.access_key_id;
     CHECK_EQ(str_param_value, "s3_access_key_id");
 
-    str_param_value = ZarrStreamSettings_get_s3_secret_access_key(settings);
+    str_param_value = s3_settings_out.secret_access_key;
     CHECK_EQ(str_param_value, "s3_secret_access_key");
 
     /* Set and get data type */
@@ -104,7 +110,7 @@ set_and_get_parameters(ZarrStreamSettings* settings)
 
     /* Set and get compression settings */
     CHECK_EQ(
-      ZarrStreamSettings_set_compression(settings, &compression_settings),
+      ZarrStreamSettings_set_compression(settings, &compression_settings_in),
       ZarrStatus_Success);
 
     /* Set and get some dimensions */
@@ -168,86 +174,42 @@ set_and_get_parameters(ZarrStreamSettings* settings)
 
     CHECK_EQ(ZarrStreamSettings_get_dimension_count(settings), 5);
 
-    char name[64];
-    ZarrDimensionType kind;
-    size_t array_size_px;
-    size_t chunk_size_px;
-    size_t shard_size_chunks;
+    ZarrDimensionProperties dimension_out;
 
-    CHECK_EQ(ZarrStreamSettings_get_dimension(settings,
-                                              0,
-                                              name,
-                                              64,
-                                              &kind,
-                                              &array_size_px,
-                                              &chunk_size_px,
-                                              &shard_size_chunks),
-             ZarrStatus_Success);
-    CHECK_EQ(std::string(name), "t");
-    CHECK_EQ(kind, ZarrDimensionType_Time);
-    CHECK_EQ(array_size_px, 50);
-    CHECK_EQ(chunk_size_px, 25);
-    CHECK_EQ(shard_size_chunks, 6);
+    dimension_out = ZarrStreamSettings_get_dimension(settings, 0);
+    CHECK_EQ(std::string(dimension_out.name), "t");
+    CHECK_EQ(dimension_out.kind, ZarrDimensionType_Time);
+    CHECK_EQ(dimension_out.array_size_px, 50);
+    CHECK_EQ(dimension_out.chunk_size_px, 25);
+    CHECK_EQ(dimension_out.shard_size_chunks, 6);
 
-    CHECK_EQ(ZarrStreamSettings_get_dimension(settings,
-                                              1,
-                                              name,
-                                              64,
-                                              &kind,
-                                              &array_size_px,
-                                              &chunk_size_px,
-                                              &shard_size_chunks),
-             ZarrStatus_Success);
-    CHECK_EQ(std::string(name), "c");
-    CHECK_EQ(kind, ZarrDimensionType_Channel);
-    CHECK_EQ(array_size_px, 40);
-    CHECK_EQ(chunk_size_px, 20);
-    CHECK_EQ(shard_size_chunks, 5);
+    dimension_out = ZarrStreamSettings_get_dimension(settings, 1);
+    CHECK_EQ(std::string(dimension_out.name), "c");
+    CHECK_EQ(dimension_out.kind, ZarrDimensionType_Channel);
+    CHECK_EQ(dimension_out.array_size_px, 40);
+    CHECK_EQ(dimension_out.chunk_size_px, 20);
+    CHECK_EQ(dimension_out.shard_size_chunks, 5);
 
-    CHECK_EQ(ZarrStreamSettings_get_dimension(settings,
-                                              2,
-                                              name,
-                                              64,
-                                              &kind,
-                                              &array_size_px,
-                                              &chunk_size_px,
-                                              &shard_size_chunks),
-             ZarrStatus_Success);
-    CHECK_EQ(std::string(name), "z");
-    CHECK_EQ(kind, ZarrDimensionType_Space);
-    CHECK_EQ(array_size_px, 30);
-    CHECK_EQ(chunk_size_px, 15);
-    CHECK_EQ(shard_size_chunks, 4);
+    dimension_out = ZarrStreamSettings_get_dimension(settings, 2);
+    CHECK_EQ(std::string(dimension_out.name), "z");
+    CHECK_EQ(dimension_out.kind, ZarrDimensionType_Space);
+    CHECK_EQ(dimension_out.array_size_px, 30);
+    CHECK_EQ(dimension_out.chunk_size_px, 15);
+    CHECK_EQ(dimension_out.shard_size_chunks, 4);
 
-    CHECK_EQ(ZarrStreamSettings_get_dimension(settings,
-                                              3,
-                                              name,
-                                              64,
-                                              &kind,
-                                              &array_size_px,
-                                              &chunk_size_px,
-                                              &shard_size_chunks),
-             ZarrStatus_Success);
-    CHECK_EQ(std::string(name), "y");
-    CHECK_EQ(kind, ZarrDimensionType_Space);
-    CHECK_EQ(array_size_px, 20);
-    CHECK_EQ(chunk_size_px, 10);
-    CHECK_EQ(shard_size_chunks, 3);
+    dimension_out = ZarrStreamSettings_get_dimension(settings, 3);
+    CHECK_EQ(std::string(dimension_out.name), "y");
+    CHECK_EQ(dimension_out.kind, ZarrDimensionType_Space);
+    CHECK_EQ(dimension_out.array_size_px, 20);
+    CHECK_EQ(dimension_out.chunk_size_px, 10);
+    CHECK_EQ(dimension_out.shard_size_chunks, 3);
 
-    CHECK_EQ(ZarrStreamSettings_get_dimension(settings,
-                                              4,
-                                              name,
-                                              64,
-                                              &kind,
-                                              &array_size_px,
-                                              &chunk_size_px,
-                                              &shard_size_chunks),
-             ZarrStatus_Success);
-    CHECK_EQ(std::string(name), "x");
-    CHECK_EQ(kind, ZarrDimensionType_Space);
-    CHECK_EQ(array_size_px, 10);
-    CHECK_EQ(chunk_size_px, 5);
-    CHECK_EQ(shard_size_chunks, 2);
+    dimension_out = ZarrStreamSettings_get_dimension(settings, 4);
+    CHECK_EQ(std::string(dimension_out.name), "x");
+    CHECK_EQ(dimension_out.kind, ZarrDimensionType_Space);
+    CHECK_EQ(dimension_out.array_size_px, 10);
+    CHECK_EQ(dimension_out.chunk_size_px, 5);
+    CHECK_EQ(dimension_out.shard_size_chunks, 2);
 
     /* Set and get multiscale */
     CHECK_EQ(ZarrStreamSettings_set_multiscale(settings, 10),
@@ -263,19 +225,19 @@ Error:
 int
 main()
 {
-    ZarrStreamSettings* stream = ZarrStreamSettings_create();
-    if (!stream) {
-        fprintf(stderr, "Failed to create Zarr stream\n");
+    ZarrStreamSettings* settings = ZarrStreamSettings_create();
+    if (!settings) {
+        fprintf(stderr, "Failed to create Zarr settings\n");
         return 1;
     }
 
     int retval = 0;
 
-    CHECK(check_preconditions(stream));
-    CHECK(set_and_get_parameters(stream));
+    CHECK(check_preconditions(settings));
+    CHECK(set_and_get_parameters(settings));
 
 Finalize:
-    ZarrStreamSettings_destroy(stream);
+    ZarrStreamSettings_destroy(settings);
     return retval;
 Error:
     retval = 1;

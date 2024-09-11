@@ -9,7 +9,7 @@
 
 #define SIZED(str) str, sizeof(str)
 #define DIM(name_, kind_, array_size, chunk_size, shard_size)                  \
-    (ZarrDimensionSettings)                                                    \
+    (ZarrDimensionProperties)                                                    \
     {                                                                          \
         .name = name_, .bytes_of_name = sizeof(name_), .kind = kind_,          \
         .array_size_px = array_size, .chunk_size_px = chunk_size,              \
@@ -64,7 +64,7 @@ setup()
 
     ZarrStreamSettings_reserve_dimensions(settings, 5);
 
-    ZarrDimensionSettings dimension;
+    ZarrDimensionProperties dimension;
     dimension =
       DIM("t", ZarrDimensionType_Time, array_timepoints, chunk_timepoints, 0);
     ZarrStreamSettings_set_dimension(settings, 0, &dimension);
@@ -84,7 +84,10 @@ setup()
     dimension = DIM("x", ZarrDimensionType_Space, array_width, chunk_width, 0);
     ZarrStreamSettings_set_dimension(settings, 4, &dimension);
 
-    return ZarrStream_create(settings, ZarrVersion_2);
+    auto* stream = ZarrStream_create(settings, ZarrVersion_2);
+    ZarrStreamSettings_destroy(settings);
+
+    return stream;
 }
 
 void
@@ -294,7 +297,7 @@ verify()
 int
 main()
 {
-    Zarr_set_log_level(LogLevel_Debug);
+    Zarr_set_log_level(ZarrLogLevel_Debug);
 
     auto* stream = setup();
     std::vector<int32_t> frame(array_width * array_height, 0);

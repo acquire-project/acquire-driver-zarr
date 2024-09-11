@@ -23,24 +23,6 @@
         }                                                                      \
     } while (0)
 
-#define ZARR_DIMENSION_MIN 3
-#define ZARR_DIMENSION_MAX 32
-
-#define SETTINGS_SET_STRING(settings, member, bytes_of_member)                 \
-    do {                                                                       \
-        if (!(settings)) {                                                     \
-            LOG_ERROR("Null pointer: %s", #settings);                          \
-            return ZarrStatus_InvalidArgument;                                 \
-        }                                                                      \
-        if (!(member)) {                                                       \
-            LOG_ERROR("Null pointer: %s", #member);                            \
-            return ZarrStatus_InvalidArgument;                                 \
-        }                                                                      \
-        size_t nbytes = strnlen(member, bytes_of_member);                      \
-        settings->member = { member, nbytes };                                 \
-        return ZarrStatus_Success;                                             \
-    } while (0)
-
 #define SETTINGS_GET_STRING(settings, member)                                  \
     do {                                                                       \
         if (!settings) {                                                       \
@@ -51,6 +33,9 @@
     } while (0)
 
 namespace {
+const size_t zarr_dimension_min = 3;
+const size_t zarr_dimension_max = 32;
+
 const char*
 compressor_to_string(ZarrCompressor compressor)
 {
@@ -79,7 +64,7 @@ compression_codec_to_string(ZarrCompressionCodec codec)
     }
 }
 
-inline std::string
+std::string
 trim(const char* s, size_t bytes_of_s)
 {
     // trim left
@@ -136,7 +121,7 @@ ZarrStreamSettings_copy(const ZarrStreamSettings* settings)
     copy->s3_bucket_name = settings->s3_bucket_name;
     copy->s3_access_key_id = settings->s3_access_key_id;
     copy->s3_secret_access_key = settings->s3_secret_access_key;
-    copy->external_metadata = settings->external_metadata;
+    copy->custom_metadata = settings->custom_metadata;
     copy->dtype = settings->dtype;
     copy->compressor = settings->compressor;
     copy->compression_codec = settings->compression_codec;
@@ -251,40 +236,6 @@ ZarrStreamSettings_set_compression(
 }
 
 ZarrStatus
-ZarrStreamSettings_set_s3_endpoint(ZarrStreamSettings* settings,
-                                   const char* s3_endpoint,
-                                   size_t bytes_of_s3_endpoint)
-{
-    SETTINGS_SET_STRING(settings, s3_endpoint, bytes_of_s3_endpoint);
-}
-
-ZarrStatus
-ZarrStreamSettings_set_s3_bucket_name(ZarrStreamSettings* settings,
-                                      const char* s3_bucket_name,
-                                      size_t bytes_of_s3_bucket_name)
-{
-    SETTINGS_SET_STRING(settings, s3_bucket_name, bytes_of_s3_bucket_name);
-}
-
-ZarrStatus
-ZarrStreamSettings_set_s3_access_key_id(ZarrStreamSettings* settings,
-                                        const char* s3_access_key_id,
-                                        size_t bytes_of_s3_access_key_id)
-{
-    SETTINGS_SET_STRING(settings, s3_access_key_id, bytes_of_s3_access_key_id);
-}
-
-ZarrStatus
-ZarrStreamSettings_set_s3_secret_access_key(
-  ZarrStreamSettings* settings,
-  const char* s3_secret_access_key,
-  size_t bytes_of_s3_secret_access_key)
-{
-    SETTINGS_SET_STRING(
-      settings, s3_secret_access_key, bytes_of_s3_secret_access_key);
-}
-
-ZarrStatus
 ZarrStreamSettings_set_custom_metadata(ZarrStreamSettings* settings,
                                        const char* external_metadata,
                                        size_t bytes_of_external_metadata)
@@ -295,7 +246,7 @@ ZarrStreamSettings_set_custom_metadata(ZarrStreamSettings* settings,
     }
 
     if (!external_metadata) {
-        LOG_ERROR("Null pointer: external_metadata");
+        LOG_ERROR("Null pointer: custom_metadata");
         return ZarrStatus_InvalidArgument;
     }
 
@@ -307,7 +258,7 @@ ZarrStreamSettings_set_custom_metadata(ZarrStreamSettings* settings,
 
     size_t nbytes = strnlen(external_metadata, bytes_of_external_metadata);
     if (nbytes < 2) {
-        settings->external_metadata = "{}";
+        settings->custom_metadata = "{}";
         return ZarrStatus_Success;
     }
 
@@ -322,7 +273,7 @@ ZarrStreamSettings_set_custom_metadata(ZarrStreamSettings* settings,
         LOG_ERROR("Invalid JSON: %s", external_metadata);
         return ZarrStatus_InvalidArgument;
     }
-    settings->external_metadata = val.dump();
+    settings->custom_metadata = val.dump();
 
     return ZarrStatus_Success;
 }
@@ -340,75 +291,16 @@ ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
 }
 
 ZarrStatus
-ZarrStreamSettings_set_compressor(ZarrStreamSettings* settings,
-                                  ZarrCompressor compressor)
-{
-    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
-    EXPECT_VALID_ARGUMENT(
-      compressor < ZarrCompressorCount, "Invalid compressor: %d", compressor);
-
-    settings->compressor = compressor;
-    return ZarrStatus_Success;
-}
-
-ZarrStatus
-ZarrStreamSettings_set_compression_codec(ZarrStreamSettings* settings,
-                                         ZarrCompressionCodec codec)
-{
-    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
-    EXPECT_VALID_ARGUMENT(codec < ZarrCompressionCodecCount,
-                          "Invalid codec: %s",
-                          compression_codec_to_string(codec));
-
-    settings->compression_codec = codec;
-    return ZarrStatus_Success;
-}
-
-ZarrStatus
-ZarrStreamSettings_set_compression_level(ZarrStreamSettings* settings,
-                                         uint8_t level)
-{
-    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
-    EXPECT_VALID_ARGUMENT(level >= 0 && level <= 9,
-                          "Invalid level: %d. Must be between 0 (no "
-                          "compression) and 9 (maximum compression).",
-                          level);
-
-    settings->compression_level = level;
-
-    return ZarrStatus_Success;
-}
-
-ZarrStatus
-ZarrStreamSettings_set_compression_shuffle(ZarrStreamSettings* settings,
-                                           uint8_t shuffle)
-{
-    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
-    EXPECT_VALID_ARGUMENT(shuffle == BLOSC_NOSHUFFLE ||
-                            shuffle == BLOSC_SHUFFLE ||
-                            shuffle == BLOSC_BITSHUFFLE,
-                          "Invalid shuffle: %d. Must be %d (no shuffle), %d "
-                          "(byte shuffle), or %d (bit shuffle)",
-                          shuffle,
-                          BLOSC_NOSHUFFLE,
-                          BLOSC_SHUFFLE,
-                          BLOSC_BITSHUFFLE);
-
-    settings->compression_shuffle = shuffle;
-    return ZarrStatus_Success;
-}
-
-ZarrStatus
 ZarrStreamSettings_reserve_dimensions(ZarrStreamSettings* settings,
                                       size_t count)
 {
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
-    EXPECT_VALID_ARGUMENT(count >= ZARR_DIMENSION_MIN &&
-                            count <= ZARR_DIMENSION_MAX,
+    EXPECT_VALID_ARGUMENT(count >= zarr_dimension_min &&
+                            count <= zarr_dimension_max,
                           "Invalid count: %zu. Count must be between %d and %d",
                           count,
-                          ZARR_DIMENSION_MIN,
-                          ZARR_DIMENSION_MAX);
+                          zarr_dimension_min,
+                          zarr_dimension_max);
 
     settings->dimensions.resize(count);
     return ZarrStatus_Success;
@@ -417,7 +309,7 @@ ZarrStreamSettings_reserve_dimensions(ZarrStreamSettings* settings,
 ZarrStatus
 ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
                                  size_t index,
-                                 const ZarrDimensionSettings* dimension)
+                                 const ZarrDimensionProperties* dimension)
 {
     EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
     EXPECT_VALID_ARGUMENT(dimension, "Null pointer: dimension");
@@ -485,34 +377,31 @@ ZarrStreamSettings_get_store_path(const ZarrStreamSettings* settings)
     SETTINGS_GET_STRING(settings, store_path);
 }
 
-const char*
-ZarrStreamSettings_get_s3_endpoint(const ZarrStreamSettings* settings)
+ZarrS3Settings
+ZarrStreamSettings_get_s3_settings(const ZarrStreamSettings* settings)
 {
-    SETTINGS_GET_STRING(settings, s3_endpoint);
+    if (!settings) {
+        LOG_WARNING("Null pointer: settings. Returning empty S3 settings.");
+        return {};
+    }
+
+    ZarrS3Settings s3_settings = {
+        settings->s3_endpoint.c_str(),
+        settings->s3_endpoint.length(),
+        settings->s3_bucket_name.c_str(),
+        settings->s3_bucket_name.length(),
+        settings->s3_access_key_id.c_str(),
+        settings->s3_access_key_id.length(),
+        settings->s3_secret_access_key.c_str(),
+        settings->s3_secret_access_key.length(),
+    };
+    return s3_settings;
 }
 
 const char*
-ZarrStreamSettings_get_s3_bucket_name(const ZarrStreamSettings* settings)
+ZarrStreamSettings_get_custom_metadata(const ZarrStreamSettings* settings)
 {
-    SETTINGS_GET_STRING(settings, s3_bucket_name);
-}
-
-const char*
-ZarrStreamSettings_get_s3_access_key_id(const ZarrStreamSettings* settings)
-{
-    SETTINGS_GET_STRING(settings, s3_access_key_id);
-}
-
-const char*
-ZarrStreamSettings_get_s3_secret_access_key(const ZarrStreamSettings* settings)
-{
-    SETTINGS_GET_STRING(settings, s3_secret_access_key);
-}
-
-const char*
-ZarrStreamSettings_get_external_metadata(const ZarrStreamSettings* settings)
-{
-    SETTINGS_GET_STRING(settings, external_metadata);
+    SETTINGS_GET_STRING(settings, custom_metadata);
 }
 
 ZarrDataType
@@ -525,45 +414,21 @@ ZarrStreamSettings_get_data_type(const ZarrStreamSettings* settings)
     return static_cast<ZarrDataType>(settings->dtype);
 }
 
-ZarrCompressor
-ZarrStreamSettings_get_compressor(const ZarrStreamSettings* settings)
+ZarrCompressionSettings
+ZarrStreamSettings_get_compression(const ZarrStreamSettings* settings)
 {
     if (!settings) {
-        LOG_WARNING("Null pointer: settings. Returning ZarrCompressor_None.");
-        return ZarrCompressor_None;
+        LOG_WARNING("Null pointer: settings. Returning empty compression.");
+        return {};
     }
-    return static_cast<ZarrCompressor>(settings->compressor);
-}
 
-ZarrCompressionCodec
-ZarrStreamSettings_get_compression_codec(const ZarrStreamSettings* settings)
-{
-    if (!settings) {
-        LOG_WARNING(
-          "Null pointer: settings. Returning ZarrCompressionCodec_None.");
-        return ZarrCompressionCodec_None;
-    }
-    return static_cast<ZarrCompressionCodec>(settings->compression_codec);
-}
-
-uint8_t
-ZarrStreamSettings_get_compression_level(const ZarrStreamSettings* settings)
-{
-    if (!settings) {
-        LOG_WARNING("Null pointer: settings. Returning 0.");
-        return 0;
-    }
-    return settings->compression_level;
-}
-
-uint8_t
-ZarrStreamSettings_get_compression_shuffle(const ZarrStreamSettings* settings)
-{
-    if (!settings) {
-        LOG_WARNING("Null pointer: settings. Returning 0.");
-        return 0;
-    }
-    return settings->compression_shuffle;
+    ZarrCompressionSettings compression = {
+        .compressor = settings->compressor,
+        .codec = static_cast<ZarrCompressionCodec>(settings->compression_codec),
+        .level = settings->compression_level,
+        .shuffle = settings->compression_shuffle,
+    };
+    return compression;
 }
 
 size_t
@@ -576,56 +441,44 @@ ZarrStreamSettings_get_dimension_count(const ZarrStreamSettings* settings)
     return settings->dimensions.size();
 }
 
-ZarrStatus
+ZarrDimensionProperties
 ZarrStreamSettings_get_dimension(const ZarrStreamSettings* settings,
-                                 size_t index,
-                                 char* name,
-                                 size_t bytes_of_name,
-                                 ZarrDimensionType* kind,
-                                 size_t* array_size_px,
-                                 size_t* chunk_size_px,
-                                 size_t* shard_size_chunks)
+                                 size_t index)
 {
-    EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
-    EXPECT_VALID_ARGUMENT(name, "Null pointer: name");
-    EXPECT_VALID_ARGUMENT(kind, "Null pointer: kind");
-    EXPECT_VALID_ARGUMENT(array_size_px, "Null pointer: array_size_px");
-    EXPECT_VALID_ARGUMENT(chunk_size_px, "Null pointer: chunk_size_px");
-    EXPECT_VALID_ARGUMENT(shard_size_chunks, "Null pointer: shard_size_chunks");
+    if (!settings) {
+        LOG_WARNING("Null pointer: settings. Returning empty dimension.");
+        return {};
+    }
 
     if (index >= settings->dimensions.size()) {
         LOG_ERROR("Invalid index: %zu. Must be less than %zu",
                   index,
                   settings->dimensions.size());
-        return ZarrStatus_InvalidIndex;
+        return {};
     }
 
-    const struct ZarrDimension_s* dim = &settings->dimensions[index];
+    const auto& dim = settings->dimensions[index];
 
-    if (bytes_of_name < dim->name.length() + 1) {
-        LOG_ERROR("Insufficient buffer size: %zu. Need at least %zu",
-                  bytes_of_name,
-                  dim->name.length() + 1);
-        return ZarrStatus_Overflow;
-    }
+    ZarrDimensionProperties dimension = {
+        .name = dim.name.c_str(),
+        .bytes_of_name = dim.name.size() + 1,
+        .kind = dim.kind,
+        .array_size_px = dim.array_size_px,
+        .chunk_size_px = dim.chunk_size_px,
+        .shard_size_chunks = dim.shard_size_chunks,
+    };
 
-    memcpy(name, dim->name.c_str(), dim->name.length() + 1);
-    *kind = static_cast<ZarrDimensionType>(dim->kind);
-    *array_size_px = dim->array_size_px;
-    *chunk_size_px = dim->chunk_size_px;
-    *shard_size_chunks = dim->shard_size_chunks;
-
-    return ZarrStatus_Success;
+    return dimension;
 }
 
-uint8_t
+bool
 ZarrStreamSettings_get_multiscale(const ZarrStreamSettings* settings)
 {
     if (!settings) {
-        LOG_WARNING("Null pointer: settings. Returning 0.");
-        return 0;
+        LOG_WARNING("Null pointer: settings. Returning false.");
+        return false;
     }
-    return static_cast<uint8_t>(settings->multiscale);
+    return settings->multiscale;
 }
 
 /* Internal functions */

@@ -17,7 +17,7 @@ test_ZarrStreamSettings_copy()
     const char* s3_bucket_name = "my-bucket";
     const char* s3_access_key_id = "access_key_123";
     const char* s3_secret_access_key = "secret_key_456";
-    const char* external_metadata = "{\"key\":\"value\"}";
+    const char* custom_metadata = "{\"key\":\"value\"}";
 
     ZarrS3Settings s3_settings = {
         .endpoint = s3_endpoint,
@@ -40,7 +40,7 @@ test_ZarrStreamSettings_copy()
               "%d",
               ZarrStatus_Success,
               ZarrStreamSettings_set_custom_metadata(
-                original, external_metadata, strlen(external_metadata) + 1));
+                original, custom_metadata, strlen(custom_metadata) + 1));
 
     EXPECT_EQ(ZarrStatus,
               "%d",
@@ -65,7 +65,7 @@ test_ZarrStreamSettings_copy()
               ZarrStatus_Success,
               ZarrStreamSettings_reserve_dimensions(original, 3));
 
-    ZarrDimensionSettings dimension = {
+    ZarrDimensionProperties dimension = {
         .name = "z",
         .bytes_of_name = strlen("z") + 1,
         .kind = ZarrDimensionType_Space,
@@ -115,58 +115,46 @@ test_ZarrStreamSettings_copy()
 
     // Verify copied settings
     EXPECT_STR_EQ(store_path, ZarrStreamSettings_get_store_path(copy));
-    EXPECT_STR_EQ(s3_endpoint, ZarrStreamSettings_get_s3_endpoint(copy));
-    EXPECT_STR_EQ(s3_bucket_name, ZarrStreamSettings_get_s3_bucket_name(copy));
-    EXPECT_STR_EQ(s3_access_key_id,
-                  ZarrStreamSettings_get_s3_access_key_id(copy));
-    EXPECT_STR_EQ(s3_secret_access_key,
-                  ZarrStreamSettings_get_s3_secret_access_key(copy));
-    EXPECT_STR_EQ(external_metadata,
-                  ZarrStreamSettings_get_external_metadata(copy));
+
+    ZarrS3Settings s3_settings_copy = ZarrStreamSettings_get_s3_settings(copy);
+    EXPECT_STR_EQ(s3_endpoint, s3_settings_copy.endpoint);
+    EXPECT_STR_EQ(s3_bucket_name, s3_settings_copy.bucket_name);
+    EXPECT_STR_EQ(s3_access_key_id, s3_settings_copy.access_key_id);
+    EXPECT_STR_EQ(s3_secret_access_key, s3_settings_copy.secret_access_key);
+
+    EXPECT_STR_EQ(custom_metadata,
+                  ZarrStreamSettings_get_custom_metadata(copy));
 
     EXPECT_EQ(ZarrDataType,
               "%d",
               ZarrDataType_float32,
               ZarrStreamSettings_get_data_type(copy));
+
+    ZarrCompressionSettings compression_settings_copy =
+      ZarrStreamSettings_get_compression(copy);
     EXPECT_EQ(ZarrCompressor,
               "%d",
               ZarrCompressor_Blosc1,
-              ZarrStreamSettings_get_compressor(copy));
+              compression_settings_copy.compressor);
     EXPECT_EQ(ZarrCompressionCodec,
               "%d",
               ZarrCompressionCodec_BloscLZ4,
-              ZarrStreamSettings_get_compression_codec(copy));
-    EXPECT_EQ(uint8_t, "%u", 5, ZarrStreamSettings_get_compression_level(copy));
-    EXPECT_EQ(
-      uint8_t, "%u", 1, ZarrStreamSettings_get_compression_shuffle(copy));
+              compression_settings_copy.codec);
+    EXPECT_EQ(uint8_t, "%u", 5, compression_settings_copy.level);
+    EXPECT_EQ(uint8_t, "%u", 1, compression_settings_copy.shuffle);
 
     EXPECT_EQ(size_t, "%zu", 3, ZarrStreamSettings_get_dimension_count(copy));
 
     // Check dimensions
     for (size_t i = 0; i < 3; ++i) {
-        char name[3];
-        size_t bytes_of_name = sizeof(name);
-        ZarrDimensionType kind;
-        size_t array_size_px, chunk_size_px, shard_size_chunks;
-
-        EXPECT_EQ(ZarrStatus,
-                  "%d",
-                  ZarrStatus_Success,
-                  ZarrStreamSettings_get_dimension(copy,
-                                                   i,
-                                                   name,
-                                                   bytes_of_name,
-                                                   &kind,
-                                                   &array_size_px,
-                                                   &chunk_size_px,
-                                                   &shard_size_chunks));
+        auto dim = ZarrStreamSettings_get_dimension(copy, i);
 
         const char* expected_name = (i == 0) ? "z" : (i == 1) ? "y" : "x";
-        EXPECT_STR_EQ(expected_name, name);
-        EXPECT_EQ(ZarrDimensionType, "%d", ZarrDimensionType_Space, kind);
-        EXPECT_EQ(size_t, "%zu", (i + 1) * 100, array_size_px);
-        EXPECT_EQ(size_t, "%zu", (i + 1) * 10, chunk_size_px);
-        EXPECT_EQ(size_t, "%zu", 1, shard_size_chunks);
+        EXPECT_STR_EQ(expected_name, dim.name);
+        EXPECT_EQ(ZarrDimensionType, "%d", ZarrDimensionType_Space, dim.kind);
+        EXPECT_EQ(size_t, "%zu", (i + 1) * 100, dim.array_size_px);
+        EXPECT_EQ(size_t, "%zu", (i + 1) * 10, dim.chunk_size_px);
+        EXPECT_EQ(size_t, "%zu", 1, dim.shard_size_chunks);
     }
 
     EXPECT_EQ(uint8_t, "%u", 1, ZarrStreamSettings_get_multiscale(copy));

@@ -66,7 +66,7 @@ check_json()
 int
 main()
 {
-    Logger::set_log_level(LogLevel_Debug);
+    Logger::set_log_level(ZarrLogLevel_Debug);
 
     int retval = 1;
 
