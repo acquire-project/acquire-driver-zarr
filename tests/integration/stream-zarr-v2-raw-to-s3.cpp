@@ -8,7 +8,6 @@
 
 #define SIZED(str) str, sizeof(str)
 #define DIM(name_, kind_, array_size, chunk_size, shard_size)                  \
-    (ZarrDimensionProperties)                                                    \
     {                                                                          \
         .name = name_, .bytes_of_name = sizeof(name_), .kind = kind_,          \
         .array_size_px = array_size, .chunk_size_px = chunk_size,              \

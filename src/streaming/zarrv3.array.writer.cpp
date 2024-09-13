@@ -35,8 +35,6 @@ sample_type_to_dtype(ZarrDataType t)
             return "int32";
         case ZarrDataType_int64:
             return "int64";
-        case ZarrDataType_float16:
-            return "float16";
         case ZarrDataType_float32:
             return "float32";
         case ZarrDataType_float64:

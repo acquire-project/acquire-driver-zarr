@@ -33,8 +33,6 @@ sample_type_to_dtype(ZarrDataType t)
             return dtype_prefix + "i4";
         case ZarrDataType_int64:
             return dtype_prefix + "i8";
-        case ZarrDataType_float16:
-            return dtype_prefix + "f2";
         case ZarrDataType_float32:
             return dtype_prefix + "f4";
         case ZarrDataType_float64:

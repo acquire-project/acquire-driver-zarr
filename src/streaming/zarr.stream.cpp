@@ -272,7 +272,6 @@ zarr::bytes_of_type(ZarrDataType data_type)
             return 1;
         case ZarrDataType_int16:
         case ZarrDataType_uint16:
-        case ZarrDataType_float16:
             return 2;
         case ZarrDataType_int32:
         case ZarrDataType_uint32:
@@ -877,10 +876,6 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
         case ZarrDataType_int64:
             scale = scale_image<int64_t>;
             average2 = average_two_frames<int64_t>;
-            break;
-        case ZarrDataType_float16:
-            scale = scale_image<uint16_t>;
-            average2 = average_two_frames<uint16_t>;
             break;
         case ZarrDataType_float32:
             scale = scale_image<float>;

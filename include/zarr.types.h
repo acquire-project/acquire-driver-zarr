@@ -52,7 +52,6 @@ extern "C"
         ZarrDataType_int16,
         ZarrDataType_int32,
         ZarrDataType_int64,
-        ZarrDataType_float16,
         ZarrDataType_float32,
         ZarrDataType_float64,
         ZarrDataTypeCount
