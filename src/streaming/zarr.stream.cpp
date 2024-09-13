@@ -383,6 +383,11 @@ extern "C"
         return Logger::get_log_level();
     }
 
+    uint32_t Zarr_get_api_version()
+    {
+        return 0;
+    }
+
     /* Error handling */
 
     const char* Zarr_get_error_message(ZarrStatus status)
