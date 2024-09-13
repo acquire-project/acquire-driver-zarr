@@ -52,7 +52,7 @@ jobs:
       - name: CMake
         run: |
           cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DBUILD_SHARED_LIBS=${{matrix.build_shared_libs}} -DNOTEST=1
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DBUILD_SHARED_LIBS=${{matrix.build_shared_libs}} -DNOTEST=1 -DBUILD_ACQUIRE_DRIVER_ZARR=OFF
 
       - name: Build
         run: |
