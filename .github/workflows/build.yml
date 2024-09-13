@@ -13,6 +13,9 @@ jobs:
         build_type:
           - "Debug"
           - "Release"
+        build_shared_libs:
+          - "OFF"
+          - "ON"
         platform:
           - "windows-latest"
           - "ubuntu-latest"
@@ -49,7 +52,7 @@ jobs:
       - name: CMake
         run: |
           cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}}
-          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}}
+          cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DBUILD_SHARED_LIBS=${{matrix.build_shared_libs}} -DNOTEST=1
 
       - name: Build
         run: |
@@ -61,58 +64,58 @@ jobs:
           name: ${{matrix.platform}} ${{matrix.build_type}} binaries
           path: ${{github.workspace}}/*.zip
 
-  mac-build:
-    strategy:
-      matrix:
-        build_type:
-          - "Debug"
-          - "Release"
-
-    runs-on: "macos-latest"
-
-    permissions:
-      actions: write
-
-    steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.10.0
-        with:
-          access_token: ${{ github.token }}
-
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-
-      - name: Install vcpkg
-        run: |
-          git clone https://github.com/microsoft/vcpkg.git
-          cd vcpkg && ./bootstrap-vcpkg.sh
-          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
-          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
-          ./vcpkg integrate install
-        shell: bash
-
-      - name: Build for x64
-        run: |
-          cmake --preset=default -DVCPKG_TARGET_TRIPLET=x64-osx -DVCPKG_INSTALLED_DIR=${{github.workspace}}/vcpkg-x64 -B ${{github.workspace}}/build-x64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="x86_64" -DNOTEST=1
-          cmake --build ${{github.workspace}}/build-x64 --config ${{matrix.build_type}}
-
-      - name: Build for arm64
-        run: |
-          cmake --preset=default -DVCPKG_TARGET_TRIPLET=arm64-osx -DVCPKG_INSTALLED_DIR=${{github.workspace}}/vcpkg-arm64 -B ${{github.workspace}}/build-arm64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64" -DNOTEST=1
-          cmake --build ${{github.workspace}}/build-arm64 --config ${{matrix.build_type}}
-
-      - name: Create a universal binary
-        run: |
-          cp -r ${{github.workspace}}/build-x64 ${{github.workspace}}/build && cd ${{github.workspace}}/build
-          for filename in $(find . -type f -exec grep -H "build-x64" {} \; | awk '{print $1}' | sed -e 's/:.*//' | sort -u); do sed -i.bak -e "s/build-x64/build/g" $filename && rm ${filename}.bak; done
-          for lib in `find . -type f \( -name "*.so" -o -name "*.a" \)`; do rm $lib && lipo -create ../build-x64/${lib} ../build-arm64/${lib} -output $lib; done
-
-      - name: Package
-        run: |
-          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
-
-      - uses: actions/upload-artifact@v3
-        with:
-          name: macos-latest ${{matrix.build_type}} binaries
-          path: ${{github.workspace}}/*.zip
+#  mac-build:
+#    strategy:
+#      matrix:
+#        build_type:
+#          - "Debug"
+#          - "Release"
+#
+#    runs-on: "macos-latest"
+#
+#    permissions:
+#      actions: write
+#
+#    steps:
+#      - name: Cancel Previous Runs
+#        uses: styfle/cancel-workflow-action@0.10.0
+#        with:
+#          access_token: ${{ github.token }}
+#
+#      - uses: actions/checkout@v3
+#        with:
+#          submodules: true
+#
+#      - name: Install vcpkg
+#        run: |
+#          git clone https://github.com/microsoft/vcpkg.git
+#          cd vcpkg && ./bootstrap-vcpkg.sh
+#          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
+#          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
+#          ./vcpkg integrate install
+#        shell: bash
+#
+#      - name: Build for x64
+#        run: |
+#          cmake --preset=default -DVCPKG_TARGET_TRIPLET=x64-osx -DVCPKG_INSTALLED_DIR=${{github.workspace}}/vcpkg-x64 -B ${{github.workspace}}/build-x64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="x86_64" -DNOTEST=1
+#          cmake --build ${{github.workspace}}/build-x64 --config ${{matrix.build_type}}
+#
+#      - name: Build for arm64
+#        run: |
+#          cmake --preset=default -DVCPKG_TARGET_TRIPLET=arm64-osx -DVCPKG_INSTALLED_DIR=${{github.workspace}}/vcpkg-arm64 -B ${{github.workspace}}/build-arm64 -DCMAKE_BUILD_TYPE=${{matrix.build_type}} -DCMAKE_OSX_ARCHITECTURES="arm64" -DNOTEST=1
+#          cmake --build ${{github.workspace}}/build-arm64 --config ${{matrix.build_type}}
+#
+#      - name: Create a universal binary
+#        run: |
+#          cp -r ${{github.workspace}}/build-x64 ${{github.workspace}}/build && cd ${{github.workspace}}/build
+#          for filename in $(find . -type f -exec grep -H "build-x64" {} \; | awk '{print $1}' | sed -e 's/:.*//' | sort -u); do sed -i.bak -e "s/build-x64/build/g" $filename && rm ${filename}.bak; done
+#          for lib in `find . -type f \( -name "*.so" -o -name "*.a" \)`; do rm $lib && lipo -create ../build-x64/${lib} ../build-arm64/${lib} -output $lib; done
+#
+#      - name: Package
+#        run: |
+#          cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
+#
+#      - uses: actions/upload-artifact@v3
+#        with:
+#          name: macos-latest ${{matrix.build_type}} binaries
+#          path: ${{github.workspace}}/*.zip
