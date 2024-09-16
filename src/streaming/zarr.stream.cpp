@@ -418,8 +418,6 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version)
   , version_(version)
   , error_()
 {
-    settings_.dimensions = std::move(settings->dimensions);
-
     // spin up thread pool
     thread_pool_ = std::make_shared<zarr::ThreadPool>(
       std::thread::hardware_concurrency(),

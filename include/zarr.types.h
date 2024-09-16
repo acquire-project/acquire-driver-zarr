@@ -81,6 +81,9 @@ extern "C"
         ZarrDimensionTypeCount
     } ZarrDimensionType;
 
+    /**
+     * @brief S3 settings for streaming to Zarr.
+     */
     typedef struct
     {
         const char* endpoint;
@@ -107,11 +110,13 @@ extern "C"
         uint8_t shuffle; /**< Whether to shuffle the data before compressing */
     } ZarrCompressionSettings;
 
+    /**
+     * @brief Properties of a dimension of the Zarr array.
+     */
     typedef struct
     {
         const char* name; /**< Name of the dimension */
-        size_t
-          bytes_of_name; /**< Length of the name, including null terminator */
+        size_t bytes_of_name; /**< Bytes in @p name, including null terminator */
         ZarrDimensionType kind; /**< Type of the dimension */
         uint32_t array_size_px; /**< Size of the array along this dimension in
                                    pixels */
