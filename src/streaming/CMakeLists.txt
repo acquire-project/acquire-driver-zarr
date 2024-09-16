@@ -9,12 +9,11 @@ add_library(${tgt}
         zarr.stream.cpp
 )
 
-include(CMakePrintHelpers)
-cmake_print_variables(CMAKE_SOURCE_DIR)
+set(PUBLIC_INCLUDE_DIR ${CMAKE_SOURCE_DIR}/include/)
 
 target_include_directories(${tgt}
         PUBLIC
-        $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
+        $<BUILD_INTERFACE:${PUBLIC_INCLUDE_DIR}>
         PRIVATE
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
 )
@@ -34,7 +33,7 @@ install(TARGETS ${tgt}
 )
 
 # Install public header files
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/include/
+install(DIRECTORY ${PUBLIC_INCLUDE_DIR}
         DESTINATION include
         FILES_MATCHING PATTERN "*.h"
 )

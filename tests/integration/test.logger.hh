@@ -5,10 +5,10 @@
 class Logger
 {
   public:
-    static void set_log_level(LogLevel level);
-    static LogLevel get_log_level();
+    static void set_log_level(ZarrLogLevel level);
+    static ZarrLogLevel get_log_level();
 
-    static std::string log(LogLevel level,
+    static std::string log(ZarrLogLevel level,
                            const char* file,
                            int line,
                            const char* func,
@@ -16,7 +16,7 @@ class Logger
                            ...);
 
   private:
-    static LogLevel current_level;
+    static ZarrLogLevel current_level;
 };
 
 #define LOG_DEBUG(...)                                                         \
@@ -24,9 +24,9 @@ class Logger
 #define LOG_INFO(...)                                                          \
     Logger::log(LogLevel_Info, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define LOG_WARNING(...)                                                       \
-    Logger::log(LogLevel_Warning, __FILE__, __LINE__, __func__, __VA_ARGS__)
+    Logger::log(ZarrLogLevel_Warning, __FILE__, __LINE__, __func__, __VA_ARGS__)
 #define LOG_ERROR(...)                                                         \
-    Logger::log(LogLevel_Error, __FILE__, __LINE__, __func__, __VA_ARGS__)
+    Logger::log(ZarrLogLevel_Error, __FILE__, __LINE__, __func__, __VA_ARGS__)
 
 #define EXPECT(e, ...)                                                         \
     do {                                                                       \

@@ -8,7 +8,7 @@
 struct ZarrStream_s
 {
   public:
-    ZarrStream_s(struct ZarrStreamSettings_s* settings, uint8_t version);
+    ZarrStream_s(struct ZarrStreamSettings_s* settings, ZarrVersion version);
     ~ZarrStream_s() = default;
 
     /**
@@ -19,11 +19,11 @@ struct ZarrStream_s
      */
     size_t append(const void* data, size_t nbytes);
 
-    size_t version() const { return version_; }
+    ZarrVersion version() const { return version_; }
     const ZarrStreamSettings_s& settings() const { return settings_; }
 
   private:
     struct ZarrStreamSettings_s settings_;
-    uint8_t version_;   // Zarr version. 2 or 3.
+    ZarrVersion version_;   // Zarr version. 2 or 3.
     std::string error_; // error message. If nonempty, an error occurred.
 };

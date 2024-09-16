@@ -6,29 +6,29 @@
 #include <iomanip>
 #include <filesystem>
 
-LogLevel Logger::current_level = LogLevel_Info;
+ZarrLogLevel Logger::current_level = ZarrLogLevel_Info;
 
 void
-Logger::set_log_level(LogLevel level)
+Logger::set_log_level(ZarrLogLevel level)
 {
     current_level = level;
 }
 
-LogLevel
+ZarrLogLevel
 Logger::get_log_level()
 {
     return current_level;
 }
 
 std::string
-Logger::log(LogLevel level,
+Logger::log(ZarrLogLevel level,
             const char* file,
             int line,
             const char* func,
             const char* format,
             ...)
 {
-    if (current_level == LogLevel_None || level < current_level) {
+    if (current_level == ZarrLogLevel_None || level < current_level) {
         return {}; // Suppress logs
     }
 
@@ -39,17 +39,17 @@ Logger::log(LogLevel level,
     std::ostream* stream = &std::cout;
 
     switch (level) {
-        case LogLevel_Debug:
+        case ZarrLogLevel_Debug:
             prefix = "[DEBUG] ";
             break;
-        case LogLevel_Info:
+        case ZarrLogLevel_Info:
             prefix = "[INFO] ";
             break;
-        case LogLevel_Warning:
+        case ZarrLogLevel_Warning:
             prefix = "[WARNING] ";
             stream = &std::cerr;
             break;
-        case LogLevel_Error:
+        case ZarrLogLevel_Error:
             prefix = "[ERROR] ";
             stream = &std::cerr;
             break;
