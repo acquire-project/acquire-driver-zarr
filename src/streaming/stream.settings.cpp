@@ -5,7 +5,7 @@
 #include <blosc.h>
 #include <nlohmann/json.hpp>
 
-#include <cstring> // memcpy
+#include <cstring> // memcpy, strnlen
 #include <filesystem>
 
 #define EXPECT_VALID_ARGUMENT(e, ...)                                          \
@@ -93,14 +93,14 @@ validate_s3_settings(const ZarrS3Settings* settings)
 {
     size_t len;
 
-    if (len = strnlen_s(settings->endpoint, settings->bytes_of_endpoint);
+    if (len = strnlen(settings->endpoint, settings->bytes_of_endpoint);
         len == 0) {
         LOG_ERROR("S3 endpoint is empty");
         return false;
     }
 
     // https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html
-    if (len = strnlen_s(settings->bucket_name, settings->bytes_of_bucket_name);
+    if (len = strnlen(settings->bucket_name, settings->bytes_of_bucket_name);
         len < 4 || len > 64) {
         LOG_ERROR("Invalid length for S3 bucket name: %zu. Must be between 3 "
                   "and 63 characters",
@@ -109,13 +109,13 @@ validate_s3_settings(const ZarrS3Settings* settings)
     }
 
     if (len =
-          strnlen_s(settings->access_key_id, settings->bytes_of_access_key_id);
+          strnlen(settings->access_key_id, settings->bytes_of_access_key_id);
         len == 0) {
         LOG_ERROR("S3 access key ID is empty");
         return false;
     }
 
-    if (len = strnlen_s(settings->secret_access_key,
+    if (len = strnlen(settings->secret_access_key,
                         settings->bytes_of_secret_access_key);
         len == 0) {
         LOG_ERROR("S3 secret access key is empty");
