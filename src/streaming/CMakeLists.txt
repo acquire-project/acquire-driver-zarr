@@ -4,6 +4,8 @@ add_library(${tgt}
         macros.hh
         stream.settings.hh
         stream.settings.cpp
+        zarr.stream.hh
+        zarr.stream.cpp
 )
 
 target_include_directories(${tgt}
