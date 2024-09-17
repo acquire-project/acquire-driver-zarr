@@ -22,6 +22,9 @@ set(tests
         zarrv2-writer-write-even
         zarrv2-writer-write-ragged-append-dim
         zarrv2-writer-write-ragged-internal-dim
+        zarrv3-writer-write-even
+        zarrv3-writer-write-ragged-append-dim
+        zarrv3-writer-write-ragged-internal-dim
 )
 
 foreach (name ${tests})

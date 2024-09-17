@@ -26,6 +26,8 @@ add_library(${tgt}
         array.writer.cpp
         zarrv2.array.writer.hh
         zarrv2.array.writer.cpp
+        zarrv3.array.writer.hh
+        zarrv3.array.writer.cpp
 )
 
 target_include_directories(${tgt}
