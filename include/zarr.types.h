@@ -117,7 +117,7 @@ extern "C"
     {
         const char* name; /**< Name of the dimension */
         size_t bytes_of_name; /**< Bytes in @p name, including null terminator */
-        ZarrDimensionType kind; /**< Type of the dimension */
+        ZarrDimensionType type; /**< Type of the dimension */
         uint32_t array_size_px; /**< Size of the array along this dimension in
                                        pixels */
         uint32_t chunk_size_px; /**< Size of the chunks along this dimension in
