@@ -17,6 +17,8 @@ set(tests
         s3-sink-write
         sink-creator-make-metadata-sinks
         sink-creator-make-data-sinks
+        array-writer-downsample-writer-config
+        array-writer-write-frame-to-chunks
 )
 
 foreach (name ${tests})

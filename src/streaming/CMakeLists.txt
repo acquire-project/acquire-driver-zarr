@@ -22,6 +22,8 @@ add_library(${tgt}
         s3.sink.cpp
         sink.creator.hh
         sink.creator.cpp
+        array.writer.hh
+        array.writer.cpp
 )
 
 target_include_directories(${tgt}
