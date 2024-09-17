@@ -5,6 +5,11 @@ set(tests
         get-stream-parameters
         create-stream
         stream-get-settings
+        common-chunk-lattice-index
+        common-tile-group-offset
+        common-chunk-internal-offset
+        common-shard-index-for-chunk
+        common-shard-internal-index
 )
 
 foreach (name ${tests})

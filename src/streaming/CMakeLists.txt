@@ -7,6 +7,8 @@ add_library(${tgt}
         stream.settings.cpp
         zarr.stream.hh
         zarr.stream.cpp
+        zarr.common.hh
+        zarr.common.cpp
 )
 
 target_include_directories(${tgt}
