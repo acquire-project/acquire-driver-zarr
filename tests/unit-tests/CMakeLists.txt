@@ -10,6 +10,9 @@ set(tests
         common-chunk-internal-offset
         common-shard-index-for-chunk
         common-shard-internal-index
+        thread-pool-push-to-job-queue
+        s3-connection-put-object
+        s3-connection-upload-multipart-object
 )
 
 foreach (name ${tests})

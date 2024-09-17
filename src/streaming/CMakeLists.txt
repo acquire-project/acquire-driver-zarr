@@ -9,6 +9,12 @@ add_library(${tgt}
         zarr.stream.cpp
         zarr.common.hh
         zarr.common.cpp
+        blosc.compression.params.hh
+        blosc.compression.params.cpp
+        thread.pool.hh
+        thread.pool.cpp
+        s3.connection.hh
+        s3.connection.cpp
 )
 
 target_include_directories(${tgt}
