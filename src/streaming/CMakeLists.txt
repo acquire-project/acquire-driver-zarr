@@ -15,6 +15,13 @@ add_library(${tgt}
         thread.pool.cpp
         s3.connection.hh
         s3.connection.cpp
+        sink.hh
+        file.sink.hh
+        file.sink.cpp
+        s3.sink.hh
+        s3.sink.cpp
+        sink.creator.hh
+        sink.creator.cpp
 )
 
 target_include_directories(${tgt}
