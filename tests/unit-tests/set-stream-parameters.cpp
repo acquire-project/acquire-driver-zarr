@@ -256,7 +256,6 @@ main()
 
     ZarrStreamSettings* settings = ZarrStreamSettings_create();
     try {
-        CHECK(settings);
         check_preliminaries(settings);
         set_store(settings);
         set_compression(settings);

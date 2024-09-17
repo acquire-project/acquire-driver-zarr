@@ -217,7 +217,6 @@ main()
 
     ZarrStreamSettings* settings = ZarrStreamSettings_create();
     try {
-        CHECK(settings);
         check_preliminaries(settings);
         get_store_path(settings);
         get_s3_settings(settings);
