@@ -18,6 +18,19 @@ extern "C"
     uint32_t Zarr_get_api_version();
 
     /**
+     * @brief Set the log level for the Zarr API.
+     * @param level The log level.
+     * @return ZarrStatus_Success on success, or an error code on failure.
+     */
+    ZarrStatus Zarr_set_log_level(ZarrLogLevel level);
+
+    /**
+     * @brief Get the log level for the Zarr API.
+     * @return The log level for the Zarr API.
+     */
+    ZarrLogLevel Zarr_get_log_level();
+
+    /**
      * @brief Get the message for the given status code.
      * @param status The status code.
      * @return A human-readable status message.
@@ -138,27 +151,73 @@ extern "C"
       const char* external_metadata,
       size_t bytes_of_external_metadata);
 
+    /**
+     * @brief Get the store path for the Zarr stream.
+     * @param settings The Zarr stream settings struct.
+     * @return The store path for the Zarr stream, or NULL on failure.
+     */
     const char* ZarrStreamSettings_get_store_path(
       const ZarrStreamSettings* settings);
 
+    /**
+     * @brief Get the S3 settings for the Zarr stream.
+     * @param settings The Zarr stream settings struct.
+     * @return The S3 settings for the Zarr stream, or an uninitialized struct on
+     * failure.
+     */
     ZarrS3Settings ZarrStreamSettings_get_s3_settings(
       const ZarrStreamSettings* settings);
 
+    /**
+     * @brief Get the compression settings for the Zarr stream.
+     * @param settings The Zarr stream settings struct.
+     * @return The compression settings for the Zarr stream, or an uninitialized
+     * struct on failure.
+     */
     ZarrCompressionSettings ZarrStreamSettings_get_compression(
       const ZarrStreamSettings* settings);
 
+    /**
+     * @brief Get the data type for the Zarr stream.
+     * @param settings The Zarr stream settings struct.
+     * @return The data type for the Zarr stream, or ZarrDataType_uint8 on failure.
+     */
     ZarrDataType ZarrStreamSettings_get_data_type(
       const ZarrStreamSettings* settings);
 
+    /**
+     * @brief Get the number of dimensions in the Zarr stream settings struct.
+     * @param settings The Zarr stream settings struct.
+     * @return The number of dimensions in the Zarr stream settings struct, or 0 on
+     * failure.
+     */
     size_t ZarrStreamSettings_get_dimension_count(
       const ZarrStreamSettings* settings);
 
+    /**
+     * @brief Get the properties for an acquisition dimension.
+     * @param settings The Zarr stream settings struct.
+     * @param index The index of the dimension to get.
+     * @return The properties for the @p index th dimension, or an uninitialized struct on
+     * failure.
+     */
     ZarrDimensionProperties ZarrStreamSettings_get_dimension(
       const ZarrStreamSettings* settings,
       size_t index);
 
+    /**
+     * @brief Get the multiscale flag for the Zarr stream.
+     * @param settings The Zarr stream settings struct.
+     * @return The multiscale flag for the Zarr stream, or false on failure.
+     */
     bool ZarrStreamSettings_get_multiscale(const ZarrStreamSettings* settings);
 
+    /**
+     * @brief Get the JSON-formatted custom metadata for the Zarr stream.
+     * @param settings The Zarr stream settings struct.
+     * @return The JSON-formatted custom metadata for the Zarr stream, or NULL on
+     * failure.
+     */
     const char* ZarrStreamSettings_get_custom_metadata(
       const ZarrStreamSettings* settings);
 
@@ -205,9 +264,6 @@ extern "C"
      * @return A copy of the settings for the Zarr stream.
      */
     ZarrStreamSettings* ZarrStream_get_settings(const ZarrStream* stream);
-
-    ZarrStatus Zarr_set_log_level(ZarrLogLevel level);
-    ZarrLogLevel Zarr_get_log_level();
 
 #ifdef __cplusplus
 }
