@@ -8,6 +8,7 @@
 #include <thread>
 
 ZarrLogLevel Logger::current_level_ = ZarrLogLevel_Info;
+std::mutex Logger::log_mutex_{};
 
 void
 Logger::set_log_level(ZarrLogLevel level)
