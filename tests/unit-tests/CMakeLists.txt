@@ -1,8 +1,10 @@
 set(project acquire-zarr)
 
 set(tests
-    set-stream-parameters
-    get-stream-parameters
+        set-stream-parameters
+        get-stream-parameters
+        create-stream
+        stream-get-settings
 )
 
 foreach (name ${tests})

@@ -196,6 +196,26 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
         return false;
     }
 
+    // we must have at least 3 dimensions
+    if (settings->dimensions.size() < 3) {
+        LOG_ERROR("Invalid number of dimensions: %zu. Must be at least 3",
+                  settings->dimensions.size());
+        return false;
+    }
+
+    // check the final dimension (width), must be space
+    if (settings->dimensions.back().type != ZarrDimensionType_Space) {
+        LOG_ERROR("Last dimension must be of type Space");
+        return false;
+    }
+
+    // check the penultimate dimension (height), must be space
+    if (settings->dimensions[settings->dimensions.size() - 2].type !=
+        ZarrDimensionType_Space) {
+        LOG_ERROR("Second to last dimension must be of type Space");
+        return false;
+    }
+
     // validate the dimensions individually
     for (size_t i = 0; i < settings->dimensions.size(); ++i) {
         if (!validate_dimension(settings->dimensions[i], version, i == 0)) {
