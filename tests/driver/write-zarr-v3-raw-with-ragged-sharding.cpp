@@ -113,11 +113,11 @@ setup(AcquireRuntime* runtime)
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
-                                           SIZED("x") + 1,
-                                           DimensionType_Space,
-                                           frame_width,
-                                           chunk_width,
-                                           shard_width));
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           frames_per_chunk,
+                                           1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
                                            SIZED("y") + 1,
@@ -127,11 +127,11 @@ setup(AcquireRuntime* runtime)
                                            shard_height));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            2,
-                                           SIZED("t") + 1,
-                                           DimensionType_Time,
-                                           0,
-                                           frames_per_chunk,
-                                           1));
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
+                                           shard_width));
 
     props.video[0].camera.settings.binning = 1;
     props.video[0].camera.settings.pixel_type = SampleType_u8;
@@ -239,9 +239,13 @@ validate()
     metadata_path = test_path / "meta" / "root.group.json";
     CHECK(fs::is_regular_file(metadata_path));
 
+    // check the external metadata file
+    metadata_path = test_path / "meta" / "acquire.json";
+    CHECK(fs::is_regular_file(metadata_path));
+
     f = std::ifstream(metadata_path);
     metadata = json::parse(f);
-    CHECK("" == metadata["attributes"]["acquire"]);
+    CHECK(metadata.empty());
 
     // check the array metadata file
     metadata_path = test_path / "meta" / "root" / "0.array.json";
@@ -307,10 +311,10 @@ validate()
 
         for (auto i = 0; i < indices.size(); i += 2) {
             ASSERT_EQ(
-              uint64_t, "%llu", (i / 2) * bytes_per_chunk, indices.at(i));
+              uint64_t, "%zu", (i / 2) * bytes_per_chunk, indices.at(i));
         }
         for (auto i = 1; i < indices.size(); i += 2) {
-            ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(i));
+            ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(i));
         }
     }
 
@@ -336,16 +340,16 @@ validate()
 
         size_t offset = 0;
         for (auto i = 0; i < indices.size(); i += 12) {
-            ASSERT_EQ(uint64_t, "%llu", offset, indices.at(i));
-            ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(i + 1));
+            ASSERT_EQ(uint64_t, "%zu", offset, indices.at(i));
+            ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(i + 1));
             ASSERT_EQ(
-              uint64_t, "%llu", offset + bytes_per_chunk, indices.at(i + 2));
-            ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(i + 3));
+              uint64_t, "%zu", offset + bytes_per_chunk, indices.at(i + 2));
+            ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(i + 3));
 
             // the rest of the indices should be empty
             for (auto j = 4; j < 12; ++j) {
                 ASSERT_EQ(uint64_t,
-                          "%llu",
+                          "%zu",
                           std::numeric_limits<uint64_t>::max(),
                           indices.at(i + j));
             }
@@ -376,14 +380,14 @@ validate()
 
         for (auto i = 0; i < 12; i += 2) {
             ASSERT_EQ(
-              uint64_t, "%llu", (i / 2) * bytes_per_chunk, indices.at(i));
-            ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(i + 1));
+              uint64_t, "%zu", (i / 2) * bytes_per_chunk, indices.at(i));
+            ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(i + 1));
         }
 
         // the rest of the indices should be empty
         for (auto i = 12; i < indices.size(); ++i) {
             ASSERT_EQ(uint64_t,
-                      "%llu",
+                      "%zu",
                       std::numeric_limits<uint64_t>::max(),
                       indices.at(i));
         }
@@ -409,14 +413,14 @@ validate()
         std::vector<uint64_t> indices(2 * chunks_per_full_shard);
         shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
 
-        ASSERT_EQ(uint64_t, "%llu", 0, indices.at(0));
-        ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(1));
-        ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(2));
-        ASSERT_EQ(uint64_t, "%llu", bytes_per_chunk, indices.at(3));
+        ASSERT_EQ(uint64_t, "%zu", 0, indices.at(0));
+        ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(1));
+        ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(2));
+        ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(3));
 
         for (auto i = 4; i < indices.size(); ++i) {
             ASSERT_EQ(uint64_t,
-                      "%llu",
+                      "%zu",
                       std::numeric_limits<uint64_t>::max(),
                       indices.at(i));
         }

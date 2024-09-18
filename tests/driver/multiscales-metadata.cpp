@@ -88,8 +88,6 @@ setup(AcquireRuntime* runtime, const char* filename)
     AcquireProperties props = {};
     OK(acquire_get_configuration(runtime, &props));
 
-    struct PixelScale sample_spacing_um = { .x = 1.0f, .y = 2.0f };
-
     DEVOK(device_manager_select(dm,
                                 DeviceKind_Camera,
                                 SIZED("simulated.*empty.*"),
@@ -105,15 +103,15 @@ setup(AcquireRuntime* runtime, const char* filename)
                                   strlen(filename) + 1,
                                   nullptr,
                                   0,
-                                  sample_spacing_um,
+                                  {1, 1},
                                   3));
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
-                                           SIZED("x") + 1,
+                                           SIZED("z") + 1,
                                            DimensionType_Space,
-                                           frame_width,
-                                           frame_width,
+                                           0,
+                                           chunk_planes,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
@@ -124,10 +122,10 @@ setup(AcquireRuntime* runtime, const char* filename)
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            2,
-                                           SIZED("z") + 1,
+                                           SIZED("x") + 1,
                                            DimensionType_Space,
-                                           0,
-                                           chunk_planes,
+                                           frame_width,
+                                           frame_width,
                                            0));
 
     CHECK(storage_properties_set_enable_multiscale(
@@ -236,8 +234,7 @@ validate()
 {
     CHECK(fs::is_directory(TEST ".zarr"));
 
-    const auto external_metadata_path =
-      fs::path(TEST ".zarr") / "0" / ".zattrs";
+    const auto external_metadata_path = fs::path(TEST ".zarr") / "acquire.json";
     CHECK(fs::is_regular_file(external_metadata_path));
     CHECK(fs::file_size(external_metadata_path) == 2); // "{}"
 
@@ -276,7 +273,7 @@ validate()
 
         const auto& scale = coord_trans["scale"];
         ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[0].get<float>());
-        ASSERT_EQ(float, "%f", 2.0f * std::pow(2.f, i), scale[1].get<float>());
+        ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[1].get<float>());
         ASSERT_EQ(float, "%f", std::pow(2.f, i), scale[2].get<float>());
     }
 

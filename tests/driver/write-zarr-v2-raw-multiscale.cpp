@@ -118,31 +118,31 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
-                                           SIZED("x") + 1,
-                                           DimensionType_Space,
-                                           frame_width,
-                                           chunk_width,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           chunk_planes,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
-                                           SIZED("y") + 1,
-                                           DimensionType_Space,
-                                           frame_height,
-                                           chunk_height,
-                                           0));
-    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           2,
                                            SIZED("c") + 1,
                                            DimensionType_Channel,
                                            1,
                                            1,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           chunk_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            3,
-                                           SIZED("t") + 1,
-                                           DimensionType_Time,
-                                           0,
-                                           chunk_planes,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
                                            0));
 
     CHECK(storage_properties_set_enable_multiscale(
@@ -252,8 +252,7 @@ validate()
 {
     CHECK(fs::is_directory(TEST ".zarr"));
 
-    const auto external_metadata_path =
-      fs::path(TEST ".zarr") / "0" / ".zattrs";
+    const auto external_metadata_path = fs::path(TEST ".zarr") / "acquire.json";
     CHECK(fs::is_regular_file(external_metadata_path));
     CHECK(fs::file_size(external_metadata_path) > 0);
 

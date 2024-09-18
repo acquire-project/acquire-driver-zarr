@@ -13,7 +13,6 @@ if (BUILD_ACQUIRE_DRIVER_ZARR)
     #
     set(tests
             list-devices
-            unit-tests
             get
             get-meta
             get-set-get

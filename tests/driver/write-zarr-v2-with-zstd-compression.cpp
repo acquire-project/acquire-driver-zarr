@@ -105,31 +105,31 @@ acquire(AcquireRuntime* runtime, const char* filename)
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
-                                           SIZED("x") + 1,
-                                           DimensionType_Space,
-                                           frame_width,
-                                           frame_width,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           frames_per_chunk,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
-                                           SIZED("y") + 1,
-                                           DimensionType_Space,
-                                           frame_height,
-                                           frame_height,
-                                           0));
-    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           2,
                                            SIZED("c") + 1,
                                            DimensionType_Channel,
                                            1,
                                            1,
                                            0));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           frame_height,
+                                           0));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            3,
-                                           SIZED("t") + 1,
-                                           DimensionType_Time,
-                                           0,
-                                           frames_per_chunk,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           frame_width,
                                            0));
 
     props.video[0].camera.settings.binning = 1;
@@ -152,8 +152,7 @@ validate()
 {
     CHECK(fs::is_directory(TEST ".zarr"));
 
-    const auto external_metadata_path =
-      fs::path(TEST ".zarr") / "0" / ".zattrs";
+    const auto external_metadata_path = fs::path(TEST ".zarr") / "acquire.json";
     CHECK(fs::is_regular_file(external_metadata_path));
     ASSERT_GT(int, "%d", fs::file_size(external_metadata_path), 0);
 

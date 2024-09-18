@@ -108,34 +108,34 @@ setup(AcquireRuntime* runtime)
                                   0,
                                   (char*)filename,
                                   strlen(filename) + 1,
-                                  nullptr,
-                                  0,
+                                  R"({"hello":"world"})",
+                                  sizeof(R"({"hello":"world"})"),
                                   sample_spacing_um,
                                   4));
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           0,
+                                           3,
                                            SIZED("x") + 1,
                                            DimensionType_Space,
                                            frame_width,
                                            chunk_width,
                                            shard_width));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           1,
+                                           2,
                                            SIZED("y") + 1,
                                            DimensionType_Space,
                                            frame_height,
                                            chunk_height,
                                            shard_height));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           2,
+                                           1,
                                            SIZED("c") + 1,
                                            DimensionType_Channel,
                                            1,
                                            1,
                                            1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           3,
+                                           0,
                                            SIZED("t") + 1,
                                            DimensionType_Time,
                                            0,
@@ -248,9 +248,13 @@ validate()
     metadata_path = test_path / "meta" / "root.group.json";
     CHECK(fs::is_regular_file(metadata_path));
 
+    // check the external metadata file
+    metadata_path = test_path / "meta" / "acquire.json";
+    CHECK(fs::is_regular_file(metadata_path));
+
     f = std::ifstream(metadata_path);
     metadata = json::parse(f);
-    CHECK("" == metadata["attributes"]["acquire"]);
+    CHECK("world" == metadata["hello"]);
 
     // check the array metadata file
     metadata_path = test_path / "meta" / "root" / "0.array.json";
