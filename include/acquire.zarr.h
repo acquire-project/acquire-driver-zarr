@@ -239,6 +239,8 @@ extern "C"
 
     /**
      * @brief Append data to the Zarr stream.
+     * @details This function will block while chunks are compressed and written
+     * to the store. It will return when all data has been written.
      * @param[in, out] stream The Zarr stream struct.
      * @param[in] data The data to append.
      * @param[in] bytes_in The number of bytes in @p data. It should be at least
