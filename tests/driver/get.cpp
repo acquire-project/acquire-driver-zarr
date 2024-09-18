@@ -97,8 +97,8 @@ main()
                 CHECK(props.uri.nbytes == 1);
 
                 CHECK(props.external_metadata_json.str);
-                CHECK(strcmp(props.external_metadata_json.str, "") == 0);
-                CHECK(props.external_metadata_json.nbytes == 1);
+                CHECK(strcmp(props.external_metadata_json.str, "{}") == 0);
+                CHECK(props.external_metadata_json.nbytes == 3);
 
                 CHECK(props.first_frame_id == 0);
 
