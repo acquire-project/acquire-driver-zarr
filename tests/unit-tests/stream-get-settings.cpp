@@ -113,12 +113,15 @@ main()
     }
 
     // cleanup
-    if (fs::is_directory(settings->store_path)) {
-        fs::remove_all(settings->store_path);
+    ZarrStream_destroy(stream);
+
+    std::error_code ec;
+    if (fs::is_directory(settings->store_path) && !fs::remove_all(settings->store_path, ec)) {
+        LOG_ERROR("Failed to remove store path: %s", ec.message().c_str());
     }
+
     ZarrStreamSettings_destroy(settings);
     ZarrStreamSettings_destroy(settings_copy);
-    ZarrStream_destroy(stream);
 
     return retval;
 }

@@ -1,10 +1,18 @@
 #include "macros.hh"
 #include "zarr.stream.hh"
 #include "acquire.zarr.h"
+#include "zarr.common.hh"
+#include "zarrv2.array.writer.hh"
+#include "zarrv3.array.writer.hh"
+#include "sink.creator.hh"
 
 #include <blosc.h>
 
 #include <filesystem>
+
+#ifdef min
+#undef min
+#endif
 
 namespace fs = std::filesystem;
 
@@ -225,6 +233,107 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
 
     return true;
 }
+
+const char*
+dimension_type_to_string(ZarrDimensionType type)
+{
+    switch (type) {
+        case ZarrDimensionType_Time:
+            return "time";
+        case ZarrDimensionType_Channel:
+            return "channel";
+        case ZarrDimensionType_Space:
+            return "space";
+        case ZarrDimensionType_Other:
+            return "other";
+        default:
+            return "(unknown)";
+    }
+}
+
+template<typename T>
+[[nodiscard]]
+uint8_t*
+scale_image(const uint8_t* const src,
+            size_t& bytes_of_src,
+            size_t& width,
+            size_t& height)
+{
+    CHECK(src);
+
+    const size_t bytes_of_frame = width * height * sizeof(T);
+    EXPECT(bytes_of_src >= bytes_of_frame,
+           "Expecting at least %zu bytes, got %zu",
+           bytes_of_frame,
+           bytes_of_src);
+
+    const int downscale = 2;
+    constexpr size_t bytes_of_type = sizeof(T);
+    const double factor = 0.25;
+
+    const auto w_pad = width + (width % downscale);
+    const auto h_pad = height + (height % downscale);
+
+    const auto size_downscaled =
+      static_cast<uint32_t>(w_pad * h_pad * factor * bytes_of_type);
+
+    auto* dst = new uint8_t[size_downscaled];
+    EXPECT(dst,
+           "Failed to allocate %zu bytes for destination frame",
+           size_downscaled);
+
+    memset(dst, 0, size_downscaled);
+
+    size_t dst_idx = 0;
+    for (auto row = 0; row < height; row += downscale) {
+        const bool pad_height = (row == height - 1 && height != h_pad);
+
+        for (auto col = 0; col < width; col += downscale) {
+            size_t src_idx = row * width + col;
+            const bool pad_width = (col == width - 1 && width != w_pad);
+
+            double here = src[src_idx];
+            double right = src[src_idx + (1 - static_cast<int>(pad_width))];
+            double down =
+              src[src_idx + width * (1 - static_cast<int>(pad_height))];
+            double diag =
+              src[src_idx + width * (1 - static_cast<int>(pad_height)) +
+                  (1 - static_cast<int>(pad_width))];
+
+            dst[dst_idx++] =
+              static_cast<T>(factor * (here + right + down + diag));
+        }
+    }
+
+    bytes_of_src = size_downscaled;
+    width = w_pad / 2;
+    height = h_pad / 2;
+
+    return dst;
+}
+
+template<typename T>
+void
+average_two_frames(void* dst_,
+                   size_t bytes_of_dst,
+                   const void* src_,
+                   size_t bytes_of_src)
+{
+    CHECK(dst_);
+    CHECK(src_);
+    EXPECT(bytes_of_dst == bytes_of_src,
+           "Expecting %zu bytes in destination, got %zu",
+           bytes_of_src,
+           bytes_of_dst);
+
+    T* dst = static_cast<T*>(dst_);
+    const T* src = static_cast<const T*>(src_);
+
+    const auto num_pixels = bytes_of_src / sizeof(T);
+    for (auto i = 0; i < num_pixels; ++i) {
+        dst[i] = static_cast<T>(0.5 * (dst[i] + src[i]));
+    }
+}
 } // namespace
 
 /* ZarrStream_s implementation */
@@ -234,7 +343,17 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings,
   : settings_(*settings)
   , version_(version)
   , error_()
+  , frame_buffer_offset_(0)
 {
+    // spin up thread pool
+    thread_pool_ = std::make_shared<zarr::ThreadPool>(
+      std::thread::hardware_concurrency(),
+      [this](const std::string& err) { this->set_error_(err); });
+
+    // allocate a frame buffer
+    frame_buffer_.resize(zarr::bytes_of_frame(
+      settings_.dimensions, static_cast<ZarrDataType>(settings_.dtype)));
+
     // create the data store
     EXPECT(create_store_(), "%s", error_.c_str());
 
@@ -242,7 +361,9 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings,
     EXPECT(create_writers_(), "%s", error_.c_str());
 
     // allocate multiscale frame placeholders
-    create_scaled_frames_();
+    if (settings_.multiscale) {
+        create_scaled_frames_();
+    }
 
     // allocate metadata sinks
     EXPECT(create_metadata_sinks_(), "%s", error_.c_str());
@@ -259,19 +380,78 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings,
 
 ZarrStream_s::~ZarrStream_s()
 {
-    try {
-        // must precede close of chunk file
-        write_group_metadata_();
-    } catch (const std::exception& e) {
-        LOG_ERROR("Error finalizing Zarr stream: %s", e.what());
+    if (!write_group_metadata_()) {
+        LOG_ERROR("Error finalizing Zarr stream: %s", error_.c_str());
+    }
+    metadata_sinks_.clear();
+
+    writers_.clear(); // flush before shutting down thread pool
+    thread_pool_->await_stop();
+
+    for (auto& [_, frame] : scaled_frames_) {
+        if (frame) {
+            delete[] *frame;
+        }
     }
 }
 
 size_t
-ZarrStream::append(const void* data, size_t nbytes)
+ZarrStream::append(const void* data_, size_t nbytes)
 {
-    // TODO (aliddell): implement this
-    return 0;
+    EXPECT(error_.empty(), "Cannot append data: %s", error_.c_str());
+
+    if (0 == nbytes) {
+        return 0;
+    }
+
+    auto* data = static_cast<const uint8_t*>(data_);
+
+    const size_t bytes_of_frame = frame_buffer_.size();
+    size_t bytes_written = 0;
+
+    while (bytes_written < nbytes) {
+        const size_t bytes_remaining = nbytes - bytes_written;
+        if (frame_buffer_offset_ > 0) { // add to / finish a partial frame
+            const size_t bytes_to_copy =
+              std::min(bytes_of_frame - frame_buffer_offset_, bytes_remaining);
+
+            memcpy(frame_buffer_.data() + frame_buffer_offset_,
+                   data + bytes_written,
+                   bytes_to_copy);
+            frame_buffer_offset_ += bytes_to_copy;
+            bytes_written += bytes_to_copy;
+
+            // ready to flush the frame buffer
+            if (frame_buffer_offset_ == bytes_of_frame) {
+                const size_t bytes_written_this_frame =
+                  writers_[0]->write_frame(data, bytes_of_frame);
+                if (bytes_written_this_frame == 0) {
+                    break;
+                }
+
+                bytes_written += bytes_to_copy;
+                data += bytes_to_copy;
+                frame_buffer_offset_ = 0;
+            }
+        } else if (bytes_remaining < bytes_of_frame) { // begin partial frame
+            memcpy(frame_buffer_.data(), data, bytes_remaining);
+            frame_buffer_offset_ = bytes_remaining;
+            bytes_written += bytes_remaining;
+        } else { // at least one full frame
+            const size_t bytes_written_this_frame =
+              writers_[0]->write_frame(data, bytes_of_frame);
+            if (bytes_written_this_frame == 0) {
+                break;
+            }
+
+            write_multiscale_frames_(data, bytes_written_this_frame);
+
+            bytes_written += bytes_written_this_frame;
+            data += bytes_written_this_frame;
+        }
+    }
+
+    return bytes_written;
 }
 
 void
@@ -284,7 +464,26 @@ bool
 ZarrStream_s::create_store_()
 {
     if (is_s3_acquisition(&settings_)) {
-        // TODO (aliddell): implement this
+        // spin up S3 connection pool
+        try {
+            s3_connection_pool_ = std::make_shared<zarr::S3ConnectionPool>(
+              std::thread::hardware_concurrency(),
+              settings_.s3_endpoint,
+              settings_.s3_access_key_id,
+              settings_.s3_secret_access_key);
+        } catch (const std::exception& e) {
+            set_error_("Error creating S3 connection pool: " +
+                       std::string(e.what()));
+            return false;
+        }
+
+        // test the S3 connection
+        auto conn = s3_connection_pool_->get_connection();
+        if (!conn->check_connection()) {
+            set_error_("Failed to connect to S3");
+            return false;
+        }
+        s3_connection_pool_->return_connection(std::move(conn));
     } else {
         if (fs::exists(settings_.store_path)) {
             // remove everything inside the store path
@@ -315,51 +514,276 @@ ZarrStream_s::create_store_()
 bool
 ZarrStream_s::create_writers_()
 {
-    // TODO (aliddell): implement this
+    writers_.clear();
+
+    // construct Blosc compression parameters
+    std::optional<zarr::BloscCompressionParams> blosc_compression_params;
+    if (settings_.compressor == ZarrCompressor_Blosc1) {
+        blosc_compression_params = zarr::BloscCompressionParams(
+          zarr::blosc_codec_to_string(
+            static_cast<ZarrCompressionCodec>(settings_.compression_codec)),
+          settings_.compression_level,
+          settings_.compression_shuffle);
+    }
+
+    std::optional<std::string> bucket_name;
+    if (is_s3_acquisition(&settings_)) {
+        bucket_name = settings_.s3_bucket_name;
+    }
+
+    zarr::ArrayWriterConfig config = {
+        .dimensions = settings_.dimensions,
+        .dtype = static_cast<ZarrDataType>(settings_.dtype),
+        .level_of_detail = 0,
+        .bucket_name = bucket_name,
+        .store_path = settings_.store_path,
+        .compression_params = blosc_compression_params
+    };
+
+    if (version_ == 2) {
+        writers_.push_back(std::make_unique<zarr::ZarrV2ArrayWriter>(
+          config, thread_pool_, s3_connection_pool_));
+    } else {
+        writers_.push_back(std::make_unique<zarr::ZarrV3ArrayWriter>(
+          config, thread_pool_, s3_connection_pool_));
+    }
+
+    if (settings_.multiscale) {
+        zarr::ArrayWriterConfig downsampled_config;
+
+        bool do_downsample = true;
+        while (do_downsample) {
+            do_downsample = downsample(config, downsampled_config);
+
+            if (version_ == 2) {
+                writers_.push_back(std::make_unique<zarr::ZarrV2ArrayWriter>(
+                  downsampled_config, thread_pool_, s3_connection_pool_));
+            } else {
+                writers_.push_back(std::make_unique<zarr::ZarrV3ArrayWriter>(
+                  downsampled_config, thread_pool_, s3_connection_pool_));
+            }
+            //            scaled_frames_.emplace(level++, std::nullopt);
+
+            config = std::move(downsampled_config);
+            downsampled_config = {};
+        }
+    }
+
     return true;
 }
 
 void
 ZarrStream_s::create_scaled_frames_()
 {
-    if (settings_.multiscale) {
-        // TODO (aliddell): implement this
+    for (size_t level = 1; level < writers_.size(); ++level) {
+        scaled_frames_.emplace(level, std::nullopt);
     }
 }
 
 bool
 ZarrStream_s::create_metadata_sinks_()
 {
-    // TODO (aliddell): implement this
+    zarr::SinkCreator creator(thread_pool_, s3_connection_pool_);
+
+    try {
+        if (s3_connection_pool_) {
+            if (!creator.make_metadata_sinks(version_,
+                                             settings_.s3_bucket_name,
+                                             settings_.store_path,
+                                             metadata_sinks_)) {
+                set_error_("Error creating metadata sinks");
+                return false;
+            }
+        } else {
+            if (!creator.make_metadata_sinks(
+                  version_, settings_.store_path, metadata_sinks_)) {
+                set_error_("Error creating metadata sinks");
+                return false;
+            }
+        }
+    } catch (const std::exception& e) {
+        set_error_("Error creating metadata sinks: " + std::string(e.what()));
+        return false;
+    }
+
     return true;
 }
 
 bool
 ZarrStream_s::write_base_metadata_()
 {
-    // TODO (aliddell): implement this
+    nlohmann::json metadata;
+    std::string metadata_key;
+
+    if (version_ == 2) {
+        metadata["multiscales"] = make_multiscale_metadata_();
+
+        metadata_key = ".zattrs";
+    } else {
+        metadata["extensions"] = nlohmann::json::array();
+        metadata["metadata_encoding"] =
+          "https://purl.org/zarr/spec/protocol/core/3.0";
+        metadata["metadata_key_suffix"] = ".json";
+        metadata["zarr_format"] =
+          "https://purl.org/zarr/spec/protocol/core/3.0";
+
+        metadata_key = "zarr.json";
+    }
+
+    const std::unique_ptr<zarr::Sink>& sink = metadata_sinks_.at(metadata_key);
+    if (!sink) {
+        set_error_("Metadata sink '" + metadata_key + "'not found");
+        return false;
+    }
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+
+    if (!sink->write(0, metadata_bytes, metadata_str.size())) {
+        set_error_("Error writing base metadata");
+        return false;
+    }
+
     return true;
 }
 
 bool
 ZarrStream_s::write_group_metadata_()
 {
-    // TODO (aliddell): implement this
+    nlohmann::json metadata;
+    std::string metadata_key;
+
+    if (version_ == 2) {
+        metadata = { { "zarr_format", 2 } };
+
+        metadata_key = ".zgroup";
+    } else {
+        metadata["attributes"]["multiscales"] = make_multiscale_metadata_();
+
+        metadata_key = "meta/root.group.json";
+    }
+
+    const std::unique_ptr<zarr::Sink>& sink = metadata_sinks_.at(metadata_key);
+    if (!sink) {
+        set_error_("Metadata sink '" + metadata_key + "'not found");
+        return false;
+    }
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    if (!sink->write(0, metadata_bytes, metadata_str.size())) {
+        set_error_("Error writing group metadata");
+        return false;
+    }
+
     return true;
 }
 
 bool
 ZarrStream_s::write_external_metadata_()
 {
-    // TODO (aliddell): implement this
+    if (settings_.custom_metadata.empty()) {
+        return true;
+    }
+
+    auto metadata = nlohmann::json::parse(settings_.custom_metadata,
+                                          nullptr, // callback
+                                          false,   // allow exceptions
+                                          true     // ignore comments
+    );
+    std::string metadata_key = "acquire.json";
+
+    if (version_ == 3) {
+        metadata_key = "meta/" + metadata_key;
+    }
+
+    const std::unique_ptr<zarr::Sink>& sink = metadata_sinks_.at(metadata_key);
+    if (!sink) {
+        set_error_("Metadata sink '" + metadata_key + "'not found");
+        return false;
+    }
+
+    const std::string metadata_str = metadata.dump(4);
+    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    if (!sink->write(0, metadata_bytes, metadata_str.size())) {
+        set_error_("Error writing external metadata");
+        return false;
+    }
+
     return true;
 }
 
 nlohmann::json
 ZarrStream_s::make_multiscale_metadata_() const
 {
-    // TODO (aliddell): implement this
-    return {};
+    nlohmann::json multiscales;
+    const auto& dimensions = settings_.dimensions;
+    multiscales[0]["version"] = "0.4";
+
+    auto& axes = multiscales[0]["axes"];
+    for (auto dim = dimensions.begin(); dim != dimensions.end(); ++dim) {
+        std::string type = dimension_type_to_string(dim->type);
+
+        if (dim < dimensions.end() - 2) {
+            axes.push_back({ { "name", dim->name.c_str() }, { "type", type } });
+        } else {
+            axes.push_back({ { "name", dim->name.c_str() },
+                             { "type", type },
+                             { "unit", "micrometer" } });
+        }
+    }
+
+    // spatial multiscale metadata
+    std::vector<double> scales(dimensions.size(), 1.0);
+    multiscales[0]["datasets"] = {
+        {
+          { "path", "0" },
+          { "coordinateTransformations",
+            {
+              {
+                { "type", "scale" },
+                { "scale", scales },
+              },
+            } },
+        },
+    };
+
+    for (auto i = 1; i < writers_.size(); ++i) {
+        scales.clear();
+        scales.push_back(std::pow(2, i)); // append
+        for (auto k = 0; k < dimensions.size() - 3; ++k) {
+            scales.push_back(1.);
+        }
+        scales.push_back(std::pow(2, i)); // y
+        scales.push_back(std::pow(2, i)); // x
+
+        multiscales[0]["datasets"].push_back({
+          { "path", std::to_string(i) },
+          { "coordinateTransformations",
+            {
+              {
+                { "type", "scale" },
+                { "scale", scales },
+              },
+            } },
+        });
+
+        // downsampling metadata
+        multiscales[0]["type"] = "local_mean";
+        multiscales[0]["metadata"] = {
+            { "description",
+              "The fields in the metadata describe how to reproduce this "
+              "multiscaling in scikit-image. The method and its parameters "
+              "are "
+              "given here." },
+            { "method", "skimage.transform.downscale_local_mean" },
+            { "version", "0.21.0" },
+            { "args", "[2]" },
+            { "kwargs", { "cval", 0 } },
+        };
+    }
+
+    return multiscales;
 }
 
 void
@@ -370,7 +794,88 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
         return;
     }
 
-    // TODO (aliddell): implement this
+    std::function<uint8_t*(const uint8_t*, size_t&, size_t&, size_t&)> scale;
+    std::function<void(void*, size_t, const void*, size_t)> average2;
+
+    auto dtype = static_cast<ZarrDataType>(settings_.dtype);
+    switch (dtype) {
+        case ZarrDataType_uint8:
+            scale = scale_image<uint8_t>;
+            average2 = average_two_frames<uint8_t>;
+            break;
+        case ZarrDataType_uint16:
+            scale = scale_image<uint16_t>;
+            average2 = average_two_frames<uint16_t>;
+            break;
+        case ZarrDataType_uint32:
+            scale = scale_image<uint32_t>;
+            average2 = average_two_frames<uint32_t>;
+            break;
+        case ZarrDataType_uint64:
+            scale = scale_image<uint64_t>;
+            average2 = average_two_frames<uint64_t>;
+            break;
+        case ZarrDataType_int8:
+            scale = scale_image<int8_t>;
+            average2 = average_two_frames<int8_t>;
+            break;
+        case ZarrDataType_int16:
+            scale = scale_image<int16_t>;
+            average2 = average_two_frames<int16_t>;
+            break;
+        case ZarrDataType_int32:
+            scale = scale_image<int32_t>;
+            average2 = average_two_frames<int32_t>;
+            break;
+        case ZarrDataType_int64:
+            scale = scale_image<int64_t>;
+            average2 = average_two_frames<int64_t>;
+            break;
+        case ZarrDataType_float32:
+            scale = scale_image<float>;
+            average2 = average_two_frames<float>;
+            break;
+        case ZarrDataType_float64:
+            scale = scale_image<double>;
+            average2 = average_two_frames<double>;
+            break;
+        default:
+            throw std::runtime_error("Invalid data type: " +
+                                     std::to_string(dtype));
+    }
+
+    const auto& dims = settings_.dimensions;
+    size_t frame_width = dims.back().array_size_px;
+    size_t frame_height = dims[dims.size() - 2].array_size_px;
+
+    uint8_t* dst;
+    for (auto i = 1; i < writers_.size(); ++i) {
+        dst = scale(data, bytes_of_data, frame_width, frame_height);
+
+        // bytes_of data is now downscaled
+        // frame_width and frame_height are now the new dimensions
+
+        if (scaled_frames_[i]) {
+            average2(dst, bytes_of_data, *scaled_frames_[i], bytes_of_data);
+            EXPECT(writers_[i]->write_frame(dst, bytes_of_data),
+                   "Failed to write frame to writer %zu",
+                   i);
+
+            // clean up this LOD
+            delete[] *scaled_frames_[i];
+            scaled_frames_[i].reset();
+
+            // set up for next iteration
+            if (i + 1 < writers_.size()) {
+                data = dst;
+            } else {
+                delete[] dst;
+            }
+        } else {
+            scaled_frames_[i] = dst;
+            break;
+        }
+    }
 }
 
 // C API

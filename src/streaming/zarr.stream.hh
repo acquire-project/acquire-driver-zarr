@@ -1,6 +1,10 @@
 #pragma once
 
 #include "stream.settings.hh"
+#include "thread.pool.hh"
+#include "s3.connection.hh"
+#include "sink.hh"
+#include "array.writer.hh"
 
 #include <nlohmann/json.hpp>
 
@@ -28,6 +32,18 @@ struct ZarrStream_s
     struct ZarrStreamSettings_s settings_;
     ZarrVersion version_;   // Zarr version. 2 or 3.
     std::string error_; // error message. If nonempty, an error occurred.
+
+    std::vector<uint8_t> frame_buffer_;
+    size_t frame_buffer_offset_;
+
+    std::shared_ptr<zarr::ThreadPool> thread_pool_;
+    std::shared_ptr<zarr::S3ConnectionPool> s3_connection_pool_;
+
+    std::vector<std::unique_ptr<zarr::ArrayWriter>> writers_;
+    std::unordered_map<std::string, std::unique_ptr<zarr::Sink>>
+      metadata_sinks_;
+
+    std::unordered_map<size_t, std::optional<uint8_t*>> scaled_frames_;
 
     /**
      * @brief Set an error message.
@@ -57,7 +73,7 @@ struct ZarrStream_s
     [[nodiscard]] bool write_external_metadata_();
 
     /** @brief Construct OME metadata pertaining to the multiscale pyramid. */
-    nlohmann::json make_multiscale_metadata_() const;
+    [[nodiscard]] nlohmann::json make_multiscale_metadata_() const;
 
     void write_multiscale_frames_(const uint8_t* data, size_t bytes_of_data);
 };
