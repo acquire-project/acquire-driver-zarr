@@ -1,3 +1,5 @@
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 set(tgt acquire-zarr-logger)
 
 add_library(${tgt}

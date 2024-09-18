@@ -19,6 +19,9 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(NOTEST "Disable all tests" OFF)
+option(BUILD_ACQUIRE_DRIVER_ZARR "Build the Acquire Zarr driver" ON)
+
 add_subdirectory(src)
 add_subdirectory(tests)
 add_subdirectory(examples)
