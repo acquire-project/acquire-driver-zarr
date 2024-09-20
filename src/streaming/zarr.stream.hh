@@ -1,16 +1,42 @@
 #pragma once
 
-#include "stream.settings.hh"
+#include "zarr.types.h"
 
 #include <nlohmann/json.hpp>
 
 #include <cstddef> // size_t
 #include <memory>  // unique_ptr
+#include <optional>
+
+struct ZarrDimension_s
+{
+  public:
+    ZarrDimension_s(const char* name,
+                    ZarrDimensionType type,
+                    uint32_t array_size_px,
+                    uint32_t chunk_size_px,
+                    uint32_t shard_size_chunks)
+      : name(name)
+      , type(type)
+      , array_size_px(array_size_px)
+      , chunk_size_px(chunk_size_px)
+      , shard_size_chunks(shard_size_chunks)
+    {
+    }
+
+    std::string name;       /* Name of the dimension */
+    ZarrDimensionType type; /* Type of dimension */
+
+    uint32_t array_size_px;     /* Size of the array along this dimension */
+    uint32_t chunk_size_px;     /* Size of a chunk along this dimension */
+    uint32_t shard_size_chunks; /* Number of chunks in a shard along this
+                                 * dimension */
+};
 
 struct ZarrStream_s
 {
   public:
-    ZarrStream_s(struct ZarrStreamSettings_s* settings, ZarrVersion version);
+    ZarrStream_s(struct ZarrStreamSettings_s* settings);
     ~ZarrStream_s();
 
     /**
@@ -21,13 +47,39 @@ struct ZarrStream_s
      */
     size_t append(const void* data, size_t nbytes);
 
-    ZarrVersion version() const { return version_; }
-    const ZarrStreamSettings_s& settings() const { return settings_; }
-
   private:
-    struct ZarrStreamSettings_s settings_;
-    ZarrVersion version_;   // Zarr version. 2 or 3.
     std::string error_; // error message. If nonempty, an error occurred.
+
+    ZarrVersion version_;
+
+    std::string store_path_;
+
+    std::optional<std::string> s3_endpoint_;
+    std::optional<std::string> s3_bucket_name_;
+    std::optional<std::string> s3_access_key_id_;
+    std::optional<std::string> s3_secret_access_key_;
+
+    std::string custom_metadata_;
+
+    ZarrDataType dtype_;
+
+    std::optional<ZarrCompressor> compressor_;
+    std::optional<ZarrCompressionCodec> compression_codec_;
+    std::optional<uint8_t> compression_level_;
+    std::optional<uint8_t> compression_shuffle_;
+
+    std::vector<ZarrDimension_s> dimensions_;
+
+    bool multiscale_;
+
+    [[nodiscard]] bool is_s3_acquisition_() const;
+    [[nodiscard]] bool is_compressed_acquisition_() const;
+
+    /**
+     * @brief Copy settings to the stream.
+     * @param settings Struct containing settings to copy.
+     */
+    void commit_settings_(const struct ZarrStreamSettings_s* settings);
 
     /**
      * @brief Set an error message.
