@@ -9,15 +9,15 @@ extern "C"
 
     typedef struct ZarrStreamSettings_s
     {
-        ZarrS3Settings s3_settings;
-        ZarrCompressionSettings compression_settings;
-        ZarrDimensionProperties* dimensions;
-        size_t dimension_count;
-        char* store_path;
-        char* custom_metadata;
-        ZarrDataType data_type;
-        ZarrVersion version;
-        bool multiscale;
+        char* store_path; /**< Path to the store. Filesystem path or S3 key prefix. */
+        char* custom_metadata; /**< JSON-formatted custom metadata to be stored with the dataset. */
+        ZarrS3Settings* s3_settings; /**< Optional S3 settings for the store. */
+        ZarrCompressionSettings* compression_settings; /**< Optional chunk compression settings for the store. */
+        ZarrDimensionProperties* dimensions; /**< The properties of each dimension in the dataset. */
+        size_t dimension_count; /**< The number of dimensions in the dataset. */
+        bool multiscale; /**< Whether to stream to multiple levels of detail. */
+        ZarrDataType data_type; /**< The pixel data type of the dataset. */
+        ZarrVersion version; /**< The version of the Zarr format to use. 2 or 3. */
     } ZarrStreamSettings;
 
     typedef struct ZarrStream_s ZarrStream;
