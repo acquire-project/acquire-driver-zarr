@@ -1,11 +1,20 @@
 #pragma once
 
-#include "stream.settings.hh"
-
 #include <nlohmann/json.hpp>
 
 #include <cstddef> // size_t
 #include <memory>  // unique_ptr
+
+struct ZarrDimension_s
+{
+    std::string name;       /* Name of the dimension */
+    ZarrDimensionType type; /* Type of dimension */
+
+    uint32_t array_size_px;     /* Size of the array along this dimension */
+    uint32_t chunk_size_px;     /* Size of a chunk along this dimension */
+    uint32_t shard_size_chunks; /* Number of chunks in a shard along this
+                                 dimension */
+};
 
 struct ZarrStream_s
 {
@@ -20,8 +29,6 @@ struct ZarrStream_s
      * @return The number of bytes appended.
      */
     size_t append(const void* data, size_t nbytes);
-
-    ZarrVersion version() const { return version_; }
 
   private:
     std::string error_; // error message. If nonempty, an error occurred.

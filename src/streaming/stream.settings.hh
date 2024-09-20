@@ -7,17 +7,6 @@
 #include <string>
 #include <vector>
 
-struct ZarrDimension_s
-{
-    std::string name;       /* Name of the dimension */
-    ZarrDimensionType type; /* Type of dimension */
-
-    uint32_t array_size_px;     /* Size of the array along this dimension */
-    uint32_t chunk_size_px;     /* Size of a chunk along this dimension */
-    uint32_t shard_size_chunks; /* Number of chunks in a shard along this
-                                 dimension */
-};
-
 struct ZarrStreamSettings_s
 {
   public:
