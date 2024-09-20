@@ -231,10 +231,13 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
 
 ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings,
                          ZarrVersion version)
-  : settings_(*settings)
-  , version_(version)
+  : version_(version)
   , error_()
 {
+    if (!validate_settings(settings, version)) {
+        throw std::runtime_error("Invalid Zarr stream settings");
+    }
+
     // create the data store
     EXPECT(create_store_(), "%s", error_.c_str());
 
@@ -286,14 +289,14 @@ ZarrStream_s::create_store_()
     if (is_s3_acquisition(&settings_)) {
         // TODO (aliddell): implement this
     } else {
-        if (fs::exists(settings_.store_path)) {
+        if (fs::exists(settings_.store_path_)) {
             // remove everything inside the store path
             std::error_code ec;
-            fs::remove_all(settings_.store_path, ec);
+            fs::remove_all(settings_.store_path_, ec);
 
             if (ec) {
                 set_error_("Failed to remove existing store path '" +
-                           settings_.store_path + "': " + ec.message());
+                           settings_.store_path_ + "': " + ec.message());
                 return false;
             }
         }
@@ -301,9 +304,9 @@ ZarrStream_s::create_store_()
         // create the store path
         {
             std::error_code ec;
-            if (!fs::create_directories(settings_.store_path, ec)) {
+            if (!fs::create_directories(settings_.store_path_, ec)) {
                 set_error_("Failed to create store path '" +
-                           settings_.store_path + "': " + ec.message());
+                           settings_.store_path_ + "': " + ec.message());
                 return false;
             }
         }
@@ -371,73 +374,4 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
     }
 
     // TODO (aliddell): implement this
-}
-
-// C API
-extern "C"
-{
-    ZarrStream* ZarrStream_create(struct ZarrStreamSettings_s* settings,
-                                  ZarrVersion version)
-    {
-        if (!validate_settings(settings, version)) {
-            return nullptr;
-        }
-
-        // initialize the stream
-        ZarrStream_s* stream = nullptr;
-
-        try {
-            stream = new ZarrStream(settings, version);
-        } catch (const std::bad_alloc&) {
-            LOG_ERROR("Failed to allocate memory for Zarr stream");
-        } catch (const std::exception& e) {
-            LOG_ERROR("Error creating Zarr stream: %s", e.what());
-        }
-
-        return stream;
-    }
-
-    void ZarrStream_destroy(ZarrStream* stream)
-    {
-        delete stream;
-    }
-
-    ZarrStatus ZarrStream_append(ZarrStream* stream,
-                                 const void* data,
-                                 size_t bytes_in,
-                                 size_t* bytes_out)
-    {
-        EXPECT_VALID_ARGUMENT(stream, "Null pointer: stream");
-        EXPECT_VALID_ARGUMENT(data, "Null pointer: data");
-        EXPECT_VALID_ARGUMENT(bytes_out, "Null pointer: bytes_out");
-
-        try {
-            *bytes_out = stream->append(data, bytes_in);
-        } catch (const std::exception& e) {
-            LOG_ERROR("Error appending data: %s", e.what());
-            return ZarrStatus_InternalError;
-        }
-
-        return ZarrStatus_Success;
-    }
-
-    ZarrVersion ZarrStream_get_version(const ZarrStream* stream)
-    {
-        if (!stream) {
-            LOG_WARNING("Null pointer: stream. Returning ZarrVersion_2");
-            return ZarrVersion_2;
-        }
-
-        return stream->version();
-    }
-
-    ZarrStreamSettings* ZarrStream_get_settings(const ZarrStream* stream)
-    {
-        if (!stream) {
-            LOG_WARNING("Null pointer: stream. Returning nullptr");
-            return nullptr;
-        }
-
-        return ZarrStreamSettings_copy(&stream->settings());
-    }
 }

@@ -22,12 +22,31 @@ struct ZarrStream_s
     size_t append(const void* data, size_t nbytes);
 
     ZarrVersion version() const { return version_; }
-    const ZarrStreamSettings_s& settings() const { return settings_; }
 
   private:
-    struct ZarrStreamSettings_s settings_;
-    ZarrVersion version_;   // Zarr version. 2 or 3.
     std::string error_; // error message. If nonempty, an error occurred.
+
+    ZarrVersion version_;
+
+    std::string store_path_;
+
+    std::string s3_endpoint;
+    std::string s3_bucket_name;
+    std::string s3_access_key_id;
+    std::string s3_secret_access_key;
+
+    std::string custom_metadata;
+
+    ZarrDataType dtype;
+
+    ZarrCompressor compressor;
+    ZarrCompressionCodec compression_codec;
+    uint8_t compression_level;
+    uint8_t compression_shuffle;
+
+    std::vector<ZarrDimension_s> dimensions;
+
+    bool multiscale;
 
     /**
      * @brief Set an error message.

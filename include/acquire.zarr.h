@@ -11,13 +11,13 @@ extern "C"
     {
         ZarrS3Settings s3_settings;
         ZarrCompressionSettings compression_settings;
-        ZarrDimensionProperties* dimensions;
-        size_t dimension_count;
-        char* store_path;
+        ZarrDimensionProperties* dimensions; /**< The properties of each dimension in the dataset. */
+        size_t dimension_count; /**< The number of dimensions in the dataset. */
+        char* store_path; /**< Path to the store. Filesystem path or S3 key prefix. */
         char* custom_metadata;
+        bool multiscale;
         ZarrDataType data_type;
         ZarrVersion version;
-        bool multiscale;
     } ZarrStreamSettings;
 
     typedef struct ZarrStream_s ZarrStream;
