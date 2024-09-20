@@ -23,7 +23,7 @@ extern "C"
         ZarrStatus_CompressionError,
         ZarrStatus_InvalidSettings,
         ZarrStatusCount,
-    } ZarrStatus;
+    } ZarrStatusCode;
 
     typedef enum
     {
@@ -34,7 +34,7 @@ extern "C"
 
     typedef enum
     {
-        ZarrLogLevel_Debug,
+        ZarrLogLevel_Debug = 0,
         ZarrLogLevel_Info,
         ZarrLogLevel_Warning,
         ZarrLogLevel_Error,
@@ -44,7 +44,7 @@ extern "C"
 
     typedef enum
     {
-        ZarrDataType_uint8,
+        ZarrDataType_uint8 = 0,
         ZarrDataType_uint16,
         ZarrDataType_uint32,
         ZarrDataType_uint64,
@@ -87,13 +87,9 @@ extern "C"
     typedef struct
     {
         const char* endpoint;
-        size_t bytes_of_endpoint;
         const char* bucket_name;
-        size_t bytes_of_bucket_name;
         const char* access_key_id;
-        size_t bytes_of_access_key_id;
         const char* secret_access_key;
-        size_t bytes_of_secret_access_key;
     } ZarrS3Settings;
 
     /**
