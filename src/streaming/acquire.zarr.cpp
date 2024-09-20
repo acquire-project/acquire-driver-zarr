@@ -1,4 +1,4 @@
-#include "zarr.types.h"
+#include "acquire.zarr.h"
 #include "zarr.stream.hh"
 #include "macros.hh"
 
@@ -52,6 +52,40 @@ extern "C"
                 return "Invalid settings";
             default:
                 return "Unknown error";
+        }
+    }
+
+    ZarrStatusCode ZarrStreamSettings_create_dimension_array(
+      struct ZarrStreamSettings_s* settings,
+      size_t dimension_count)
+    {
+        EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
+        EXPECT_VALID_ARGUMENT(dimension_count >= 3,
+                              "Invalid dimension count: %zu",
+                              dimension_count);
+
+        ZarrDimensionProperties* dimensions = nullptr;
+
+        try {
+            dimensions = new ZarrDimensionProperties[dimension_count];
+        } catch (const std::bad_alloc&) {
+            LOG_ERROR("Failed to allocate memory for dimensions");
+            return ZarrStatusCode_OutOfMemory;
+        }
+
+        ZarrStreamSettings_destroy_dimension_array(settings);
+        settings->dimensions = dimensions;
+        settings->dimension_count = dimension_count;
+
+        return ZarrStatusCode_Success;
+    }
+
+    void ZarrStreamSettings_destroy_dimension_array(
+      struct ZarrStreamSettings_s* settings)
+    {
+        if (nullptr != settings && nullptr != settings->dimensions) {
+            delete[] settings->dimensions;
+            settings->dimensions = nullptr;
         }
     }
 

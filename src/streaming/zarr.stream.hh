@@ -4,6 +4,7 @@
 
 #include <cstddef> // size_t
 #include <memory>  // unique_ptr
+#include <optional>
 
 struct ZarrDimension_s
 {
@@ -51,25 +52,26 @@ struct ZarrStream_s
 
     std::string store_path_;
 
-    bool is_s3_acquisition_;
-    std::string s3_endpoint_;
-    std::string s3_bucket_name_;
-    std::string s3_access_key_id_;
-    std::string s3_secret_access_key_;
+    std::optional<std::string> s3_endpoint_;
+    std::optional<std::string> s3_bucket_name_;
+    std::optional<std::string> s3_access_key_id_;
+    std::optional<std::string> s3_secret_access_key_;
 
     std::string custom_metadata_;
 
     ZarrDataType dtype_;
 
-    bool is_compressed_acquisition_;
-    ZarrCompressor compressor_;
-    ZarrCompressionCodec compression_codec_;
-    uint8_t compression_level_;
-    uint8_t compression_shuffle_;
+    std::optional<ZarrCompressor> compressor_;
+    std::optional<ZarrCompressionCodec> compression_codec_;
+    std::optional<uint8_t> compression_level_;
+    std::optional<uint8_t> compression_shuffle_;
 
     std::vector<ZarrDimension_s> dimensions_;
 
     bool multiscale_;
+
+    [[nodiscard]] bool is_s3_acquisition_() const;
+    [[nodiscard]] bool is_compressed_acquisition_() const;
 
     /**
      * @brief Copy settings to the stream.

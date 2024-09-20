@@ -14,22 +14,26 @@ configure_stream_dimensions(ZarrStreamSettings* settings)
 
     *dim = ZarrDimensionProperties{
         .name = "t",
-        .bytes_of_name = sizeof("t"),
         .type = ZarrDimensionType_Time,
         .array_size_px = 100,
         .chunk_size_px = 10,
     };
 
     dim = settings->dimensions + 1;
-    dim->name = "y";
-    dim->type = ZarrDimensionType_Space;
-    dim->array_size_px = 200;
-    dim->chunk_size_px = 20;
+    *dim = ZarrDimensionProperties{
+        .name = "y",
+        .type = ZarrDimensionType_Space,
+        .array_size_px = 200,
+        .chunk_size_px = 20,
+    };
 
     dim = settings->dimensions + 2;
-    dim->name = "x";
-    dim->array_size_px = 300;
-    dim->chunk_size_px = 30;
+    *dim = ZarrDimensionProperties{
+        .name = "x",
+        .type = ZarrDimensionType_Space,
+        .array_size_px = 300,
+        .chunk_size_px = 30,
+    };
 }
 
 int
@@ -39,6 +43,7 @@ main()
 
     ZarrStream* stream;
     ZarrStreamSettings settings;
+    memset(&settings, 0, sizeof(settings));
     settings.version = ZarrVersion_2;
 
     try {

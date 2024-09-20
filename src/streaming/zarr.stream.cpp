@@ -156,9 +156,9 @@ validate_compression_settings(const ZarrCompressionSettings* settings)
 
 [[nodiscard]]
 bool
-validate_custom_metadata(std::string_view metadata)
+validate_custom_metadata(const char* metadata)
 {
-    if (metadata.empty()) {
+    if (nullptr == metadata || !*metadata) {
         return true; // custom metadata is optional
     }
 
@@ -170,7 +170,7 @@ validate_custom_metadata(std::string_view metadata)
     );
 
     if (val.is_discarded()) {
-        LOG_ERROR("Invalid JSON: %s", metadata.data());
+        LOG_ERROR("Invalid JSON: %s", metadata);
         return false;
     }
 
@@ -227,6 +227,10 @@ validate_settings(const struct ZarrStreamSettings_s* settings)
         return false;
     }
 
+    if (nullptr == settings->store_path) {
+        LOG_ERROR("Null pointer: store_path");
+        return false;
+    }
     std::string_view store_path(settings->store_path);
 
     // we require the store path (root of the dataset) to be nonempty
@@ -343,6 +347,20 @@ ZarrStream::append(const void* data, size_t nbytes)
     return 0;
 }
 
+bool
+ZarrStream_s::is_s3_acquisition_() const
+{
+    return s3_endpoint_.has_value() && s3_bucket_name_.has_value() &&
+           s3_access_key_id_.has_value() && s3_secret_access_key_.has_value();
+}
+
+bool
+ZarrStream_s::is_compressed_acquisition_() const
+{
+    return compressor_.has_value() && compression_codec_.has_value() &&
+           compression_level_.has_value() && compression_shuffle_.has_value();
+}
+
 void
 ZarrStream_s::commit_settings_(const struct ZarrStreamSettings_s* settings)
 {
@@ -355,7 +373,6 @@ ZarrStream_s::commit_settings_(const struct ZarrStreamSettings_s* settings)
         s3_bucket_name_ = trim(settings->s3_settings->bucket_name);
         s3_access_key_id_ = trim(settings->s3_settings->access_key_id);
         s3_secret_access_key_ = trim(settings->s3_settings->secret_access_key);
-        is_s3_acquisition_ = true;
     }
 
     if (is_compressed_acquisition(settings)) {
@@ -363,7 +380,6 @@ ZarrStream_s::commit_settings_(const struct ZarrStreamSettings_s* settings)
         compression_codec_ = settings->compression_settings->codec;
         compression_level_ = settings->compression_settings->level;
         compression_shuffle_ = settings->compression_settings->shuffle;
-        is_compressed_acquisition_ = true;
     }
 
     dtype_ = settings->data_type;
@@ -387,7 +403,7 @@ ZarrStream_s::set_error_(const std::string& msg)
 bool
 ZarrStream_s::create_store_()
 {
-    if (is_s3_acquisition_) {
+    if (is_s3_acquisition_()) {
         // TODO (aliddell): implement this
     } else {
         if (fs::exists(store_path_)) {
