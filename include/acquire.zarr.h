@@ -24,8 +24,8 @@ extern "C"
      */
     typedef struct ZarrStreamSettings_s
     {
-        char* store_path; /**< Path to the store. Filesystem path or S3 key prefix. */
-        char* custom_metadata; /**< JSON-formatted custom metadata to be stored with the dataset. */
+        const char* store_path; /**< Path to the store. Filesystem path or S3 key prefix. */
+        const char* custom_metadata; /**< JSON-formatted custom metadata to be stored with the dataset. */
         ZarrS3Settings* s3_settings; /**< Optional S3 settings for the store. */
         ZarrCompressionSettings* compression_settings; /**< Optional chunk compression settings for the store. */
         ZarrDimensionProperties* dimensions; /**< The properties of each dimension in the dataset. */
