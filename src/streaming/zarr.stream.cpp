@@ -12,21 +12,18 @@ namespace {
 bool
 is_s3_acquisition(const struct ZarrStreamSettings_s* settings)
 {
-    return !settings->s3_endpoint.empty() &&
-           !settings->s3_bucket_name.empty() &&
-           !settings->s3_access_key_id.empty() &&
-           !settings->s3_secret_access_key.empty();
+    return nullptr != settings->s3_settings;
 }
 
 bool
 is_compressed_acquisition(const struct ZarrStreamSettings_s* settings)
 {
-    return settings->compressor != ZarrCompressor_None;
+    return nullptr != settings->compression_settings;
 }
 
 [[nodiscard]]
 bool
-validate_s3_settings(const struct ZarrStreamSettings_s* settings)
+validate_s3_settings(const ZarrS3Settings* settings)
 {
     if (settings->s3_endpoint.empty()) {
         LOG_ERROR("S3 endpoint is empty");
@@ -186,8 +183,8 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
         return false;
     }
 
-    if (settings->dtype >= ZarrDataTypeCount) {
-        LOG_ERROR("Invalid data type: %d", settings->dtype);
+    if (settings->data_type >= ZarrDataTypeCount) {
+        LOG_ERROR("Invalid data type: %d", settings->data_type);
         return false;
     }
 
