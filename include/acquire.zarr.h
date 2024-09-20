@@ -7,6 +7,21 @@ extern "C"
 {
 #endif
 
+    /**
+     * @brief The settings for a Zarr stream.
+     * @details This struct contains the settings for a Zarr stream, including
+     * the store path, custom metadata, S3 settings, chunk compression settings,
+     * dimension properties, whether to stream to multiple levels of detail, the
+     * pixel data type, and the Zarr format version.
+     * @note The store path can be a filesystem path or an S3 key prefix. For example,
+     * supplying an endpoint "s3://my-endpoint.com" and a bucket "my-bucket" with a
+     * store_path of "my-dataset.zarr" will result in the store being written to
+     * "s3://my-endpoint.com/my-bucket/my-dataset.zarr".
+     * @note The dimensions array may be allocated with ZarrStreamSettings_create_dimension_array
+     * and freed with ZarrStreamSettings_destroy_dimension_array. The order in which you
+     * set the dimension properties in the array should match the order of the dimensions
+     * from slowest to fastest changing, for example, [Z, Y, X] for a 3D dataset.
+     */
     typedef struct ZarrStreamSettings_s
     {
         char* store_path; /**< Path to the store. Filesystem path or S3 key prefix. */
@@ -31,7 +46,7 @@ extern "C"
     /**
      * @brief Set the log level for the Zarr API.
      * @param level The log level.
-     * @return ZarrStatus_Success on success, or an error code on failure.
+     * @return ZarrStatusCode_Success on success, or an error code on failure.
      */
     ZarrStatusCode Zarr_set_log_level(ZarrLogLevel level);
 
@@ -47,6 +62,20 @@ extern "C"
      * @return A human-readable status message.
      */
     const char* Zarr_get_status_message(ZarrStatusCode status);
+
+    /**
+     * @brief Allocate memory for the dimension array in the Zarr stream settings struct.
+     * @param[in, out] settings The Zarr stream settings struct.
+     * @param dimension_count The number of dimensions in the dataset to allocate memory for.
+     * @return ZarrStatusCode_Success on success, or an error code on failure.
+     */
+    ZarrStatusCode ZarrStreamSettings_create_dimension_array(ZarrStreamSettings* settings, size_t dimension_count);
+
+    /**
+     * @brief Free memory for the dimension array in the Zarr stream settings struct.
+     * @param[in, out] settings The Zarr stream settings struct containing the dimension array to free.
+     */
+    void ZarrStreamSettings_destroy_dimension_array(ZarrStreamSettings* settings);
 
     /**
      * @brief Create a Zarr stream.
@@ -71,7 +100,7 @@ extern "C"
      * @param[in] bytes_in The number of bytes in @p data. It should be at least
      * the size of a single frame.
      * @param[out] bytes_out The number of bytes written to the stream.
-     * @return ZarrStatus_Success on success, or an error code on failure.
+     * @return ZarrStatusCode_Success on success, or an error code on failure.
      */
     ZarrStatusCode ZarrStream_append(ZarrStream* stream,
                                  const void* data,
