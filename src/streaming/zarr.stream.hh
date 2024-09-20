@@ -7,6 +7,20 @@
 
 struct ZarrDimension_s
 {
+  public:
+    ZarrDimension_s(const char* name,
+                    ZarrDimensionType type,
+                    uint32_t array_size_px,
+                    uint32_t chunk_size_px,
+                    uint32_t shard_size_chunks)
+      : name(name)
+      , type(type)
+      , array_size_px(array_size_px)
+      , chunk_size_px(chunk_size_px)
+      , shard_size_chunks(shard_size_chunks)
+    {
+    }
+
     std::string name;       /* Name of the dimension */
     ZarrDimensionType type; /* Type of dimension */
 
@@ -19,7 +33,7 @@ struct ZarrDimension_s
 struct ZarrStream_s
 {
   public:
-    ZarrStream_s(struct ZarrStreamSettings_s* settings, ZarrVersion version);
+    ZarrStream_s(struct ZarrStreamSettings_s* settings);
     ~ZarrStream_s();
 
     /**
@@ -37,23 +51,31 @@ struct ZarrStream_s
 
     std::string store_path_;
 
-    std::string s3_endpoint;
-    std::string s3_bucket_name;
-    std::string s3_access_key_id;
-    std::string s3_secret_access_key;
+    bool is_s3_acquisition_;
+    std::string s3_endpoint_;
+    std::string s3_bucket_name_;
+    std::string s3_access_key_id_;
+    std::string s3_secret_access_key_;
 
-    std::string custom_metadata;
+    std::string custom_metadata_;
 
-    ZarrDataType dtype;
+    ZarrDataType dtype_;
 
-    ZarrCompressor compressor;
-    ZarrCompressionCodec compression_codec;
-    uint8_t compression_level;
-    uint8_t compression_shuffle;
+    bool is_compressed_acquisition_;
+    ZarrCompressor compressor_;
+    ZarrCompressionCodec compression_codec_;
+    uint8_t compression_level_;
+    uint8_t compression_shuffle_;
 
-    std::vector<ZarrDimension_s> dimensions;
+    std::vector<ZarrDimension_s> dimensions_;
 
-    bool multiscale;
+    bool multiscale_;
+
+    /**
+     * @brief Copy settings to the stream.
+     * @param settings Struct containing settings to copy.
+     */
+    void commit_settings_(const struct ZarrStreamSettings_s* settings);
 
     /**
      * @brief Set an error message.

@@ -15,7 +15,7 @@
     do {                                                                       \
         if (!(e)) {                                                            \
             LOG_ERROR(__VA_ARGS__);                                            \
-            return ZarrStatus_InvalidArgument;                                 \
+            return ZarrStatusCode_InvalidArgument;                             \
         }                                                                      \
     } while (0)
 
@@ -23,6 +23,6 @@
     do {                                                                       \
         if (!(e)) {                                                            \
             LOG_ERROR(__VA_ARGS__);                                            \
-            return ZarrStatus_InvalidIndex;                                    \
+            return ZarrStatusCode_InvalidIndex;                                \
         }                                                                      \
     } while (0)
