@@ -12,17 +12,17 @@ extern "C"
 
     typedef enum
     {
-        ZarrStatus_Success = 0,
-        ZarrStatus_InvalidArgument,
-        ZarrStatus_Overflow,
-        ZarrStatus_InvalidIndex,
-        ZarrStatus_NotYetImplemented,
-        ZarrStatus_InternalError,
-        ZarrStatus_OutOfMemory,
-        ZarrStatus_IOError,
-        ZarrStatus_CompressionError,
-        ZarrStatus_InvalidSettings,
-        ZarrStatusCount,
+        ZarrStatusCode_Success = 0,
+        ZarrStatusCode_InvalidArgument,
+        ZarrStatusCode_Overflow,
+        ZarrStatusCode_InvalidIndex,
+        ZarrStatusCode_NotYetImplemented,
+        ZarrStatusCode_InternalError,
+        ZarrStatusCode_OutOfMemory,
+        ZarrStatusCode_IOError,
+        ZarrStatusCode_CompressionError,
+        ZarrStatusCode_InvalidSettings,
+        ZarrStatusCodeCount,
     } ZarrStatusCode;
 
     typedef enum
