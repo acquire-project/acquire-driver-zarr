@@ -51,11 +51,9 @@ extern "C"
     /**
      * @brief Create a Zarr stream.
      * @param[in, out] settings The settings for the Zarr stream.
-     * @param[in] version The version of the Zarr stream. 2 or 3.
      * @return A pointer to the Zarr stream struct, or NULL on failure.
      */
-    ZarrStream* ZarrStream_create(ZarrStreamSettings* settings,
-                                  ZarrVersion version);
+    ZarrStream* ZarrStream_create(ZarrStreamSettings* settings);
 
     /**
      * @brief Destroy a Zarr stream.
