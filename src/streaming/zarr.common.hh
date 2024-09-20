@@ -1,6 +1,5 @@
 #pragma once
 
-#include "stream.settings.hh"
 #include "zarr.stream.hh"
 
 #include "acquire.zarr.h"
