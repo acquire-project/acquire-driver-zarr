@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stream.settings.hh" // ZarrDimension_s
+#include "zarr.stream.hh" // ZarrDimension_s
 #include "sink.hh"
 #include "thread.pool.hh"
 #include "s3.connection.hh"
