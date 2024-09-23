@@ -19,22 +19,16 @@
 
 #define ZARR_OK(e)                                                             \
     do {                                                                       \
-        ZarrStatus __err = (e);                                                \
-        EXPECT(                                                                \
-          __err == ZarrStatus_Success, "%s", Zarr_get_error_message(__err));   \
+        ZarrStatusCode __err = (e);                                            \
+        EXPECT(__err == ZarrStatusCode_Success,                                \
+               "%s",                                                           \
+               Zarr_get_status_message(__err));                                \
     } while (0)
 
 namespace sink = acquire::sink;
 namespace fs = std::filesystem;
 
 using json = nlohmann::json;
-
-struct S3URI
-{
-    std::string endpoint;
-    std::string bucket;
-    std::string store_path;
-};
 
 namespace {
 /**
@@ -450,10 +444,13 @@ sink::Zarr::Zarr(ZarrVersion version,
       .reserve_image_shape = ::zarr_reserve_image_shape,
   }
   , version_(version)
+  , store_path_()
+  , custom_metadata_("{}")
+  , dtype_(ZarrDataType_uint8)
   , compression_codec_(compression_codec)
   , compression_level_(compression_level)
-  , shuffle_(shuffle)
-  , stream_settings_(nullptr)
+  , compression_shuffle_(shuffle)
+  , multiscale_(false)
   , stream_(nullptr)
 {
     EXPECT(
@@ -465,17 +462,14 @@ sink::Zarr::Zarr(ZarrVersion version,
       compression_level_ <= 9,
       "Invalid compression level: %d. Compression level must be in [0, 9].",
       compression_level_);
-    EXPECT(shuffle_ <= 2,
+    EXPECT(compression_shuffle_ <= 2,
            "Invalid shuffle value: %d. Shuffle must be 0, 1, or 2.",
-           shuffle_);
-
-    stream_settings_ = ZarrStreamSettings_create();
+           compression_shuffle_);
 }
 
 sink::Zarr::~Zarr()
 {
     stop();
-    ZarrStreamSettings_destroy(stream_settings_);
 }
 
 void
@@ -485,27 +479,21 @@ sink::Zarr::set(const StorageProperties* props)
            "Cannot set properties while running.");
     EXPECT(props, "StorageProperties is NULL.");
 
-    if (!stream_settings_) {
-        stream_settings_ = ZarrStreamSettings_create();
-        CHECK(stream_settings_);
-    }
-
     // check that the external metadata is valid
     if (props->external_metadata_json.str) {
         validate_json(props->external_metadata_json.str,
                       props->external_metadata_json.nbytes);
 
-        ZARR_OK(ZarrStreamSettings_set_custom_metadata(
-          stream_settings_,
-          props->external_metadata_json.str,
-          props->external_metadata_json.nbytes));
+        custom_metadata_ = props->external_metadata_json.str;
+    }
+
+    if (custom_metadata_.empty()) {
+        custom_metadata_ = "{}";
     }
 
     EXPECT(props->uri.str, "URI string is NULL.");
     EXPECT(props->uri.nbytes > 1, "URI string is empty.");
     std::string uri(props->uri.str, props->uri.nbytes - 1);
-
-    std::string store_path;
 
     if (is_web_uri(uri)) {
         EXPECT(props->access_key_id.str, "Access key ID is NULL.");
@@ -517,33 +505,20 @@ sink::Zarr::set(const StorageProperties* props)
         auto components = split_uri(uri);
         EXPECT(components.size() > 3, "Invalid URI: %s", uri.c_str());
 
-        std::string s3_endpoint = components[0] + "//" + components[1];
-        const std::string& s3_bucket_name = components[2];
-        ZarrS3Settings s3_settings{
-            .endpoint = s3_endpoint.c_str(),
-            .bytes_of_endpoint = s3_endpoint.size() + 1,
-            .bucket_name = s3_bucket_name.c_str(),
-            .bytes_of_bucket_name = s3_bucket_name.size() + 1,
-            .access_key_id = props->access_key_id.str,
-            .bytes_of_access_key_id = props->access_key_id.nbytes,
-            .secret_access_key = props->secret_access_key.str,
-            .bytes_of_secret_access_key = props->secret_access_key.nbytes,
-        };
+        s3_endpoint_ = components[0] + "//" + components[1];
+        s3_bucket_name_ = components[2];
+        s3_access_key_id_ = props->access_key_id.str;
+        s3_secret_access_key_ = props->secret_access_key.str;
 
-        store_path = components[3];
+        store_path_ = components[3];
         for (auto i = 4; i < components.size(); ++i) {
-            store_path += "/" + components[i];
+            store_path_ += "/" + components[i];
         }
-
-        ZARR_OK(ZarrStreamSettings_set_store(stream_settings_,
-                                             store_path.c_str(),
-                                             store_path.size() + 1,
-                                             &s3_settings));
     } else {
         if (uri.find("file://") != std::string::npos) {
             uri = uri.substr(7); // strlen("file://") == 7
         }
-        store_path = uri;
+        std::string store_path = uri;
 
         if (fs::exists(store_path)) {
             std::error_code ec;
@@ -569,25 +544,12 @@ sink::Zarr::set(const StorageProperties* props)
                "Expected \"%s\" to have write permissions.",
                parent_path.c_str());
 
-        ZarrStreamSettings_set_store(
-          stream_settings_, store_path.c_str(), store_path.size() + 1, nullptr);
+        store_path_ = store_path;
     }
 
-    // set compression settings
-    if (compression_codec_ > ZarrCompressionCodec_None) {
-        ZarrCompressionSettings compression_settings{
-            .compressor = ZarrCompressor_Blosc1,
-            .codec = compression_codec_,
-            .level = compression_level_,
-            .shuffle = shuffle_,
-        };
+    dimension_names_.clear();
+    dimensions_.clear();
 
-        ZARR_OK(ZarrStreamSettings_set_compression(stream_settings_,
-                                                   &compression_settings));
-    }
-
-    ZARR_OK(ZarrStreamSettings_reserve_dimensions(
-      stream_settings_, props->acquisition_dimensions.size));
     for (auto i = 0; i < props->acquisition_dimensions.size; ++i) {
         const auto* dim = props->acquisition_dimensions.data + i;
         validate_dimension(dim, i == 0);
@@ -611,20 +573,15 @@ sink::Zarr::set(const StorageProperties* props)
                                          std::to_string(dim->kind));
         }
 
-        ZarrDimensionProperties dimension = {
-            .name = dim->name.str,
-            .bytes_of_name = dim->name.nbytes,
-            .type = type,
-            .array_size_px = dim->array_size_px,
-            .chunk_size_px = dim->chunk_size_px,
-            .shard_size_chunks = dim->shard_size_chunks,
-        };
-        ZARR_OK(
-          ZarrStreamSettings_set_dimension(stream_settings_, i, &dimension));
+        dimension_names_.emplace_back(dim->name.str);
+        dimensions_.emplace_back(nullptr,
+                                 type,
+                                 dim->array_size_px,
+                                 dim->chunk_size_px,
+                                 dim->shard_size_chunks);
     }
 
-    ZARR_OK(ZarrStreamSettings_set_multiscale(stream_settings_,
-                                              props->enable_multiscale));
+    multiscale_ = props->enable_multiscale;
 
     state = DeviceState_Armed;
 }
@@ -633,44 +590,41 @@ void
 sink::Zarr::get(StorageProperties* props) const
 {
     EXPECT(props, "StorageProperties is NULL.");
-    EXPECT(stream_settings_ || stream_, "No stream or stream settings.");
 
     storage_properties_destroy(props);
 
-    std::string s3_endpoint, s3_bucket, store_path;
+    std::string s3_endpoint, s3_bucket;
     std::string access_key_id, secret_access_key;
-    std::string external_metadata_json;
 
-    bool multiscale;
     size_t ndims;
 
-    store_path = ZarrStreamSettings_get_store_path(stream_settings_);
+    if (s3_endpoint_) {
+        s3_endpoint = *s3_endpoint_;
+    }
+    if (s3_bucket_name_) {
+        s3_bucket = *s3_bucket_name_;
+    }
+    if (s3_access_key_id_) {
+        access_key_id = *s3_access_key_id_;
+    }
+    if (s3_secret_access_key_) {
+        secret_access_key = *s3_secret_access_key_;
+    }
 
-    auto s3_settings = ZarrStreamSettings_get_s3_settings(stream_settings_);
-    s3_endpoint = s3_settings.endpoint;
-    s3_bucket = s3_settings.bucket_name;
-    access_key_id = s3_settings.access_key_id;
-    secret_access_key = s3_settings.secret_access_key;
-
-    external_metadata_json =
-      ZarrStreamSettings_get_custom_metadata(stream_settings_);
-
-    ndims = ZarrStreamSettings_get_dimension_count(stream_settings_);
-    multiscale = ZarrStreamSettings_get_multiscale(stream_settings_);
+    ndims = dimension_names_.size();
 
     std::string uri;
-    if (!s3_endpoint.empty() && !s3_bucket.empty() && !store_path.empty()) {
-        uri = s3_endpoint + "/" + s3_bucket + "/" + store_path;
-    } else if (!store_path.empty()) {
-        uri = "file://" + fs::absolute(store_path).string();
+    if (!s3_endpoint.empty() && !s3_bucket.empty() && !store_path_.empty()) {
+        uri = s3_endpoint + "/" + s3_bucket + "/" + store_path_;
+    } else if (!store_path_.empty()) {
+        uri = "file://" + fs::absolute(store_path_).string();
     }
 
     const size_t bytes_of_filename = uri.empty() ? 0 : uri.size() + 1;
 
     const char* metadata =
-      external_metadata_json.empty() ? nullptr : external_metadata_json.c_str();
-    const size_t bytes_of_metadata =
-      metadata ? external_metadata_json.size() + 1 : 0;
+      custom_metadata_.empty() ? nullptr : custom_metadata_.c_str();
+    const size_t bytes_of_metadata = metadata ? custom_metadata_.size() + 1 : 0;
 
     CHECK(storage_properties_init(props,
                                   0,
@@ -695,10 +649,9 @@ sink::Zarr::get(StorageProperties* props) const
         ZarrDimensionType dimension_type;
         size_t array_size_px, chunk_size_px, shard_size_chunks;
 
-        ZarrDimensionProperties dimension =
-          ZarrStreamSettings_get_dimension(stream_settings_, i);
+        auto dimension = dimensions_[i];
 
-        std::string dim_name = dimension.name;
+        auto dim_name = dimension_names_[i];
         dimension_type = dimension.type;
         array_size_px = dimension.array_size_px;
         chunk_size_px = dimension.chunk_size_px;
@@ -736,7 +689,7 @@ sink::Zarr::get(StorageProperties* props) const
                                                shard_size_chunks));
     }
 
-    CHECK(storage_properties_set_enable_multiscale(props, multiscale));
+    CHECK(storage_properties_set_enable_multiscale(props, multiscale_));
 }
 
 void
@@ -756,14 +709,54 @@ void
 sink::Zarr::start()
 {
     EXPECT(state == DeviceState_Armed, "Device is not armed.");
-    EXPECT(stream_settings_, "No stream settings.");
 
     if (stream_) {
         ZarrStream_destroy(stream_);
         stream_ = nullptr;
     }
 
-    stream_ = ZarrStream_create(stream_settings_, version_);
+    for (auto i = 0; i < dimension_names_.size(); ++i) {
+        auto& dim = dimensions_[i];
+        dim.name = dimension_names_[i].c_str();
+    }
+
+    ZarrStreamSettings stream_settings{
+        .store_path = store_path_.c_str(),
+        .custom_metadata = custom_metadata_.c_str(),
+        .s3_settings = nullptr,
+        .compression_settings = nullptr,
+        .dimensions = dimensions_.data(),
+        .dimension_count = dimensions_.size(),
+        .multiscale = multiscale_,
+        .data_type = dtype_,
+        .version = version_,
+    };
+
+    ZarrS3Settings s3_settings;
+    ZarrCompressionSettings compression_settings;
+
+    if (s3_endpoint_ && s3_bucket_name_ && s3_access_key_id_ &&
+        s3_secret_access_key_) {
+        s3_settings = { .endpoint = s3_endpoint_->c_str(),
+                        .bucket_name = s3_bucket_name_->c_str(),
+                        .access_key_id = s3_access_key_id_->c_str(),
+                        .secret_access_key = s3_secret_access_key_->c_str() };
+
+        stream_settings.s3_settings = &s3_settings;
+    }
+
+    if (compression_codec_ > ZarrCompressionCodec_None) {
+        compression_settings = {
+            .compressor = ZarrCompressor_Blosc1,
+            .codec = compression_codec_,
+            .level = compression_level_,
+            .shuffle = compression_shuffle_,
+        };
+
+        stream_settings.compression_settings = &compression_settings;
+    }
+
+    stream_ = ZarrStream_create(&stream_settings);
     CHECK(stream_);
 
     state = DeviceState_Running;
@@ -774,7 +767,6 @@ sink::Zarr::stop() noexcept
 {
     if (DeviceState_Running == state) {
         // make a copy of current settings before destroying the stream
-        stream_settings_ = ZarrStream_get_settings(stream_);
         state = DeviceState_Armed;
 
         ZarrStream_destroy(stream_);
@@ -816,53 +808,47 @@ void
 sink::Zarr::reserve_image_shape(const ImageShape* shape)
 {
     EXPECT(state == DeviceState_Armed, "Device is not armed.");
-    EXPECT(stream_settings_, "No stream settings.");
 
     // `shape` should be verified nonnull in storage_reserve_image_shape, but
     // let's check anyway
     CHECK(shape);
 
-    size_t ndims = ZarrStreamSettings_get_dimension_count(stream_settings_);
+    EXPECT(dimensions_.size() > 2, "Expected at least 3 dimensions.");
 
     // check that the configured dimensions match the image shape
     {
-        ZarrDimensionProperties y_dim =
-          ZarrStreamSettings_get_dimension(stream_settings_, ndims - 2);
+        ZarrDimensionProperties y_dim = dimensions_[dimensions_.size() - 2];
         EXPECT(y_dim.array_size_px == shape->dims.height,
                "Image height mismatch.");
 
-        ZarrDimensionProperties x_dim =
-          ZarrStreamSettings_get_dimension(stream_settings_, ndims - 1);
+        ZarrDimensionProperties x_dim = dimensions_.back();
         EXPECT(x_dim.array_size_px == shape->dims.width,
                "Image width mismatch.");
     }
 
-    ZarrDataType kind;
     switch (shape->type) {
         case SampleType_u8:
-            kind = ZarrDataType_uint8;
+            dtype_ = ZarrDataType_uint8;
             break;
         case SampleType_u10:
         case SampleType_u12:
         case SampleType_u14:
         case SampleType_u16:
-            kind = ZarrDataType_uint16;
+            dtype_ = ZarrDataType_uint16;
             break;
         case SampleType_i8:
-            kind = ZarrDataType_int8;
+            dtype_ = ZarrDataType_int8;
             break;
         case SampleType_i16:
-            kind = ZarrDataType_int16;
+            dtype_ = ZarrDataType_int16;
             break;
         case SampleType_f32:
-            kind = ZarrDataType_float32;
+            dtype_ = ZarrDataType_float32;
             break;
         default:
             throw std::runtime_error("Unsupported image type: " +
                                      std::to_string(shape->type));
     }
-
-    ZARR_OK(ZarrStreamSettings_set_data_type(stream_settings_, kind));
 }
 
 extern "C"
@@ -942,150 +928,4 @@ extern "C"
         }
         return nullptr;
     }
-}
-
-/*
-void
-sink::Zarr::write_multiscale_frames_(const uint8_t* const data_,
-                                     size_t bytes_of_data,
-                                     const ImageShape& shape_)
-{
-    auto* data = const_cast<uint8_t*>(data_);
-    ImageShape shape = shape_;
-    struct VideoFrame* dst;
-
-    std::function<VideoFrame*(const uint8_t*, size_t, const ImageShape&)> scale;
-    std::function<void(VideoFrame*, const VideoFrame*)> average2;
-    switch (shape.type) {
-        case SampleType_u10:
-        case SampleType_u12:
-        case SampleType_u14:
-        case SampleType_u16:
-            scale = ::scale_image<uint16_t>;
-            average2 = ::average_two_frames<uint16_t>;
-            break;
-        case SampleType_i8:
-            scale = ::scale_image<int8_t>;
-            average2 = ::average_two_frames<int8_t>;
-            break;
-        case SampleType_i16:
-            scale = ::scale_image<int16_t>;
-            average2 = ::average_two_frames<int16_t>;
-            break;
-        case SampleType_f32:
-            scale = ::scale_image<float>;
-            average2 = ::average_two_frames<float>;
-            break;
-        case SampleType_u8:
-            scale = ::scale_image<uint8_t>;
-            average2 = ::average_two_frames<uint8_t>;
-            break;
-        default:
-            char err_msg[64];
-            snprintf(err_msg,
-                     sizeof(err_msg),
-                     "Unsupported pixel type: %s",
-                     common::sample_type_to_string(shape.type));
-            throw std::runtime_error(err_msg);
-    }
-
-    for (auto i = 1; i < writers_.size(); ++i) {
-        dst = scale(data, bytes_of_data, shape);
-        if (scaled_frames_[i].has_value()) {
-            // average
-            average2(dst, scaled_frames_[i].value());
-
-            // write the downsampled frame
-            const size_t bytes_of_frame = bytes_of_image(&dst->shape);
-            CHECK(writers_[i]->write(dst->data, bytes_of_frame));
-
-            // clean up this level of detail
-            free(scaled_frames_[i].value());
-            scaled_frames_[i].reset();
-
-            // setup for next iteration
-            if (i + 1 < writers_.size()) {
-                data = dst->data;
-                shape = dst->shape;
-                bytes_of_data = bytes_of_image(&shape);
-            } else {
-                // no longer needed
-                free(dst);
-            }
-        } else {
-            scaled_frames_[i] = dst;
-            break;
-        }
-    }
-}
-
-#ifndef NO_UNIT_TESTS
-#ifdef _WIN32
-#define acquire_export __declspec(dllexport)
-#else
-#define acquire_export
-#endif
-
-///< Test that a single frame with 1 plane is padded and averaged correctly.
-template<typename T>
-void
-test_average_frame_inner(const SampleType& stype)
-{
-    const size_t bytes_of_frame =
-      common::align_up(sizeof(VideoFrame) + 9 * sizeof(T), 8);
-    auto* src = (VideoFrame*)malloc(bytes_of_frame);
-    CHECK(src);
-
-    src->bytes_of_frame = bytes_of_frame;
-    src->shape = {
-        .dims = {
-          .channels = 1,
-          .width = 3,
-          .height = 3,
-          .planes = 1,
-        },
-        .strides = {
-          .channels = 1,
-          .width = 1,
-          .height = 3,
-          .planes = 9
-        },
-        .type = stype
-    };
-
-    for (auto i = 0; i < 9; ++i) {
-        ((T*)src->data)[i] = (T)(i + 1);
-    }
-
-    auto dst =
-      scale_image<T>(src->data, bytes_of_image(&src->shape), src->shape);
-    CHECK(((T*)dst->data)[0] == (T)3);
-    CHECK(((T*)dst->data)[1] == (T)4.5);
-    CHECK(((T*)dst->data)[2] == (T)7.5);
-    CHECK(((T*)dst->data)[3] == (T)9);
-
-    free(src);
-    free(dst);
-}
-
-extern "C" acquire_export int
-unit_test__average_frame()
-{
-    try {
-        test_average_frame_inner<uint8_t>(SampleType_u8);
-        test_average_frame_inner<int8_t>(SampleType_i8);
-        test_average_frame_inner<uint16_t>(SampleType_u16);
-        test_average_frame_inner<int16_t>(SampleType_i16);
-        test_average_frame_inner<float>(SampleType_f32);
-    } catch (const std::exception& exc) {
-        LOGE("Exception: %s\n", exc.what());
-        return 0;
-    } catch (...) {
-        LOGE("Exception: (unknown)");
-        return 0;
-    }
-
-    return 1;
-}
-#endif
-*/
+} // extern "C"

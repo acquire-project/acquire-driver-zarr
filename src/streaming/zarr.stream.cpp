@@ -20,38 +20,68 @@ namespace {
 bool
 is_s3_acquisition(const struct ZarrStreamSettings_s* settings)
 {
-    return !settings->s3_endpoint.empty() &&
-           !settings->s3_bucket_name.empty() &&
-           !settings->s3_access_key_id.empty() &&
-           !settings->s3_secret_access_key.empty();
+    return nullptr != settings->s3_settings;
 }
 
 bool
 is_compressed_acquisition(const struct ZarrStreamSettings_s* settings)
 {
-    return settings->compressor != ZarrCompressor_None;
+    return nullptr != settings->compression_settings;
+}
+
+[[nodiscard]]
+std::string
+trim(const char* s)
+{
+    if (!s || !*s) {
+        return {};
+    }
+
+    const size_t length = strlen(s);
+
+    // trim left
+    std::string trimmed(s, length);
+    trimmed.erase(trimmed.begin(),
+                  std::find_if(trimmed.begin(), trimmed.end(), [](char c) {
+                      return !std::isspace(c);
+                  }));
+
+    // trim right
+    trimmed.erase(std::find_if(trimmed.rbegin(),
+                               trimmed.rend(),
+                               [](char c) { return !std::isspace(c); })
+                    .base(),
+                  trimmed.end());
+
+    return trimmed;
 }
 
 [[nodiscard]]
 bool
-validate_s3_settings(const struct ZarrStreamSettings_s* settings)
+validate_s3_settings(const ZarrS3Settings* settings)
 {
-    if (settings->s3_endpoint.empty()) {
+    std::string trimmed = trim(settings->endpoint);
+    if (trimmed.empty()) {
         LOG_ERROR("S3 endpoint is empty");
         return false;
     }
-    if (settings->s3_bucket_name.length() < 3 ||
-        settings->s3_bucket_name.length() > 63) {
+
+    trimmed = trim(settings->bucket_name);
+    if (trimmed.length() < 3 || trimmed.length() > 63) {
         LOG_ERROR("Invalid length for S3 bucket name: %zu. Must be between 3 "
                   "and 63 characters",
-                  settings->s3_bucket_name.length());
+                  trimmed.length());
         return false;
     }
-    if (settings->s3_access_key_id.empty()) {
+
+    trimmed = trim(settings->access_key_id);
+    if (trimmed.empty()) {
         LOG_ERROR("S3 access key ID is empty");
         return false;
     }
-    if (settings->s3_secret_access_key.empty()) {
+
+    trimmed = trim(settings->secret_access_key);
+    if (trimmed.empty()) {
         LOG_ERROR("S3 secret access key is empty");
         return false;
     }
@@ -92,36 +122,37 @@ validate_filesystem_store_path(std::string_view data_root)
 
 [[nodiscard]]
 bool
-validate_compression_settings(const ZarrStreamSettings_s* settings)
+validate_compression_settings(const ZarrCompressionSettings* settings)
 {
     if (settings->compressor >= ZarrCompressorCount) {
         LOG_ERROR("Invalid compressor: %d", settings->compressor);
         return false;
     }
 
-    if (settings->compression_codec >= ZarrCompressionCodecCount) {
-        LOG_ERROR("Invalid compression codec: %d", settings->compression_codec);
+    if (settings->codec >= ZarrCompressionCodecCount) {
+        LOG_ERROR("Invalid compression codec: %d", settings->codec);
         return false;
     }
 
-    // we know the compressor is not None, so the codec must be set
-    if (settings->compression_codec == ZarrCompressionCodec_None) {
+    // if compressing, we require a compression codec
+    if (settings->compressor != ZarrCompressor_None &&
+        settings->codec == ZarrCompressionCodec_None) {
         LOG_ERROR("Compression codec must be set when using a compressor");
         return false;
     }
 
-    if (settings->compression_level == 0 || settings->compression_level > 9) {
-        LOG_ERROR("Invalid compression level: %d. Must be between 1 and 9",
-                  settings->compression_level);
+    if (settings->level > 9) {
+        LOG_ERROR("Invalid compression level: %d. Must be between 0 and 9",
+                  settings->level);
         return false;
     }
 
-    if (settings->compression_shuffle != BLOSC_NOSHUFFLE &&
-        settings->compression_shuffle != BLOSC_SHUFFLE &&
-        settings->compression_shuffle != BLOSC_BITSHUFFLE) {
+    if (settings->shuffle != BLOSC_NOSHUFFLE &&
+        settings->shuffle != BLOSC_SHUFFLE &&
+        settings->shuffle != BLOSC_BITSHUFFLE) {
         LOG_ERROR("Invalid shuffle: %d. Must be %d (no shuffle), %d (byte "
                   "shuffle), or %d (bit shuffle)",
-                  settings->compression_shuffle,
+                  settings->shuffle,
                   BLOSC_NOSHUFFLE,
                   BLOSC_SHUFFLE,
                   BLOSC_BITSHUFFLE);
@@ -133,31 +164,55 @@ validate_compression_settings(const ZarrStreamSettings_s* settings)
 
 [[nodiscard]]
 bool
-validate_dimension(const struct ZarrDimension_s& dimension,
+validate_custom_metadata(const char* metadata)
+{
+    if (nullptr == metadata || !*metadata) {
+        return true; // custom metadata is optional
+    }
+
+    // parse the JSON
+    auto val = nlohmann::json::parse(metadata,
+                                     nullptr, // callback
+                                     false,   // allow exceptions
+                                     true     // ignore comments
+    );
+
+    if (val.is_discarded()) {
+        LOG_ERROR("Invalid JSON: %s", metadata);
+        return false;
+    }
+
+    return true;
+}
+
+[[nodiscard]]
+bool
+validate_dimension(const ZarrDimensionProperties* dimension,
                    ZarrVersion version,
                    bool is_append)
 {
-    if (dimension.name.empty()) {
+    std::string trimmed = trim(dimension->name);
+    if (trimmed.empty()) {
         LOG_ERROR("Invalid name. Must not be empty");
         return false;
     }
 
-    if (dimension.type >= ZarrDimensionTypeCount) {
-        LOG_ERROR("Invalid dimension type: %d", dimension.type);
+    if (dimension->type >= ZarrDimensionTypeCount) {
+        LOG_ERROR("Invalid dimension type: %d", dimension->type);
         return false;
     }
 
-    if (!is_append && dimension.array_size_px == 0) {
+    if (!is_append && dimension->array_size_px == 0) {
         LOG_ERROR("Array size must be nonzero");
         return false;
     }
 
-    if (dimension.chunk_size_px == 0) {
-        LOG_ERROR("Chunk size must be nonzero");
+    if (dimension->chunk_size_px == 0) {
+        LOG_ERROR("Invalid chunk size: %zu", dimension->chunk_size_px);
         return false;
     }
 
-    if (version == ZarrVersion_3 && dimension.shard_size_chunks == 0) {
+    if (version == ZarrVersion_3 && dimension->shard_size_chunks == 0) {
         LOG_ERROR("Shard size must be nonzero");
         return false;
     }
@@ -167,18 +222,23 @@ validate_dimension(const struct ZarrDimension_s& dimension,
 
 [[nodiscard]]
 bool
-validate_settings(const struct ZarrStreamSettings_s* settings,
-                  ZarrVersion version)
+validate_settings(const struct ZarrStreamSettings_s* settings)
 {
     if (!settings) {
         LOG_ERROR("Null pointer: settings");
         return false;
     }
+
+    auto version = settings->version;
     if (version < ZarrVersion_2 || version >= ZarrVersionCount) {
         LOG_ERROR("Invalid Zarr version: %d", version);
         return false;
     }
 
+    if (nullptr == settings->store_path) {
+        LOG_ERROR("Null pointer: store_path");
+        return false;
+    }
     std::string_view store_path(settings->store_path);
 
     // we require the store path (root of the dataset) to be nonempty
@@ -187,46 +247,56 @@ validate_settings(const struct ZarrStreamSettings_s* settings,
         return false;
     }
 
-    if (is_s3_acquisition(settings) && !validate_s3_settings(settings)) {
+    if (is_s3_acquisition(settings) &&
+        !validate_s3_settings(settings->s3_settings)) {
         return false;
     } else if (!is_s3_acquisition(settings) &&
                !validate_filesystem_store_path(store_path)) {
         return false;
     }
 
-    if (settings->dtype >= ZarrDataTypeCount) {
-        LOG_ERROR("Invalid data type: %d", settings->dtype);
+    if (settings->data_type >= ZarrDataTypeCount) {
+        LOG_ERROR("Invalid data type: %d", settings->data_type);
         return false;
     }
 
     if (is_compressed_acquisition(settings) &&
-        !validate_compression_settings(settings)) {
+        !validate_compression_settings(settings->compression_settings)) {
+        return false;
+    }
+
+    if (!validate_custom_metadata(settings->custom_metadata)) {
+        return false;
+    }
+
+    if (nullptr == settings->dimensions) {
+        LOG_ERROR("Null pointer: dimensions");
         return false;
     }
 
     // we must have at least 3 dimensions
-    if (settings->dimensions.size() < 3) {
+    const size_t ndims = settings->dimension_count;
+    if (ndims < 3) {
         LOG_ERROR("Invalid number of dimensions: %zu. Must be at least 3",
-                  settings->dimensions.size());
+                  ndims);
         return false;
     }
 
     // check the final dimension (width), must be space
-    if (settings->dimensions.back().type != ZarrDimensionType_Space) {
+    if (settings->dimensions[ndims - 1].type != ZarrDimensionType_Space) {
         LOG_ERROR("Last dimension must be of type Space");
         return false;
     }
 
     // check the penultimate dimension (height), must be space
-    if (settings->dimensions[settings->dimensions.size() - 2].type !=
-        ZarrDimensionType_Space) {
+    if (settings->dimensions[ndims - 2].type != ZarrDimensionType_Space) {
         LOG_ERROR("Second to last dimension must be of type Space");
         return false;
     }
 
     // validate the dimensions individually
-    for (size_t i = 0; i < settings->dimensions.size(); ++i) {
-        if (!validate_dimension(settings->dimensions[i], version, i == 0)) {
+    for (size_t i = 0; i < ndims; ++i) {
+        if (!validate_dimension(settings->dimensions + i, version, i == 0)) {
             return false;
         }
     }
@@ -338,13 +408,16 @@ average_two_frames(void* dst_,
 
 /* ZarrStream_s implementation */
 
-ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings,
-                         ZarrVersion version)
-  : settings_(*settings)
-  , version_(version)
-  , error_()
+ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings)
+  : error_()
   , frame_buffer_offset_(0)
 {
+    if (!validate_settings(settings)) {
+        throw std::runtime_error("Invalid Zarr stream settings");
+    }
+
+    commit_settings_(settings);
+
     // spin up thread pool
     thread_pool_ = std::make_shared<zarr::ThreadPool>(
       std::thread::hardware_concurrency(),
@@ -352,7 +425,7 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings,
 
     // allocate a frame buffer
     frame_buffer_.resize(zarr::bytes_of_frame(
-      settings_.dimensions, static_cast<ZarrDataType>(settings_.dtype)));
+      dimensions_, static_cast<ZarrDataType>(dtype_)));
 
     // create the data store
     EXPECT(create_store_(), "%s", error_.c_str());
@@ -361,7 +434,7 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings,
     EXPECT(create_writers_(), "%s", error_.c_str());
 
     // allocate multiscale frame placeholders
-    if (settings_.multiscale) {
+    if (multiscale_) {
         create_scaled_frames_();
     }
 
@@ -454,6 +527,55 @@ ZarrStream::append(const void* data_, size_t nbytes)
     return bytes_written;
 }
 
+bool
+ZarrStream_s::is_s3_acquisition_() const
+{
+    return s3_endpoint_.has_value() && s3_bucket_name_.has_value() &&
+           s3_access_key_id_.has_value() && s3_secret_access_key_.has_value();
+}
+
+bool
+ZarrStream_s::is_compressed_acquisition_() const
+{
+    return compressor_.has_value() && compression_codec_.has_value() &&
+           compression_level_.has_value() && compression_shuffle_.has_value();
+}
+
+void
+ZarrStream_s::commit_settings_(const struct ZarrStreamSettings_s* settings)
+{
+    version_ = settings->version;
+    store_path_ = trim(settings->store_path);
+    custom_metadata_ = trim(settings->custom_metadata);
+
+    if (is_s3_acquisition(settings)) {
+        s3_endpoint_ = trim(settings->s3_settings->endpoint);
+        s3_bucket_name_ = trim(settings->s3_settings->bucket_name);
+        s3_access_key_id_ = trim(settings->s3_settings->access_key_id);
+        s3_secret_access_key_ = trim(settings->s3_settings->secret_access_key);
+    }
+
+    if (is_compressed_acquisition(settings)) {
+        compressor_ = settings->compression_settings->compressor;
+        compression_codec_ = settings->compression_settings->codec;
+        compression_level_ = settings->compression_settings->level;
+        compression_shuffle_ = settings->compression_settings->shuffle;
+    }
+
+    dtype_ = settings->data_type;
+
+    for (auto i = 0; i < settings->dimension_count; ++i) {
+        const auto& dim = settings->dimensions[i];
+        dimensions_.emplace_back(dim.name,
+                                 dim.type,
+                                 dim.array_size_px,
+                                 dim.chunk_size_px,
+                                 dim.shard_size_chunks);
+    }
+
+    multiscale_ = settings->multiscale;
+}
+
 void
 ZarrStream_s::set_error_(const std::string& msg)
 {
@@ -463,14 +585,14 @@ ZarrStream_s::set_error_(const std::string& msg)
 bool
 ZarrStream_s::create_store_()
 {
-    if (is_s3_acquisition(&settings_)) {
+    if (is_s3_acquisition_()) {
         // spin up S3 connection pool
         try {
             s3_connection_pool_ = std::make_shared<zarr::S3ConnectionPool>(
               std::thread::hardware_concurrency(),
-              settings_.s3_endpoint,
-              settings_.s3_access_key_id,
-              settings_.s3_secret_access_key);
+              *s3_endpoint_,
+              *s3_access_key_id_,
+              *s3_secret_access_key_);
         } catch (const std::exception& e) {
             set_error_("Error creating S3 connection pool: " +
                        std::string(e.what()));
@@ -485,14 +607,14 @@ ZarrStream_s::create_store_()
         }
         s3_connection_pool_->return_connection(std::move(conn));
     } else {
-        if (fs::exists(settings_.store_path)) {
+        if (fs::exists(store_path_)) {
             // remove everything inside the store path
             std::error_code ec;
-            fs::remove_all(settings_.store_path, ec);
+            fs::remove_all(store_path_, ec);
 
             if (ec) {
                 set_error_("Failed to remove existing store path '" +
-                           settings_.store_path + "': " + ec.message());
+                           store_path_ + "': " + ec.message());
                 return false;
             }
         }
@@ -500,9 +622,9 @@ ZarrStream_s::create_store_()
         // create the store path
         {
             std::error_code ec;
-            if (!fs::create_directories(settings_.store_path, ec)) {
+            if (!fs::create_directories(store_path_, ec)) {
                 set_error_("Failed to create store path '" +
-                           settings_.store_path + "': " + ec.message());
+                           store_path_ + "': " + ec.message());
                 return false;
             }
         }
@@ -518,25 +640,20 @@ ZarrStream_s::create_writers_()
 
     // construct Blosc compression parameters
     std::optional<zarr::BloscCompressionParams> blosc_compression_params;
-    if (settings_.compressor == ZarrCompressor_Blosc1) {
+    if (compressor_ && *compressor_ == ZarrCompressor_Blosc1) {
         blosc_compression_params = zarr::BloscCompressionParams(
           zarr::blosc_codec_to_string(
-            static_cast<ZarrCompressionCodec>(settings_.compression_codec)),
-          settings_.compression_level,
-          settings_.compression_shuffle);
-    }
-
-    std::optional<std::string> bucket_name;
-    if (is_s3_acquisition(&settings_)) {
-        bucket_name = settings_.s3_bucket_name;
+            *compression_codec_),
+          *compression_level_,
+          *compression_shuffle_);
     }
 
     zarr::ArrayWriterConfig config = {
-        .dimensions = settings_.dimensions,
-        .dtype = static_cast<ZarrDataType>(settings_.dtype),
+        .dimensions = dimensions_,
+        .dtype = static_cast<ZarrDataType>(dtype_),
         .level_of_detail = 0,
-        .bucket_name = bucket_name,
-        .store_path = settings_.store_path,
+        .bucket_name = s3_bucket_name_,
+        .store_path = store_path_,
         .compression_params = blosc_compression_params
     };
 
@@ -548,7 +665,7 @@ ZarrStream_s::create_writers_()
           config, thread_pool_, s3_connection_pool_));
     }
 
-    if (settings_.multiscale) {
+    if (multiscale_) {
         zarr::ArrayWriterConfig downsampled_config;
 
         bool do_downsample = true;
@@ -588,15 +705,15 @@ ZarrStream_s::create_metadata_sinks_()
     try {
         if (s3_connection_pool_) {
             if (!creator.make_metadata_sinks(version_,
-                                             settings_.s3_bucket_name,
-                                             settings_.store_path,
+                                             *s3_bucket_name_,
+                                             store_path_,
                                              metadata_sinks_)) {
                 set_error_("Error creating metadata sinks");
                 return false;
             }
         } else {
             if (!creator.make_metadata_sinks(
-                  version_, settings_.store_path, metadata_sinks_)) {
+                  version_, store_path_, metadata_sinks_)) {
                 set_error_("Error creating metadata sinks");
                 return false;
             }
@@ -682,11 +799,11 @@ ZarrStream_s::write_group_metadata_()
 bool
 ZarrStream_s::write_external_metadata_()
 {
-    if (settings_.custom_metadata.empty()) {
+    if (custom_metadata_.empty()) {
         return true;
     }
 
-    auto metadata = nlohmann::json::parse(settings_.custom_metadata,
+    auto metadata = nlohmann::json::parse(custom_metadata_,
                                           nullptr, // callback
                                           false,   // allow exceptions
                                           true     // ignore comments
@@ -717,14 +834,13 @@ nlohmann::json
 ZarrStream_s::make_multiscale_metadata_() const
 {
     nlohmann::json multiscales;
-    const auto& dimensions = settings_.dimensions;
     multiscales[0]["version"] = "0.4";
 
     auto& axes = multiscales[0]["axes"];
-    for (auto dim = dimensions.begin(); dim != dimensions.end(); ++dim) {
+    for (auto dim = dimensions_.begin(); dim != dimensions_.end(); ++dim) {
         std::string type = dimension_type_to_string(dim->type);
 
-        if (dim < dimensions.end() - 2) {
+        if (dim < dimensions_.end() - 2) {
             axes.push_back({ { "name", dim->name.c_str() }, { "type", type } });
         } else {
             axes.push_back({ { "name", dim->name.c_str() },
@@ -734,7 +850,7 @@ ZarrStream_s::make_multiscale_metadata_() const
     }
 
     // spatial multiscale metadata
-    std::vector<double> scales(dimensions.size(), 1.0);
+    std::vector<double> scales(dimensions_.size(), 1.0);
     multiscales[0]["datasets"] = {
         {
           { "path", "0" },
@@ -751,7 +867,7 @@ ZarrStream_s::make_multiscale_metadata_() const
     for (auto i = 1; i < writers_.size(); ++i) {
         scales.clear();
         scales.push_back(std::pow(2, i)); // append
-        for (auto k = 0; k < dimensions.size() - 3; ++k) {
+        for (auto k = 0; k < dimensions_.size() - 3; ++k) {
             scales.push_back(1.);
         }
         scales.push_back(std::pow(2, i)); // y
@@ -790,15 +906,14 @@ void
 ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
                                        size_t bytes_of_data)
 {
-    if (!settings_.multiscale) {
+    if (!multiscale_) {
         return;
     }
 
     std::function<uint8_t*(const uint8_t*, size_t&, size_t&, size_t&)> scale;
     std::function<void(void*, size_t, const void*, size_t)> average2;
 
-    auto dtype = static_cast<ZarrDataType>(settings_.dtype);
-    switch (dtype) {
+    switch (dtype_) {
         case ZarrDataType_uint8:
             scale = scale_image<uint8_t>;
             average2 = average_two_frames<uint8_t>;
@@ -841,12 +956,11 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
             break;
         default:
             throw std::runtime_error("Invalid data type: " +
-                                     std::to_string(dtype));
+                                     std::to_string(dtype_));
     }
 
-    const auto& dims = settings_.dimensions;
-    size_t frame_width = dims.back().array_size_px;
-    size_t frame_height = dims[dims.size() - 2].array_size_px;
+    size_t frame_width = dimensions_.back().array_size_px;
+    size_t frame_height = dimensions_[dimensions_.size() - 2].array_size_px;
 
     uint8_t* dst;
     for (auto i = 1; i < writers_.size(); ++i) {
@@ -875,74 +989,5 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
             scaled_frames_[i] = dst;
             break;
         }
-    }
-}
-
-// C API
-extern "C"
-{
-    ZarrStream* ZarrStream_create(struct ZarrStreamSettings_s* settings,
-                                  ZarrVersion version)
-    {
-        if (!validate_settings(settings, version)) {
-            return nullptr;
-        }
-
-        // initialize the stream
-        ZarrStream_s* stream = nullptr;
-
-        try {
-            stream = new ZarrStream(settings, version);
-        } catch (const std::bad_alloc&) {
-            LOG_ERROR("Failed to allocate memory for Zarr stream");
-        } catch (const std::exception& e) {
-            LOG_ERROR("Error creating Zarr stream: %s", e.what());
-        }
-
-        return stream;
-    }
-
-    void ZarrStream_destroy(ZarrStream* stream)
-    {
-        delete stream;
-    }
-
-    ZarrStatus ZarrStream_append(ZarrStream* stream,
-                                 const void* data,
-                                 size_t bytes_in,
-                                 size_t* bytes_out)
-    {
-        EXPECT_VALID_ARGUMENT(stream, "Null pointer: stream");
-        EXPECT_VALID_ARGUMENT(data, "Null pointer: data");
-        EXPECT_VALID_ARGUMENT(bytes_out, "Null pointer: bytes_out");
-
-        try {
-            *bytes_out = stream->append(data, bytes_in);
-        } catch (const std::exception& e) {
-            LOG_ERROR("Error appending data: %s", e.what());
-            return ZarrStatus_InternalError;
-        }
-
-        return ZarrStatus_Success;
-    }
-
-    ZarrVersion ZarrStream_get_version(const ZarrStream* stream)
-    {
-        if (!stream) {
-            LOG_WARNING("Null pointer: stream. Returning ZarrVersion_2");
-            return ZarrVersion_2;
-        }
-
-        return stream->version();
-    }
-
-    ZarrStreamSettings* ZarrStream_get_settings(const ZarrStream* stream)
-    {
-        if (!stream) {
-            LOG_WARNING("Null pointer: stream. Returning nullptr");
-            return nullptr;
-        }
-
-        return ZarrStreamSettings_copy(&stream->settings());
     }
 }

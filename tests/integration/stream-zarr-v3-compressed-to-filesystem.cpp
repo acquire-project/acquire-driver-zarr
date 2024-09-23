@@ -55,11 +55,12 @@ const size_t bytes_of_frame = array_width * array_height * nbytes_px;
 ZarrStream*
 setup()
 {
-    auto* settings = ZarrStreamSettings_create();
-
-    ZarrStreamSettings_set_store(
-      settings, test_path.c_str(), test_path.size() + 1, nullptr);
-    ZarrStreamSettings_set_data_type(settings, ZarrDataType_uint16);
+    ZarrStreamSettings settings = {
+        .store_path = test_path.c_str(),
+        .s3_settings = nullptr,
+        .data_type = ZarrDataType_uint16,
+        .version = ZarrVersion_3,
+    };
 
     ZarrCompressionSettings compression_settings = {
         .compressor = ZarrCompressor_Blosc1,
@@ -67,39 +68,27 @@ setup()
         .level = 2,
         .shuffle = 2,
     };
-    ZarrStreamSettings_set_compression(settings, &compression_settings);
+    settings.compression_settings = &compression_settings;
 
-    ZarrStreamSettings_reserve_dimensions(settings, 5);
-    ZarrDimensionProperties dimension;
+    CHECK_OK(ZarrStreamSettings_create_dimension_array(&settings, 5));
 
-    dimension = DIM("t",
-                    ZarrDimensionType_Time,
-                    array_timepoints,
-                    chunk_timepoints,
-                    shard_timepoints);
-    ZarrStreamSettings_set_dimension(settings, 0, &dimension);
+    ZarrDimensionProperties* dim;
+    dim = settings.dimensions;
+    *dim = DIM("t", ZarrDimensionType_Time, array_timepoints, chunk_timepoints, shard_timepoints);
 
-    dimension = DIM("c",
-                    ZarrDimensionType_Channel,
-                    array_channels,
-                    chunk_channels,
-                    shard_channels);
-    ZarrStreamSettings_set_dimension(settings, 1, &dimension);
+    dim = settings.dimensions + 1;
+    *dim = DIM("c", ZarrDimensionType_Channel, array_channels, chunk_channels, shard_channels);
 
-    dimension = DIM(
-      "z", ZarrDimensionType_Space, array_planes, chunk_planes, shard_planes);
-    ZarrStreamSettings_set_dimension(settings, 2, &dimension);
+    dim = settings.dimensions + 2;
+    *dim = DIM("z", ZarrDimensionType_Space, array_planes, chunk_planes, shard_planes);
 
-    dimension = DIM(
-      "y", ZarrDimensionType_Space, array_height, chunk_height, shard_height);
-    ZarrStreamSettings_set_dimension(settings, 3, &dimension);
+    dim = settings.dimensions + 3;
+    *dim = DIM("y", ZarrDimensionType_Space, array_height, chunk_height, shard_height);
 
-    dimension =
-      DIM("x", ZarrDimensionType_Space, array_width, chunk_width, shard_width);
-    ZarrStreamSettings_set_dimension(settings, 4, &dimension);
+    dim = settings.dimensions + 4;
+    *dim = DIM("x", ZarrDimensionType_Space, array_width, chunk_width, shard_width);
 
-    auto* stream = ZarrStream_create(settings, ZarrVersion_3);
-    ZarrStreamSettings_destroy(settings);
+    auto* stream = ZarrStream_create(&settings);
 
     return stream;
 }
@@ -355,12 +344,12 @@ main()
     try {
         size_t bytes_out;
         for (auto i = 0; i < frames_to_acquire; ++i) {
-            ZarrStatus err = ZarrStream_append(
+            ZarrStatusCode status = ZarrStream_append(
               stream, frame.data(), bytes_of_frame, &bytes_out);
-            EXPECT(err == ZarrStatus_Success,
+            EXPECT(status == ZarrStatusCode_Success,
                    "Failed to append frame %d: %s",
                    i,
-                   Zarr_get_error_message(err));
+                   Zarr_get_status_message(status));
             EXPECT_EQ(size_t, "%zu", bytes_out, bytes_of_frame);
         }
 

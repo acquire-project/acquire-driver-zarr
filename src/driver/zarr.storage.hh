@@ -4,7 +4,10 @@
 
 #include "acquire.zarr.h"
 
+#include <memory>
+#include <optional>
 #include <string>
+#include <vector>
 
 namespace acquire::sink {
 struct Zarr : public Storage
@@ -27,11 +30,26 @@ struct Zarr : public Storage
 
   private:
     ZarrVersion version_;
+    std::string store_path_;
+
+    std::optional<std::string> s3_endpoint_;
+    std::optional<std::string> s3_bucket_name_;
+    std::optional<std::string> s3_access_key_id_;
+    std::optional<std::string> s3_secret_access_key_;
+
+    std::string custom_metadata_;
+
+    ZarrDataType dtype_;
+
     ZarrCompressionCodec compression_codec_;
     uint8_t compression_level_;
-    uint8_t shuffle_;
+    uint8_t compression_shuffle_;
 
-    ZarrStreamSettings* stream_settings_;
+    std::vector<std::string> dimension_names_;
+    std::vector<ZarrDimensionProperties> dimensions_;
+
+    bool multiscale_;
+
     ZarrStream* stream_;
 };
 } // namespace acquire::sink
