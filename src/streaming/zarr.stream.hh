@@ -11,7 +11,7 @@
 struct ZarrDimension_s
 {
   public:
-    ZarrDimension_s(const char* name,
+    ZarrDimension_s(std::string_view name,
                     ZarrDimensionType type,
                     uint32_t array_size_px,
                     uint32_t chunk_size_px,
