@@ -2,9 +2,8 @@ set(tgt acquire-zarr)
 
 add_library(${tgt}
         macros.hh
-        zarr.api.cpp
-        stream.settings.hh
-        stream.settings.cpp
+        acquire.zarr.cpp
+        zarr.dimension.hh
         zarr.stream.hh
         zarr.stream.cpp
         zarr.common.hh

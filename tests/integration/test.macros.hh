@@ -20,6 +20,8 @@
         EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
     } while (0)
 
+#define CHECK_OK(e) CHECK((e) == ZarrStatusCode_Success)
+
 #define EXPECT_STR_EQ(a, b)                                                    \
     do {                                                                       \
         std::string a_ = (a) ? (a) : "";                                       \
@@ -42,7 +44,7 @@
 #define SIZED(str) str, sizeof(str)
 #define DIM(name_, type_, array_size, chunk_size, shard_size)                  \
     {                                                                          \
-        .name = (name_), .bytes_of_name = sizeof((name_)), .type = (type_),          \
+        .name = (name_), .type = (type_),          \
         .array_size_px = (array_size), .chunk_size_px = (chunk_size),              \
         .shard_size_chunks = (shard_size)                                        \
     }

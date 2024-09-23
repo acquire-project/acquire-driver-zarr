@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stream.settings.hh"
+#include "zarr.dimension.hh"
 #include "thread.pool.hh"
 #include "s3.connection.hh"
 #include "blosc.compression.params.hh"
