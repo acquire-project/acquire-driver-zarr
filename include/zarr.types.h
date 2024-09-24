@@ -12,17 +12,17 @@ extern "C"
 
     typedef enum
     {
-        ZarrStatus_Success = 0,
-        ZarrStatus_InvalidArgument,
-        ZarrStatus_Overflow,
-        ZarrStatus_InvalidIndex,
-        ZarrStatus_NotYetImplemented,
-        ZarrStatus_InternalError,
-        ZarrStatus_OutOfMemory,
-        ZarrStatus_IOError,
-        ZarrStatus_CompressionError,
-        ZarrStatus_InvalidSettings,
-        ZarrStatusCount,
+        ZarrStatusCode_Success = 0,
+        ZarrStatusCode_InvalidArgument,
+        ZarrStatusCode_Overflow,
+        ZarrStatusCode_InvalidIndex,
+        ZarrStatusCode_NotYetImplemented,
+        ZarrStatusCode_InternalError,
+        ZarrStatusCode_OutOfMemory,
+        ZarrStatusCode_IOError,
+        ZarrStatusCode_CompressionError,
+        ZarrStatusCode_InvalidSettings,
+        ZarrStatusCodeCount,
     } ZarrStatusCode;
 
     typedef enum
@@ -112,7 +112,6 @@ extern "C"
     typedef struct
     {
         const char* name; /**< Name of the dimension */
-        size_t bytes_of_name; /**< Bytes in @p name, including null terminator */
         ZarrDimensionType type; /**< Type of the dimension */
         uint32_t array_size_px; /**< Size of the array along this dimension in
                                        pixels */
