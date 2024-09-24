@@ -1,6 +1,5 @@
 #include "logger.hh"
 
-#include <cstdarg>
 #include <iomanip>
 #include <string>
 #include <thread>
@@ -34,7 +33,7 @@ Logger::get_timestamp_()
 #if defined(_WIN32)
     localtime_s(&tm, &time);
 #else
-    localtime_r(&time, &tm_snapshot);
+    localtime_r(&time, &tm);
 #endif
 
     std::ostringstream ss;
