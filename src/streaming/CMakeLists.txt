@@ -16,9 +16,13 @@ target_include_directories(${tgt}
 )
 
 target_link_libraries(${tgt} PRIVATE
-        acquire-zarr-logger
+        acquire-logger
         blosc_static
         miniocpp::miniocpp
+)
+
+target_compile_definitions(${tgt} PRIVATE
+        "ACQUIRE_ZARR_API_VERSION=\"0.0.1\""
 )
 
 set_target_properties(${tgt} PROPERTIES
@@ -33,5 +37,4 @@ install(TARGETS ${tgt}
 # Install public header files
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
         DESTINATION include
-        FILES_MATCHING PATTERN "*.h"
 )
