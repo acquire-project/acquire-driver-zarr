@@ -25,7 +25,7 @@ is_compressed_acquisition(const struct ZarrStreamSettings_s* settings)
 std::string
 trim(const char* s)
 {
-    if (!s || !*s) {
+    if (s == nullptr || *s == '\0') {
         return {};
     }
 
@@ -48,33 +48,38 @@ trim(const char* s)
     return trimmed;
 }
 
+bool
+is_empty_string(const char* s, std::string_view error_msg)
+{
+    auto trimmed = trim(s);
+    if (trimmed.empty()) {
+        LOG_ERROR(error_msg);
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]]
 bool
 validate_s3_settings(const ZarrS3Settings* settings)
 {
-    std::string trimmed = trim(settings->endpoint);
-    if (trimmed.empty()) {
-        LOG_ERROR("S3 endpoint is empty");
+    if (is_empty_string(settings->endpoint, "S3 endpoint is empty")) {
+        return false;
+    }
+    if (is_empty_string(settings->access_key_id, "S3 access key ID is empty")) {
+        return false;
+    }
+    if (is_empty_string(settings->secret_access_key,
+                        "S3 secret access key is empty")) {
         return false;
     }
 
-    trimmed = trim(settings->bucket_name);
+    std::string trimmed = trim(settings->bucket_name);
     if (trimmed.length() < 3 || trimmed.length() > 63) {
-        LOG_ERROR("Invalid length for S3 bucket name: %zu. Must be between 3 "
-                  "and 63 characters",
-                  trimmed.length());
-        return false;
-    }
-
-    trimmed = trim(settings->access_key_id);
-    if (trimmed.empty()) {
-        LOG_ERROR("S3 access key ID is empty");
-        return false;
-    }
-
-    trimmed = trim(settings->secret_access_key);
-    if (trimmed.empty()) {
-        LOG_ERROR("S3 secret access key is empty");
+        LOG_ERROR("Invalid length for S3 bucket name: ",
+                  trimmed.length(),
+                  ". Must be between 3 "
+                  "and 63 characters");
         return false;
     }
 
@@ -93,8 +98,9 @@ validate_filesystem_store_path(std::string_view data_root)
 
     // parent path must exist and be a directory
     if (!fs::exists(parent_path) || !fs::is_directory(parent_path)) {
-        LOG_ERROR("Parent path '%s' does not exist or is not a directory",
-                  parent_path.c_str());
+        LOG_ERROR("Parent path '",
+                  parent_path,
+                  "' does not exist or is not a directory");
         return false;
     }
 
@@ -105,7 +111,7 @@ validate_filesystem_store_path(std::string_view data_root)
                 fs::perms::others_write)) != fs::perms::none;
 
     if (!is_writable) {
-        LOG_ERROR("Parent path '%s' is not writable", parent_path.c_str());
+        LOG_ERROR("Parent path '", parent_path, "' is not writable");
         return false;
     }
 
@@ -117,12 +123,12 @@ bool
 validate_compression_settings(const ZarrCompressionSettings* settings)
 {
     if (settings->compressor >= ZarrCompressorCount) {
-        LOG_ERROR("Invalid compressor: %d", settings->compressor);
+        LOG_ERROR("Invalid compressor: ", settings->compressor);
         return false;
     }
 
     if (settings->codec >= ZarrCompressionCodecCount) {
-        LOG_ERROR("Invalid compression codec: %d", settings->codec);
+        LOG_ERROR("Invalid compression codec: ", settings->codec);
         return false;
     }
 
@@ -134,20 +140,24 @@ validate_compression_settings(const ZarrCompressionSettings* settings)
     }
 
     if (settings->level > 9) {
-        LOG_ERROR("Invalid compression level: %d. Must be between 0 and 9",
-                  settings->level);
+        LOG_ERROR("Invalid compression level: ",
+                  settings->level,
+                  ". Must be between 0 and 9");
         return false;
     }
 
     if (settings->shuffle != BLOSC_NOSHUFFLE &&
         settings->shuffle != BLOSC_SHUFFLE &&
         settings->shuffle != BLOSC_BITSHUFFLE) {
-        LOG_ERROR("Invalid shuffle: %d. Must be %d (no shuffle), %d (byte "
-                  "shuffle), or %d (bit shuffle)",
+        LOG_ERROR("Invalid shuffle: ",
                   settings->shuffle,
+                  ". Must be ",
                   BLOSC_NOSHUFFLE,
+                  " (no shuffle), ",
                   BLOSC_SHUFFLE,
-                  BLOSC_BITSHUFFLE);
+                  " (byte  shuffle), or ",
+                  BLOSC_BITSHUFFLE,
+                  " (bit shuffle)");
         return false;
     }
 
@@ -158,7 +168,7 @@ validate_compression_settings(const ZarrCompressionSettings* settings)
 bool
 validate_custom_metadata(const char* metadata)
 {
-    if (nullptr == metadata || !*metadata) {
+    if (metadata == nullptr || !*metadata) {
         return true; // custom metadata is optional
     }
 
@@ -170,7 +180,7 @@ validate_custom_metadata(const char* metadata)
     );
 
     if (val.is_discarded()) {
-        LOG_ERROR("Invalid JSON: %s", metadata);
+        LOG_ERROR("Invalid JSON: ", metadata);
         return false;
     }
 
@@ -183,14 +193,12 @@ validate_dimension(const ZarrDimensionProperties* dimension,
                    ZarrVersion version,
                    bool is_append)
 {
-    std::string trimmed = trim(dimension->name);
-    if (trimmed.empty()) {
-        LOG_ERROR("Invalid name. Must not be empty");
+    if (is_empty_string(dimension->name, "Dimension name is empty")) {
         return false;
     }
 
     if (dimension->type >= ZarrDimensionTypeCount) {
-        LOG_ERROR("Invalid dimension type: %d", dimension->type);
+        LOG_ERROR("Invalid dimension type: ", dimension->type);
         return false;
     }
 
@@ -200,7 +208,7 @@ validate_dimension(const ZarrDimensionProperties* dimension,
     }
 
     if (dimension->chunk_size_px == 0) {
-        LOG_ERROR("Invalid chunk size: %zu", dimension->chunk_size_px);
+        LOG_ERROR("Invalid chunk size: ", dimension->chunk_size_px);
         return false;
     }
 
@@ -223,11 +231,11 @@ validate_settings(const struct ZarrStreamSettings_s* settings)
 
     auto version = settings->version;
     if (version < ZarrVersion_2 || version >= ZarrVersionCount) {
-        LOG_ERROR("Invalid Zarr version: %d", version);
+        LOG_ERROR("Invalid Zarr version: ", version);
         return false;
     }
 
-    if (nullptr == settings->store_path) {
+    if (settings->store_path == nullptr) {
         LOG_ERROR("Null pointer: store_path");
         return false;
     }
@@ -239,16 +247,15 @@ validate_settings(const struct ZarrStreamSettings_s* settings)
         return false;
     }
 
-    if (is_s3_acquisition(settings) &&
-        !validate_s3_settings(settings->s3_settings)) {
-        return false;
-    } else if (!is_s3_acquisition(settings) &&
-               !validate_filesystem_store_path(store_path)) {
+    if ((is_s3_acquisition(settings) &&
+         !validate_s3_settings(settings->s3_settings)) ||
+        (!is_s3_acquisition(settings) &&
+         !validate_filesystem_store_path(store_path))) {
         return false;
     }
 
     if (settings->data_type >= ZarrDataTypeCount) {
-        LOG_ERROR("Invalid data type: %d", settings->data_type);
+        LOG_ERROR("Invalid data type: ", settings->data_type);
         return false;
     }
 
@@ -261,7 +268,7 @@ validate_settings(const struct ZarrStreamSettings_s* settings)
         return false;
     }
 
-    if (nullptr == settings->dimensions) {
+    if (settings->dimensions == nullptr) {
         LOG_ERROR("Null pointer: dimensions");
         return false;
     }
@@ -269,8 +276,7 @@ validate_settings(const struct ZarrStreamSettings_s* settings)
     // we must have at least 3 dimensions
     const size_t ndims = settings->dimension_count;
     if (ndims < 3) {
-        LOG_ERROR("Invalid number of dimensions: %zu. Must be at least 3",
-                  ndims);
+        LOG_ERROR("Invalid number of dimensions: ", ndims, ". Must be at least 3");
         return false;
     }
 
@@ -309,25 +315,25 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings)
     commit_settings_(settings);
 
     // create the data store
-    EXPECT(create_store_(), "%s", error_.c_str());
+    EXPECT(create_store_(), error_);
 
     // allocate writers
-    EXPECT(create_writers_(), "%s", error_.c_str());
+    EXPECT(create_writers_(), error_);
 
     // allocate multiscale frame placeholders
     create_scaled_frames_();
 
     // allocate metadata sinks
-    EXPECT(create_metadata_sinks_(), "%s", error_.c_str());
+    EXPECT(create_metadata_sinks_(), error_);
 
     // write base metadata
-    EXPECT(write_base_metadata_(), "%s", error_.c_str());
+    EXPECT(write_base_metadata_(), error_);
 
     // write group metadata
-    EXPECT(write_group_metadata_(), "%s", error_.c_str());
+    EXPECT(write_group_metadata_(), error_);
 
     // write external metadata
-    EXPECT(write_external_metadata_(), "%s", error_.c_str());
+    EXPECT(write_external_metadata_(), error_);
 }
 
 ZarrStream_s::~ZarrStream_s()
@@ -336,7 +342,7 @@ ZarrStream_s::~ZarrStream_s()
         // must precede close of chunk file
         write_group_metadata_();
     } catch (const std::exception& e) {
-        LOG_ERROR("Error finalizing Zarr stream: %s", e.what());
+        LOG_ERROR("Error finalizing Zarr stream: ", e.what());
     }
 }
 
@@ -350,15 +356,13 @@ ZarrStream::append(const void* data, size_t nbytes)
 bool
 ZarrStream_s::is_s3_acquisition_() const
 {
-    return s3_endpoint_.has_value() && s3_bucket_name_.has_value() &&
-           s3_access_key_id_.has_value() && s3_secret_access_key_.has_value();
+    return s3_settings_.has_value();
 }
 
 bool
 ZarrStream_s::is_compressed_acquisition_() const
 {
-    return compressor_.has_value() && compression_codec_.has_value() &&
-           compression_level_.has_value() && compression_shuffle_.has_value();
+    return compression_settings_.has_value();
 }
 
 void
@@ -369,17 +373,21 @@ ZarrStream_s::commit_settings_(const struct ZarrStreamSettings_s* settings)
     custom_metadata_ = trim(settings->custom_metadata);
 
     if (is_s3_acquisition(settings)) {
-        s3_endpoint_ = trim(settings->s3_settings->endpoint);
-        s3_bucket_name_ = trim(settings->s3_settings->bucket_name);
-        s3_access_key_id_ = trim(settings->s3_settings->access_key_id);
-        s3_secret_access_key_ = trim(settings->s3_settings->secret_access_key);
+        s3_settings_ = {
+            .endpoint = trim(settings->s3_settings->endpoint),
+            .bucket_name = trim(settings->s3_settings->bucket_name),
+            .access_key_id = trim(settings->s3_settings->access_key_id),
+            .secret_access_key = trim(settings->s3_settings->secret_access_key),
+        };
     }
 
     if (is_compressed_acquisition(settings)) {
-        compressor_ = settings->compression_settings->compressor;
-        compression_codec_ = settings->compression_settings->codec;
-        compression_level_ = settings->compression_settings->level;
-        compression_shuffle_ = settings->compression_settings->shuffle;
+        compression_settings_ = {
+            .compressor = settings->compression_settings->compressor,
+            .codec = settings->compression_settings->codec,
+            .level = settings->compression_settings->level,
+            .shuffle = settings->compression_settings->shuffle,
+        };
     }
 
     dtype_ = settings->data_type;
