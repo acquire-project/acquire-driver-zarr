@@ -2,11 +2,11 @@ set(project acquire-zarr)
 
 set(tests
         create-stream
-        common-chunk-lattice-index
-        common-tile-group-offset
-        common-chunk-internal-offset
-        common-shard-index-for-chunk
-        common-shard-internal-index
+        array-dimensions-chunk-lattice-index
+        array-dimensions-tile-group-offset
+        array-dimensions-chunk-internal-offset
+        array-dimensions-shard-index-for-chunk
+        array-dimensions-shard-internal-index
         thread-pool-push-to-job-queue
         s3-connection-put-object
         s3-connection-upload-multipart-object
@@ -25,7 +25,7 @@ foreach (name ${tests})
             ${CMAKE_SOURCE_DIR}/src/streaming
     )
     target_link_libraries(${tgt} PRIVATE
-            acquire-zarr-logger
+            acquire-logger
             acquire-zarr
             miniocpp::miniocpp
     )
