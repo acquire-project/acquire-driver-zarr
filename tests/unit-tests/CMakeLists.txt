@@ -2,11 +2,11 @@ set(project acquire-zarr)
 
 set(tests
         create-stream
-        common-chunk-lattice-index
-        common-tile-group-offset
-        common-chunk-internal-offset
-        common-shard-index-for-chunk
-        common-shard-internal-index
+        array-dimensions-chunk-lattice-index
+        array-dimensions-tile-group-offset
+        array-dimensions-chunk-internal-offset
+        array-dimensions-shard-index-for-chunk
+        array-dimensions-shard-internal-index
 )
 
 foreach (name ${tests})
