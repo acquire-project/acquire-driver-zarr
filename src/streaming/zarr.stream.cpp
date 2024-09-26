@@ -1,6 +1,6 @@
 #include "macros.hh"
 #include "zarr.stream.hh"
-#include "acquire.zarr.h"
+#include "zarr.common.hh"
 
 #include <blosc.h>
 
@@ -22,59 +22,22 @@ is_compressed_acquisition(const struct ZarrStreamSettings_s* settings)
 }
 
 [[nodiscard]]
-std::string
-trim(const char* s)
-{
-    if (s == nullptr || *s == '\0') {
-        return {};
-    }
-
-    const size_t length = strlen(s);
-
-    // trim left
-    std::string trimmed(s, length);
-    trimmed.erase(trimmed.begin(),
-                  std::find_if(trimmed.begin(), trimmed.end(), [](char c) {
-                      return !std::isspace(c);
-                  }));
-
-    // trim right
-    trimmed.erase(std::find_if(trimmed.rbegin(),
-                               trimmed.rend(),
-                               [](char c) { return !std::isspace(c); })
-                    .base(),
-                  trimmed.end());
-
-    return trimmed;
-}
-
-bool
-is_empty_string(const char* s, std::string_view error_msg)
-{
-    auto trimmed = trim(s);
-    if (trimmed.empty()) {
-        LOG_ERROR(error_msg);
-        return true;
-    }
-    return false;
-}
-
-[[nodiscard]]
 bool
 validate_s3_settings(const ZarrS3Settings* settings)
 {
-    if (is_empty_string(settings->endpoint, "S3 endpoint is empty")) {
+    if (zarr::is_empty_string(settings->endpoint, "S3 endpoint is empty")) {
         return false;
     }
-    if (is_empty_string(settings->access_key_id, "S3 access key ID is empty")) {
+    if (zarr::is_empty_string(settings->access_key_id,
+                              "S3 access key ID is empty")) {
         return false;
     }
-    if (is_empty_string(settings->secret_access_key,
-                        "S3 secret access key is empty")) {
+    if (zarr::is_empty_string(settings->secret_access_key,
+                              "S3 secret access key is empty")) {
         return false;
     }
 
-    std::string trimmed = trim(settings->bucket_name);
+    std::string trimmed = zarr::trim(settings->bucket_name);
     if (trimmed.length() < 3 || trimmed.length() > 63) {
         LOG_ERROR("Invalid length for S3 bucket name: ",
                   trimmed.length(),
@@ -193,7 +156,7 @@ validate_dimension(const ZarrDimensionProperties* dimension,
                    ZarrVersion version,
                    bool is_append)
 {
-    if (is_empty_string(dimension->name, "Dimension name is empty")) {
+    if (zarr::is_empty_string(dimension->name, "Dimension name is empty")) {
         return false;
     }
 
@@ -369,15 +332,19 @@ void
 ZarrStream_s::commit_settings_(const struct ZarrStreamSettings_s* settings)
 {
     version_ = settings->version;
-    store_path_ = trim(settings->store_path);
-    custom_metadata_ = trim(settings->custom_metadata);
+    store_path_ = zarr::trim(settings->store_path);
+    if (settings->custom_metadata) {
+        custom_metadata_ = zarr::trim(settings->custom_metadata);
+    } else {
+        custom_metadata_ = "{}";
+    }
 
     if (is_s3_acquisition(settings)) {
         s3_settings_ = {
-            .endpoint = trim(settings->s3_settings->endpoint),
-            .bucket_name = trim(settings->s3_settings->bucket_name),
-            .access_key_id = trim(settings->s3_settings->access_key_id),
-            .secret_access_key = trim(settings->s3_settings->secret_access_key),
+            .endpoint = zarr::trim(settings->s3_settings->endpoint),
+            .bucket_name = zarr::trim(settings->s3_settings->bucket_name),
+            .access_key_id = zarr::trim(settings->s3_settings->access_key_id),
+            .secret_access_key = zarr::trim(settings->s3_settings->secret_access_key),
         };
     }
 
@@ -392,14 +359,18 @@ ZarrStream_s::commit_settings_(const struct ZarrStreamSettings_s* settings)
 
     dtype_ = settings->data_type;
 
+    std::vector<ZarrDimension> dims;
     for (auto i = 0; i < settings->dimension_count; ++i) {
         const auto& dim = settings->dimensions[i];
-        dimensions_.emplace_back(dim.name,
-                                 dim.type,
-                                 dim.array_size_px,
-                                 dim.chunk_size_px,
-                                 dim.shard_size_chunks);
+        dims.emplace_back(dim.name,
+                          dim.type,
+                          dim.array_size_px,
+                          dim.chunk_size_px,
+                          dim.shard_size_chunks);
     }
+    dimensions_ = std::make_shared<ArrayDimensions>(std::move(dims), dtype_);
+
+    multiscale_ = settings->multiscale;
 }
 
 void

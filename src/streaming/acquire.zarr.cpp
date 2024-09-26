@@ -137,7 +137,7 @@ extern "C"
         } catch (const std::bad_alloc&) {
             LOG_ERROR("Failed to allocate memory for Zarr stream");
         } catch (const std::exception& e) {
-            LOG_ERROR("Error creating Zarr stream: %s", e.what());
+            LOG_ERROR("Error creating Zarr stream: ", e.what());
         }
 
         return stream;

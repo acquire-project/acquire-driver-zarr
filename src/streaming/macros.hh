@@ -9,7 +9,7 @@
             throw std::runtime_error(__err);                                   \
         }                                                                      \
     } while (0)
-#define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t%s", #e)
+#define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t", #e)
 
 #define EXPECT_VALID_ARGUMENT(e, ...)                                          \
     do {                                                                       \

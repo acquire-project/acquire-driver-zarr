@@ -1,35 +1,12 @@
 #pragma once
 
-#include "zarr.types.h"
+#include "zarr.dimension.hh"
 
 #include <nlohmann/json.hpp>
 
 #include <cstddef> // size_t
 #include <memory>  // unique_ptr
 #include <optional>
-
-struct ZarrDimension_s
-{
-    ZarrDimension_s(const char* name,
-                    ZarrDimensionType type,
-                    uint32_t array_size_px,
-                    uint32_t chunk_size_px,
-                    uint32_t shard_size_chunks)
-      : name(name)
-      , type(type)
-      , array_size_px(array_size_px)
-      , chunk_size_px(chunk_size_px)
-      , shard_size_chunks(shard_size_chunks)
-    {
-    }
-
-    std::string name;
-    ZarrDimensionType type;
-
-    uint32_t array_size_px;
-    uint32_t chunk_size_px;
-    uint32_t shard_size_chunks;
-};
 
 struct ZarrStream_s
 {
@@ -67,7 +44,7 @@ struct ZarrStream_s
     std::optional<CompressionSettings> compression_settings_;
     std::string custom_metadata_;
     ZarrDataType dtype_;
-    std::vector<ZarrDimension_s> dimensions_;
+    std::shared_ptr<ArrayDimensions> dimensions_;
     bool multiscale_;
 
     bool is_s3_acquisition_() const;
