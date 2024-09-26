@@ -39,9 +39,9 @@ extern "C"
 
     /**
      * @brief Get the version of the Zarr API.
-     * @return The version of the Zarr API.
+     * @return Semver formatted version of the Zarr API.
      */
-    uint32_t Zarr_get_api_version();
+    const char* Zarr_get_api_version();
 
     /**
      * @brief Set the log level for the Zarr API.
@@ -58,10 +58,10 @@ extern "C"
 
     /**
      * @brief Get the message for the given status code.
-     * @param status The status code.
+     * @param code The status code.
      * @return A human-readable status message.
      */
-    const char* Zarr_get_status_message(ZarrStatusCode status);
+    const char* Zarr_get_status_message(ZarrStatusCode code);
 
     /**
      * @brief Allocate memory for the dimension array in the Zarr stream settings struct.
