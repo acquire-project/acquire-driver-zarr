@@ -9,7 +9,7 @@
 #include <string>
 
 namespace zarr {
-class S3Sink final : public Sink
+class S3Sink : public Sink
 {
   public:
     S3Sink(std::string_view bucket_name,
