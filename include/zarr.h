@@ -1,6 +1,12 @@
 #ifndef H_ACQUIRE_ZARR_V0
 #define H_ACQUIRE_ZARR_V0
 
+#ifdef _WIN32
+#define acquire_export __declspec(dllexport)
+#else
+#define acquire_export
+#endif
+
 #include "zarr.types.h"
 
 #ifdef __cplusplus
@@ -15,20 +21,20 @@ extern "C"
      * @brief Get the version of the Zarr API.
      * @return The version of the Zarr API.
      */
-    uint32_t Zarr_get_api_version();
+    acquire_export uint32_t Zarr_get_api_version();
 
     /**
      * @brief Get the message for the given status code.
      * @param status The status code.
      * @return A human-readable status message.
      */
-    const char* Zarr_get_error_message(ZarrStatus status);
+    acquire_export const char* Zarr_get_error_message(ZarrStatus status);
 
     /**
      * @brief Create a Zarr stream settings struct.
      * @return A pointer to the Zarr stream settings struct, or NULL on failure.
      */
-    ZarrStreamSettings* ZarrStreamSettings_create();
+    acquire_export ZarrStreamSettings* ZarrStreamSettings_create();
 
     /**
      * @brief Destroy a Zarr stream settings struct.
@@ -36,14 +42,15 @@ extern "C"
      * settings struct.
      * @param[in] settings The Zarr stream settings struct.
      */
-    void ZarrStreamSettings_destroy(ZarrStreamSettings* settings);
+    acquire_export void ZarrStreamSettings_destroy(
+      ZarrStreamSettings* settings);
 
     /**
      * @brief Copy a Zarr stream settings struct.
      * @param[in] settings The Zarr stream settings struct to copy.
      * @return A copy of the Zarr stream settings struct.
      */
-    ZarrStreamSettings* ZarrStreamSettings_copy(
+    acquire_export ZarrStreamSettings* ZarrStreamSettings_copy(
       const ZarrStreamSettings* settings);
 
     /**
@@ -57,8 +64,9 @@ extern "C"
      * assumed to be a directory path.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
-    ZarrStatus ZarrStreamSettings_set_store(ZarrStreamSettings* settings,
-                                            const char* store_path,
+    acquire_export ZarrStatus
+    ZarrStreamSettings_set_store(ZarrStreamSettings* settings,
+                                 const char* store_path,
                                             size_t bytes_of_store_path,
                                             const ZarrS3Settings* s3_settings);
 
@@ -69,7 +77,7 @@ extern "C"
      * @param[in] compression_settings The compression_settings settings.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
-    ZarrStatus ZarrStreamSettings_set_compression(
+    acquire_export ZarrStatus ZarrStreamSettings_set_compression(
       ZarrStreamSettings* settings,
       const ZarrCompressionSettings* compression_settings);
 
@@ -79,8 +87,9 @@ extern "C"
      * @param[in] data_type The data type.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
-    ZarrStatus ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
-                                                ZarrDataType data_type);
+    acquire_export ZarrStatus
+    ZarrStreamSettings_set_data_type(ZarrStreamSettings* settings,
+                                     ZarrDataType data_type);
 
     /**
      * @brief Reserve space for dimensions in the Zarr stream settings struct.
@@ -91,8 +100,8 @@ extern "C"
      * @param[in] count The number of dimensions to reserve space for.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
-    ZarrStatus ZarrStreamSettings_reserve_dimensions(
-      ZarrStreamSettings* settings,
+    acquire_export ZarrStatus
+    ZarrStreamSettings_reserve_dimensions(ZarrStreamSettings* settings,
       size_t count);
 
     /**
@@ -108,8 +117,8 @@ extern "C"
      * number of dimensions reserved with ZarrStreamSettings_reserve_dimensions.
      * @param[in] dimension The dimension's settings.
      */
-    ZarrStatus ZarrStreamSettings_set_dimension(
-      ZarrStreamSettings* settings,
+    acquire_export ZarrStatus
+    ZarrStreamSettings_set_dimension(ZarrStreamSettings* settings,
       size_t index,
       const ZarrDimensionProperties* dimension);
 
@@ -120,8 +129,9 @@ extern "C"
      * levels of detail.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
-    ZarrStatus ZarrStreamSettings_set_multiscale(ZarrStreamSettings* settings,
-                                                 uint8_t multiscale);
+    acquire_export ZarrStatus
+    ZarrStreamSettings_set_multiscale(ZarrStreamSettings* settings,
+                                      uint8_t multiscale);
 
     /**
      * @brief Set JSON-formatted custom metadata for the Zarr stream.
@@ -133,33 +143,34 @@ extern "C"
      * bytes, including the null terminator.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
-    ZarrStatus ZarrStreamSettings_set_custom_metadata(
-      ZarrStreamSettings* settings,
+    acquire_export ZarrStatus
+    ZarrStreamSettings_set_custom_metadata(ZarrStreamSettings* settings,
       const char* external_metadata,
       size_t bytes_of_external_metadata);
 
-    const char* ZarrStreamSettings_get_store_path(
+    acquire_export const char* ZarrStreamSettings_get_store_path(
       const ZarrStreamSettings* settings);
 
-    ZarrS3Settings ZarrStreamSettings_get_s3_settings(
-      const ZarrStreamSettings* settings);
+    acquire_export ZarrS3Settings
+    ZarrStreamSettings_get_s3_settings(const ZarrStreamSettings* settings);
 
-    ZarrCompressionSettings ZarrStreamSettings_get_compression(
-      const ZarrStreamSettings* settings);
+    acquire_export ZarrCompressionSettings
+    ZarrStreamSettings_get_compression(const ZarrStreamSettings* settings);
 
-    ZarrDataType ZarrStreamSettings_get_data_type(
-      const ZarrStreamSettings* settings);
+    acquire_export ZarrDataType
+    ZarrStreamSettings_get_data_type(const ZarrStreamSettings* settings);
 
-    size_t ZarrStreamSettings_get_dimension_count(
-      const ZarrStreamSettings* settings);
+    acquire_export size_t
+    ZarrStreamSettings_get_dimension_count(const ZarrStreamSettings* settings);
 
-    ZarrDimensionProperties ZarrStreamSettings_get_dimension(
-      const ZarrStreamSettings* settings,
+    acquire_export ZarrDimensionProperties
+    ZarrStreamSettings_get_dimension(const ZarrStreamSettings* settings,
       size_t index);
 
-    bool ZarrStreamSettings_get_multiscale(const ZarrStreamSettings* settings);
+    acquire_export bool ZarrStreamSettings_get_multiscale(
+      const ZarrStreamSettings* settings);
 
-    const char* ZarrStreamSettings_get_custom_metadata(
+    acquire_export const char* ZarrStreamSettings_get_custom_metadata(
       const ZarrStreamSettings* settings);
 
     /**
@@ -168,15 +179,15 @@ extern "C"
      * @param[in] version The version of the Zarr stream. 2 or 3.
      * @return A pointer to the Zarr stream struct, or NULL on failure.
      */
-    ZarrStream* ZarrStream_create(ZarrStreamSettings* settings,
-                                  ZarrVersion version);
+    acquire_export ZarrStream* ZarrStream_create(ZarrStreamSettings* settings,
+                                                 ZarrVersion version);
 
     /**
      * @brief Destroy a Zarr stream.
      * @details This function frees the memory allocated for the Zarr stream.
      * @param stream The Zarr stream struct to destroy.
      */
-    void ZarrStream_destroy(ZarrStream* stream);
+    acquire_export void ZarrStream_destroy(ZarrStream* stream);
 
     /**
      * @brief Append data to the Zarr stream.
@@ -187,8 +198,8 @@ extern "C"
      * @param[out] bytes_out The number of bytes written to the stream.
      * @return ZarrStatus_Success on success, or an error code on failure.
      */
-    ZarrStatus ZarrStream_append(ZarrStream* stream,
-                                 const void* data,
+    acquire_export ZarrStatus ZarrStream_append(ZarrStream* stream,
+                                                const void* data,
                                  size_t bytes_in,
                                  size_t* bytes_out);
 
@@ -197,17 +208,18 @@ extern "C"
      * @param stream The Zarr stream struct.
      * @return The version of the Zarr stream.
      */
-    ZarrVersion ZarrStream_get_version(const ZarrStream* stream);
+    acquire_export ZarrVersion ZarrStream_get_version(const ZarrStream* stream);
 
     /**
      * @brief Get a copy of the settings for the Zarr stream.
      * @param stream The Zarr stream struct.
      * @return A copy of the settings for the Zarr stream.
      */
-    ZarrStreamSettings* ZarrStream_get_settings(const ZarrStream* stream);
+    acquire_export ZarrStreamSettings* ZarrStream_get_settings(
+      const ZarrStream* stream);
 
-    ZarrStatus Zarr_set_log_level(ZarrLogLevel level);
-    ZarrLogLevel Zarr_get_log_level();
+    acquire_export ZarrStatus Zarr_set_log_level(ZarrLogLevel level);
+    acquire_export ZarrLogLevel Zarr_get_log_level();
 
 #ifdef __cplusplus
 }

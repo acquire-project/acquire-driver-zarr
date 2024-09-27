@@ -47,6 +47,7 @@ set_target_properties(${tgt} PROPERTIES
 )
 
 install(TARGETS ${tgt}
+        RUNTIME DESTINATION bin
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
 )
@@ -54,5 +55,4 @@ install(TARGETS ${tgt}
 # Install public header files
 install(DIRECTORY ${CMAKE_SOURCE_DIR}/include/
         DESTINATION include
-        FILES_MATCHING PATTERN "*.h"
 )
