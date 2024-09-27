@@ -32,3 +32,5 @@
                b_.c_str());                                                    \
     } while (0)
 
+#define EXPECT_INT_EQ(a, b)                                                    \
+    EXPECT((a) == (b), "Expected ", #a, " == ", #b, ", but ", a, " != ", b)

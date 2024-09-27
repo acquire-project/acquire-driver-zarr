@@ -13,58 +13,62 @@ main()
     try {
         const fs::path base_dir = "acquire";
 
-        zarr::ArrayWriterConfig config{ .dimensions = {},
-                                        .dtype = ZarrDataType_uint8,
-                                        .level_of_detail = 0,
-                                        .bucket_name = std::nullopt,
-                                        .store_path = base_dir.string(),
-                                        .compression_params = std::nullopt };
-
-        config.dimensions.emplace_back("t",
-                                       ZarrDimensionType_Time,
-                                       0,
-                                       5,
-                                       1); // 5 timepoints / chunk, 1 shard
-        config.dimensions.emplace_back(
+        std::vector<ZarrDimension> dims;
+        dims.emplace_back("t",
+                          ZarrDimensionType_Time,
+                          0,
+                          5,
+                          1); // 5 timepoints / chunk, 1 shard
+        dims.emplace_back(
           "c", ZarrDimensionType_Channel, 2, 1, 1); // 2 chunks, 2 shards
-        config.dimensions.emplace_back(
+        dims.emplace_back(
           "z", ZarrDimensionType_Space, 7, 3, 3); // 3 chunks, 3 shards
-        config.dimensions.emplace_back(
+        dims.emplace_back(
           "y", ZarrDimensionType_Space, 48, 16, 3); // 3 chunks, 1 shard
-        config.dimensions.emplace_back(
+        dims.emplace_back(
           "x", ZarrDimensionType_Space, 64, 16, 2); // 4 chunks, 2 shards
+
+        zarr::ArrayWriterConfig config{
+            .dimensions = std::make_shared<ArrayDimensions>(std::move(dims),
+                                                            ZarrDataType_uint8),
+            .dtype = ZarrDataType_uint8,
+            .level_of_detail = 0,
+            .bucket_name = std::nullopt,
+            .store_path = base_dir.string(),
+            .compression_params = std::nullopt
+        };
 
         zarr::ArrayWriterConfig downsampled_config;
         CHECK(zarr::downsample(config, downsampled_config));
 
         // check dimensions
-        CHECK(downsampled_config.dimensions.size() == 5);
+        CHECK(downsampled_config.dimensions->ndims() == 5);
 
-        CHECK(downsampled_config.dimensions[0].name == "t");
-        CHECK(downsampled_config.dimensions[0].array_size_px == 0);
-        CHECK(downsampled_config.dimensions[0].chunk_size_px == 5);
-        CHECK(downsampled_config.dimensions[0].shard_size_chunks == 1);
+        CHECK(downsampled_config.dimensions->at(0).name == "t");
+        CHECK(downsampled_config.dimensions->at(0).array_size_px == 0);
+        CHECK(downsampled_config.dimensions->at(0).chunk_size_px == 5);
+        CHECK(downsampled_config.dimensions->at(0).shard_size_chunks == 1);
 
-        CHECK(downsampled_config.dimensions[1].name == "c");
+        CHECK(downsampled_config.dimensions->at(1).name == "c");
         // we don't downsample channels
-        CHECK(downsampled_config.dimensions[1].array_size_px == 2);
-        CHECK(downsampled_config.dimensions[1].chunk_size_px == 1);
-        CHECK(downsampled_config.dimensions[1].shard_size_chunks == 1);
+        CHECK(downsampled_config.dimensions->at(1).array_size_px == 2);
+        CHECK(downsampled_config.dimensions->at(1).chunk_size_px == 1);
+        CHECK(downsampled_config.dimensions->at(1).shard_size_chunks == 1);
 
-        CHECK(downsampled_config.dimensions[2].name == "z");
-        CHECK(downsampled_config.dimensions[2].array_size_px == 4);
-        CHECK(downsampled_config.dimensions[2].chunk_size_px == 3);
-        CHECK(downsampled_config.dimensions[2].shard_size_chunks == 2);
+        CHECK(downsampled_config.dimensions->at(2).name == "z");
+        CHECK(downsampled_config.dimensions->at(2).array_size_px == 4);
+        CHECK(downsampled_config.dimensions->at(2).chunk_size_px == 3);
+        CHECK(downsampled_config.dimensions->at(2).shard_size_chunks == 2);
 
-        CHECK(downsampled_config.dimensions[3].name == "y");
-        CHECK(downsampled_config.dimensions[3].array_size_px == 24);
-        CHECK(downsampled_config.dimensions[3].chunk_size_px == 16);
-        CHECK(downsampled_config.dimensions[3].shard_size_chunks == 2);
+        CHECK(downsampled_config.dimensions->at(3).name == "y");
+        CHECK(downsampled_config.dimensions->at(3).array_size_px == 24);
+        CHECK(downsampled_config.dimensions->at(3).chunk_size_px == 16);
+        CHECK(downsampled_config.dimensions->at(3).shard_size_chunks == 2);
 
-        CHECK(downsampled_config.dimensions[4].name == "x");
-        CHECK(downsampled_config.dimensions[4].array_size_px == 32);
-        CHECK(downsampled_config.dimensions[4].chunk_size_px == 16);
-        CHECK(downsampled_config.dimensions[4].shard_size_chunks == 2);
+        CHECK(downsampled_config.dimensions->at(4).name == "x");
+        CHECK(downsampled_config.dimensions->at(4).array_size_px == 32);
+        CHECK(downsampled_config.dimensions->at(4).chunk_size_px == 16);
+        CHECK(downsampled_config.dimensions->at(4).shard_size_chunks == 2);
 
         // check level of detail
         CHECK(downsampled_config.level_of_detail == 1);
@@ -82,33 +86,33 @@ main()
         CHECK(!zarr::downsample(config, downsampled_config));
 
         // check dimensions
-        CHECK(downsampled_config.dimensions.size() == 5);
+        CHECK(downsampled_config.dimensions->ndims() == 5);
 
-        CHECK(downsampled_config.dimensions[0].name == "t");
-        CHECK(downsampled_config.dimensions[0].array_size_px == 0);
-        CHECK(downsampled_config.dimensions[0].chunk_size_px == 5);
-        CHECK(downsampled_config.dimensions[0].shard_size_chunks == 1);
+        CHECK(downsampled_config.dimensions->at(0).name == "t");
+        CHECK(downsampled_config.dimensions->at(0).array_size_px == 0);
+        CHECK(downsampled_config.dimensions->at(0).chunk_size_px == 5);
+        CHECK(downsampled_config.dimensions->at(0).shard_size_chunks == 1);
 
-        CHECK(downsampled_config.dimensions[1].name == "c");
+        CHECK(downsampled_config.dimensions->at(1).name == "c");
         // we don't downsample channels
-        CHECK(downsampled_config.dimensions[1].array_size_px == 2);
-        CHECK(downsampled_config.dimensions[1].chunk_size_px == 1);
-        CHECK(downsampled_config.dimensions[1].shard_size_chunks == 1);
+        CHECK(downsampled_config.dimensions->at(1).array_size_px == 2);
+        CHECK(downsampled_config.dimensions->at(1).chunk_size_px == 1);
+        CHECK(downsampled_config.dimensions->at(1).shard_size_chunks == 1);
 
-        CHECK(downsampled_config.dimensions[2].name == "z");
-        CHECK(downsampled_config.dimensions[2].array_size_px == 2);
-        CHECK(downsampled_config.dimensions[2].chunk_size_px == 2);
-        CHECK(downsampled_config.dimensions[2].shard_size_chunks == 1);
+        CHECK(downsampled_config.dimensions->at(2).name == "z");
+        CHECK(downsampled_config.dimensions->at(2).array_size_px == 2);
+        CHECK(downsampled_config.dimensions->at(2).chunk_size_px == 2);
+        CHECK(downsampled_config.dimensions->at(2).shard_size_chunks == 1);
 
-        CHECK(downsampled_config.dimensions[3].name == "y");
-        CHECK(downsampled_config.dimensions[3].array_size_px == 12);
-        CHECK(downsampled_config.dimensions[3].chunk_size_px == 12);
-        CHECK(downsampled_config.dimensions[3].shard_size_chunks == 1);
+        CHECK(downsampled_config.dimensions->at(3).name == "y");
+        CHECK(downsampled_config.dimensions->at(3).array_size_px == 12);
+        CHECK(downsampled_config.dimensions->at(3).chunk_size_px == 12);
+        CHECK(downsampled_config.dimensions->at(3).shard_size_chunks == 1);
 
-        CHECK(downsampled_config.dimensions[4].name == "x");
-        CHECK(downsampled_config.dimensions[4].array_size_px == 16);
-        CHECK(downsampled_config.dimensions[4].chunk_size_px == 16);
-        CHECK(downsampled_config.dimensions[4].shard_size_chunks == 1);
+        CHECK(downsampled_config.dimensions->at(4).name == "x");
+        CHECK(downsampled_config.dimensions->at(4).array_size_px == 16);
+        CHECK(downsampled_config.dimensions->at(4).chunk_size_px == 16);
+        CHECK(downsampled_config.dimensions->at(4).shard_size_chunks == 1);
 
         // check level of detail
         CHECK(downsampled_config.level_of_detail == 2);
