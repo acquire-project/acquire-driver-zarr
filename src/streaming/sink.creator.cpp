@@ -36,9 +36,8 @@ zarr::SinkCreator::make_sink(std::string_view file_path)
     if (!fs::is_directory(parent_path)) {
         std::error_code ec;
         if (!fs::create_directories(parent_path, ec)) {
-            LOG_ERROR("Failed to create directory '%s': %s",
-                      parent_path.c_str(),
-                      ec.message().c_str());
+            LOG_ERROR("Failed to create directory '", parent_path, "': ",
+                      ec.message());
             return nullptr;
         }
     }
@@ -64,8 +63,8 @@ zarr::SinkCreator::make_sink(std::string_view bucket_name,
 bool
 zarr::SinkCreator::make_data_sinks(
   std::string_view base_path,
-  const std::vector<Dimension>& dimensions,
-  const std::function<size_t(const Dimension&)>& parts_along_dimension,
+  std::shared_ptr<ArrayDimensions> dimensions,
+  const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
   std::vector<std::unique_ptr<Sink>>& part_sinks)
 {
     if (base_path.starts_with("file://")) {
@@ -90,8 +89,8 @@ bool
 zarr::SinkCreator::make_data_sinks(
   std::string_view bucket_name,
   std::string_view base_path,
-  const std::vector<Dimension>& dimensions,
-  const std::function<size_t(const Dimension&)>& parts_along_dimension,
+  std::shared_ptr<ArrayDimensions> dimensions,
+  const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
   std::vector<std::unique_ptr<Sink>>& part_sinks)
 {
     EXPECT(!base_path.empty(), "Base path must not be empty.");
@@ -140,8 +139,8 @@ zarr::SinkCreator::make_metadata_sinks(
 std::queue<std::string>
 zarr::SinkCreator::make_data_sink_paths_(
   std::string_view base_path,
-  const std::vector<Dimension>& dimensions,
-  const std::function<size_t(const Dimension&)>& parts_along_dimension,
+  std::shared_ptr<ArrayDimensions> dimensions,
+  const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
   bool create_directories)
 {
     std::queue<std::string> paths;
@@ -154,9 +153,9 @@ zarr::SinkCreator::make_data_sink_paths_(
 
     // create intermediate paths
     for (auto i = 1;                // skip the last dimension
-         i < dimensions.size() - 1; // skip the x dimension
+         i < dimensions->ndims() - 1; // skip the x dimension
          ++i) {
-        const auto& dim = dimensions.at(i);
+        const auto& dim = dimensions->at(i);
         const auto n_parts = parts_along_dimension(dim);
         CHECK(n_parts);
 
@@ -180,7 +179,7 @@ zarr::SinkCreator::make_data_sink_paths_(
 
     // create final paths
     {
-        const auto& dim = dimensions.back();
+        const auto& dim = dimensions->width_dim();
         const auto n_parts = parts_along_dimension(dim);
         CHECK(n_parts);
 

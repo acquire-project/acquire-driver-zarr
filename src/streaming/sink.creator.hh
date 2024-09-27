@@ -1,6 +1,6 @@
 #pragma once
 
-#include "zarr.stream.hh" // ZarrDimension_s
+#include "zarr.dimension.hh"
 #include "sink.hh"
 #include "thread.pool.hh"
 #include "s3.connection.hh"
@@ -10,9 +10,7 @@
 #include <unordered_map>
 
 namespace zarr {
-using Dimension = ZarrDimension_s;
-
-class SinkCreator final
+class SinkCreator
 {
   public:
     SinkCreator(std::shared_ptr<ThreadPool> thread_pool_,
@@ -53,8 +51,8 @@ class SinkCreator final
      */
     [[nodiscard]] bool make_data_sinks(
       std::string_view base_path,
-      const std::vector<Dimension>& dimensions,
-      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      std::shared_ptr<ArrayDimensions> dimensions,
+      const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
       std::vector<std::unique_ptr<Sink>>& part_sinks);
 
     /**
@@ -71,8 +69,8 @@ class SinkCreator final
     [[nodiscard]] bool make_data_sinks(
       std::string_view bucket_name,
       std::string_view base_path,
-      const std::vector<Dimension>& dimensions,
-      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      std::shared_ptr<ArrayDimensions> dimensions,
+      const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
       std::vector<std::unique_ptr<Sink>>& part_sinks);
 
     /**
@@ -121,8 +119,8 @@ class SinkCreator final
      */
     std::queue<std::string> make_data_sink_paths_(
       std::string_view base_path,
-      const std::vector<Dimension>& dimensions,
-      const std::function<size_t(const Dimension&)>& parts_along_dimension,
+      std::shared_ptr<ArrayDimensions> dimensions,
+      const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
       bool create_directories);
 
     std::vector<std::string> make_metadata_sink_paths_(
