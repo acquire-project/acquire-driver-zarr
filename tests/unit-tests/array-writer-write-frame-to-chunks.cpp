@@ -42,7 +42,7 @@ main()
           std::thread::hardware_concurrency(),
           [](const std::string& err) { LOG_ERROR("Error: %s", err.c_str()); });
 
-        std::vector<zarr::Dimension> dims;
+        std::vector<ZarrDimension> dims;
         dims.emplace_back(
           "t", ZarrDimensionType_Time, array_timepoints, chunk_timepoints, 0);
         dims.emplace_back(
@@ -55,7 +55,8 @@ main()
           "x", ZarrDimensionType_Space, array_width, chunk_width, 0);
 
         zarr::ArrayWriterConfig config = {
-            .dimensions = dims,
+            .dimensions =
+              std::make_shared<ArrayDimensions>(std::move(dims), dtype),
             .dtype = dtype,
             .bucket_name = std::nullopt,
             .store_path = base_dir.string(),
@@ -73,7 +74,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }

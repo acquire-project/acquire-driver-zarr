@@ -276,8 +276,7 @@ main()
             ZarrStatusCode status = ZarrStream_append(
               stream, frame.data(), bytes_of_frame, &bytes_out);
             EXPECT(status == ZarrStatusCode_Success,
-                   "Failed to append frame %d: %s",
-                   i,
+                   "Failed to append frame ", i, ": ",
                    Zarr_get_status_message(status));
             EXPECT_EQ(size_t, "%zu", bytes_out, bytes_of_frame);
         }

@@ -18,11 +18,12 @@ zarr::downsample(const ArrayWriterConfig& config,
                  ArrayWriterConfig& downsampled_config)
 {
     // downsample dimensions
-    downsampled_config.dimensions.clear();
-    for (const auto& dim : config.dimensions) {
-        if (dim.type ==
-            ZarrDimensionType_Channel) { // don't downsample channels
-            downsampled_config.dimensions.push_back(dim);
+    std::vector<ZarrDimension> downsampled_dims;
+    for (auto i = 0; i < config.dimensions->ndims(); ++i) {
+        const auto& dim = config.dimensions->at(i);
+        // don't downsample channels
+        if (dim.type == ZarrDimensionType_Channel) {
+            downsampled_dims.push_back(dim);
         } else {
             const uint32_t array_size_px =
               (dim.array_size_px + (dim.array_size_px % 2)) / 2;
@@ -41,13 +42,15 @@ zarr::downsample(const ArrayWriterConfig& config,
                 ? 1
                 : std::min(n_chunks, dim.shard_size_chunks);
 
-            downsampled_config.dimensions.emplace_back(dim.name,
-                                                       dim.type,
-                                                       array_size_px,
-                                                       chunk_size_px,
-                                                       shard_size_chunks);
+            downsampled_dims.emplace_back(dim.name,
+                                          dim.type,
+                                          array_size_px,
+                                          chunk_size_px,
+                                          shard_size_chunks);
         }
     }
+    downsampled_config.dimensions = std::make_shared<ArrayDimensions>(
+      std::move(downsampled_dims), config.dtype);
 
     downsampled_config.level_of_detail = config.level_of_detail + 1;
     downsampled_config.bucket_name = config.bucket_name;
@@ -59,10 +62,10 @@ zarr::downsample(const ArrayWriterConfig& config,
     downsampled_config.compression_params = config.compression_params;
 
     // can we downsample downsampled_config?
-    for (auto i = 0; i < config.dimensions.size(); ++i) {
+    for (auto i = 0; i < config.dimensions->ndims(); ++i) {
         // downsampling made the chunk size strictly smaller
-        const auto& dim = config.dimensions[i];
-        const auto& downsampled_dim = downsampled_config.dimensions[i];
+        const auto& dim = config.dimensions->at(i);
+        const auto& downsampled_dim = downsampled_config.dimensions->at(i);
 
         if (dim.chunk_size_px > downsampled_dim.chunk_size_px) {
             return false;
@@ -91,7 +94,7 @@ size_t
 zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
 {
     const size_t nbytes_frame =
-      bytes_of_frame(config_.dimensions, config_.dtype);
+      bytes_of_frame(*config_.dimensions, config_.dtype);
 
     if (nbytes_frame != nbytes) {
         LOG_WARNING("Frame size mismatch: expected %zu, got %zu. Skipping",
@@ -109,7 +112,7 @@ zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
     const auto bytes_written = write_frame_to_chunks_(data, nbytes);
     EXPECT(bytes_written == nbytes, "Failed to write_frame frame to chunks");
 
-    LOG_DEBUG("Wrote %zu bytes of frame %zu", bytes_written, frames_written_);
+    LOG_DEBUG("Wrote ", bytes_written, " bytes of frame ", frames_written_);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
 
@@ -124,7 +127,7 @@ bool
 zarr::ArrayWriter::make_data_sinks_()
 {
     std::string data_root;
-    std::function<size_t(const Dimension&)> parts_along_dimension;
+    std::function<size_t(const ZarrDimension&)> parts_along_dimension;
     switch (version_()) {
         case ZarrVersion_2:
             parts_along_dimension = chunks_along_dimension;
@@ -212,10 +215,10 @@ zarr::ArrayWriter::make_buffers_() noexcept
 {
     LOG_DEBUG("Creating chunk buffers");
 
-    const size_t n_chunks = number_of_chunks_in_memory(config_.dimensions);
+    const size_t n_chunks = config_.dimensions->number_of_chunks_in_memory();
     chunk_buffers_.resize(n_chunks); // no-op if already the correct size
 
-    const auto nbytes = bytes_per_chunk(config_.dimensions, config_.dtype);
+    const auto nbytes = config_.dimensions->bytes_per_chunk();
 
     for (auto& buf : chunk_buffers_) {
         buf.resize(nbytes);
@@ -231,11 +234,11 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
 
     const auto& dimensions = config_.dimensions;
 
-    const auto& x_dim = dimensions.back();
+    const auto& x_dim = dimensions->width_dim();
     const auto frame_cols = x_dim.array_size_px;
     const auto tile_cols = x_dim.chunk_size_px;
 
-    const auto& y_dim = dimensions[dimensions.size() - 2];
+    const auto& y_dim = dimensions->height_dim();
     const auto frame_rows = y_dim.array_size_px;
     const auto tile_rows = y_dim.chunk_size_px;
 
@@ -255,10 +258,9 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
     const auto frame_id = frames_written_;
 
     // offset among the chunks in the lattice
-    const auto group_offset = tile_group_offset(frame_id, dimensions);
+    const auto group_offset = dimensions->tile_group_offset(frame_id);
     // offset within the chunk
-    const auto chunk_offset =
-      chunk_internal_offset(frame_id, dimensions, config_.dtype);
+    const auto chunk_offset = dimensions->chunk_internal_offset(frame_id);
 
     for (auto i = 0; i < n_tiles_y; ++i) {
         // TODO (aliddell): we can optimize this when tiles_per_frame_x_ is 1
@@ -306,9 +308,9 @@ bool
 zarr::ArrayWriter::should_flush_() const
 {
     const auto& dims = config_.dimensions;
-    size_t frames_before_flush = dims.front().chunk_size_px;
-    for (auto i = 1; i < dims.size() - 2; ++i) {
-        frames_before_flush *= dims[i].array_size_px;
+    size_t frames_before_flush = dims->final_dim().chunk_size_px;
+    for (auto i = 1; i < dims->ndims() - 2; ++i) {
+        frames_before_flush *= dims->at(i).array_size_px;
     }
 
     CHECK(frames_before_flush > 0);

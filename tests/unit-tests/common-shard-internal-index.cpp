@@ -11,7 +11,7 @@ main()
 {
     int retval = 1;
 
-    std::vector<zarr::Dimension> dims;
+    std::vector<ZarrDimension> dims;
     dims.emplace_back("t",
                       ZarrDimensionType_Time,
                       0,
@@ -66,7 +66,7 @@ main()
         EXPECT_INT_EQ(zarr::shard_internal_index(11, dims), 0);
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }

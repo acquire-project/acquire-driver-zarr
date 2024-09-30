@@ -12,7 +12,7 @@ main()
     int retval = 1;
 
     try {
-        std::vector<zarr::Dimension> dims;
+        std::vector<ZarrDimension> dims;
         dims.emplace_back(
           "t", ZarrDimensionType_Time, 0, 5, 0); // 5 timepoints / chunk
         dims.emplace_back("c", ZarrDimensionType_Channel, 3, 2, 0); // 2 chunks
@@ -74,7 +74,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }
