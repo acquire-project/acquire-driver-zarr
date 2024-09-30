@@ -13,9 +13,9 @@ namespace fs = std::filesystem;
 
 namespace zarr {
 
-struct ArrayWriterConfig final
+struct ArrayWriterConfig
 {
-    std::vector<ZarrDimension_s> dimensions;
+    std::shared_ptr<ArrayDimensions> dimensions;
     ZarrDataType dtype;
     int level_of_detail;
     std::optional<std::string> bucket_name;

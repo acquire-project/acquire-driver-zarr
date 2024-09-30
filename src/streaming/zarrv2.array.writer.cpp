@@ -127,21 +127,19 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
     std::vector<size_t> array_shape, chunk_shape;
 
     size_t append_size = frames_written_;
-    for (auto dim = config_.dimensions.rbegin() + 2;
-         dim < config_.dimensions.rend() - 1;
-         ++dim) {
-        CHECK(dim->array_size_px);
+    for (auto i = config_.dimensions->ndims() - 3; i > 0; --i) {
+        const auto& dim = config_.dimensions->at(i);
+        CHECK(dim.array_size_px);
         append_size =
-          (append_size + dim->array_size_px - 1) / dim->array_size_px;
+          (append_size + dim.array_size_px - 1) / dim.array_size_px;
     }
     array_shape.push_back(append_size);
 
-    chunk_shape.push_back(config_.dimensions.front().chunk_size_px);
-    for (auto dim = config_.dimensions.begin() + 1;
-         dim != config_.dimensions.end();
-         ++dim) {
-        array_shape.push_back(dim->array_size_px);
-        chunk_shape.push_back(dim->chunk_size_px);
+    chunk_shape.push_back(config_.dimensions->final_dim().chunk_size_px);
+    for (auto i = 1; i < config_.dimensions->ndims(); ++i) {
+        const auto& dim = config_.dimensions->at(i);
+        array_shape.push_back(dim.array_size_px);
+        chunk_shape.push_back(dim.chunk_size_px);
     }
 
     json metadata;

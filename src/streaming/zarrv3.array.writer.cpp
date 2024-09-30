@@ -51,10 +51,10 @@ zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
   : ArrayWriter(array_spec, thread_pool, s3_connection_pool)
-  , shard_file_offsets_(number_of_shards(array_spec.dimensions), 0)
-  , shard_tables_{ number_of_shards(array_spec.dimensions) }
+  , shard_file_offsets_(array_spec.dimensions->number_of_shards(), 0)
+  , shard_tables_{ array_spec.dimensions->number_of_shards() }
 {
-    const auto cps = chunks_per_shard(array_spec.dimensions);
+    const auto cps = array_spec.dimensions->chunks_per_shard();
 
     for (auto& table : shard_tables_) {
         table.resize(2 * cps);
@@ -89,14 +89,14 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
         return false;
     }
 
-    const auto n_shards = number_of_shards(config_.dimensions);
+    const auto n_shards = config_.dimensions->number_of_shards();
     CHECK(data_sinks_.size() == n_shards);
 
     // get shard indices for each chunk
     std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
-        const auto index = shard_index_for_chunk(i, config_.dimensions);
-        chunk_in_shards.at(index).push_back(i);
+        const auto index = config_.dimensions->shard_index_for_chunk(i);
+        chunk_in_shards[index].push_back(i);
     }
 
     // write out chunks to shards
@@ -127,7 +127,7 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
                     }
 
                     const auto internal_idx =
-                      shard_internal_index(chunk_idx, config_.dimensions);
+                      config_.dimensions->shard_internal_index(chunk_idx);
                     chunk_table.at(2 * internal_idx) = *file_offset;
                     chunk_table.at(2 * internal_idx + 1) = chunk.size();
 
@@ -183,22 +183,20 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
     std::vector<size_t> array_shape, chunk_shape, shard_shape;
 
     size_t append_size = frames_written_;
-    for (auto dim = config_.dimensions.rbegin() + 2;
-         dim < config_.dimensions.rend() - 1;
-         ++dim) {
-        CHECK(dim->array_size_px);
-        append_size = (append_size + dim->array_size_px - 1) / dim->array_size_px;
+    for (auto i = config_.dimensions->ndims() - 3; i > 0; --i) {
+        const auto& dim = config_.dimensions->at(i);
+        CHECK(dim.array_size_px);
+        append_size = (append_size + dim.array_size_px - 1) / dim.array_size_px;
     }
     array_shape.push_back(append_size);
 
-    chunk_shape.push_back(config_.dimensions.front().chunk_size_px);
-    shard_shape.push_back(config_.dimensions.front().shard_size_chunks);
-    for (auto dim = config_.dimensions.begin() + 1;
-         dim != config_.dimensions.end();
-         ++dim) {
-        array_shape.push_back(dim->array_size_px);
-        chunk_shape.push_back(dim->chunk_size_px);
-        shard_shape.push_back(dim->shard_size_chunks);
+    chunk_shape.push_back(config_.dimensions->final_dim().chunk_size_px);
+    shard_shape.push_back(config_.dimensions->final_dim().shard_size_chunks);
+    for (auto i = 1; i < config_.dimensions->ndims(); ++i) {
+        const auto& dim = config_.dimensions->at(i);
+        array_shape.push_back(dim.array_size_px);
+        chunk_shape.push_back(dim.chunk_size_px);
+        shard_shape.push_back(dim.shard_size_chunks);
     }
 
     json metadata;
@@ -255,11 +253,11 @@ bool
 zarr::ZarrV3ArrayWriter::should_rollover_() const
 {
     const auto& dims = config_.dimensions;
-    const auto& append_dim = dims.front();
+    const auto& append_dim = dims->final_dim();
     size_t frames_before_flush =
       append_dim.chunk_size_px * append_dim.shard_size_chunks;
-    for (auto i = 1; i < dims.size() - 2; ++i) {
-        frames_before_flush *= dims[i].array_size_px;
+    for (auto i = 1; i < dims->ndims() - 2; ++i) {
+        frames_before_flush *= dims->at(i).array_size_px;
     }
 
     CHECK(frames_before_flush > 0);

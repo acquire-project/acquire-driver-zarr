@@ -1,12 +1,9 @@
 #include "zarrv2.array.writer.hh"
-#include "macros.hh"
+#include "unit.test.macros.hh"
 #include "zarr.common.hh"
 
 #include <nlohmann/json.hpp>
 #include <filesystem>
-
-#define EXPECT_EQ(a, b)                                                        \
-    EXPECT((a) == (b), "Expected %s == %s, but %zu != %zu", #a, #b, a, b)
 
 namespace fs = std::filesystem;
 
@@ -43,25 +40,25 @@ check_json()
            "Expected dtype to be '<u1', but got '%s'",
            zarray["dtype"].get<std::string>().c_str());
 
-    EXPECT_EQ(zarray["zarr_format"].get<int>(), 2);
+    EXPECT_EQ(int, zarray["zarr_format"].get<int>(), 2);
 
     const auto& chunks = zarray["chunks"];
-    EXPECT_EQ(chunks.size(), 3);
-    EXPECT_EQ(chunks[0].get<int>(), chunk_planes);
-    EXPECT_EQ(chunks[1].get<int>(), chunk_height);
-    EXPECT_EQ(chunks[2].get<int>(), chunk_width);
+    EXPECT_EQ(int, chunks.size(), 3);
+    EXPECT_EQ(int, chunks[0].get<int>(), chunk_planes);
+    EXPECT_EQ(int, chunks[1].get<int>(), chunk_height);
+    EXPECT_EQ(int, chunks[2].get<int>(), chunk_width);
 
     const auto& shape = zarray["shape"];
-    EXPECT_EQ(shape.size(), 3);
-    EXPECT_EQ(shape[0].get<int>(), array_planes);
-    EXPECT_EQ(shape[1].get<int>(), array_height);
-    EXPECT_EQ(shape[2].get<int>(), array_width);
+    EXPECT_EQ(int, shape.size(), 3);
+    EXPECT_EQ(int, shape[0].get<int>(), array_planes);
+    EXPECT_EQ(int, shape[1].get<int>(), array_height);
+    EXPECT_EQ(int, shape[2].get<int>(), array_width);
 }
 
 int
 main()
 {
-    Logger::set_log_level(ZarrLogLevel_Debug);
+    Logger::set_log_level(LogLevel_Debug);
 
     int retval = 1;
 
@@ -74,7 +71,7 @@ main()
               LOG_ERROR("Error: %s\n", err.c_str());
           });
 
-        std::vector<zarr::Dimension> dims;
+        std::vector<ZarrDimension> dims;
         dims.emplace_back(
           "z", ZarrDimensionType_Space, array_planes, chunk_planes, 0);
         dims.emplace_back(
@@ -83,7 +80,7 @@ main()
           "x", ZarrDimensionType_Space, array_width, chunk_width, 0);
 
         zarr::ArrayWriterConfig config = {
-            .dimensions = dims,
+            .dimensions = std::make_shared<ArrayDimensions>(std::move(dims), dtype),
             .dtype = dtype,
             .level_of_detail = level_of_detail,
             .bucket_name = std::nullopt,
@@ -124,7 +121,7 @@ main()
                     const auto x_file = y_dir / std::to_string(x);
                     CHECK(fs::is_regular_file(x_file));
                     const auto file_size = fs::file_size(x_file);
-                    EXPECT_EQ(file_size, expected_file_size);
+                    EXPECT_EQ(int, file_size, expected_file_size);
                 }
 
                 CHECK(
@@ -138,7 +135,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }

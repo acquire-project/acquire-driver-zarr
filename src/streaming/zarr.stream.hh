@@ -1,6 +1,5 @@
 #pragma once
 
-#include "zarr.types.h"
 #include "zarr.dimension.hh"
 #include "thread.pool.hh"
 #include "s3.connection.hh"
@@ -28,28 +27,28 @@ struct ZarrStream_s
     size_t append(const void* data, size_t nbytes);
 
   private:
+    struct S3Settings {
+        std::string endpoint;
+        std::string bucket_name;
+        std::string access_key_id;
+        std::string secret_access_key;
+    };
+    struct CompressionSettings {
+        ZarrCompressor compressor;
+        ZarrCompressionCodec codec;
+        uint8_t level;
+        uint8_t shuffle;
+    };
+
     std::string error_; // error message. If nonempty, an error occurred.
 
     ZarrVersion version_;
-
     std::string store_path_;
-
-    std::optional<std::string> s3_endpoint_;
-    std::optional<std::string> s3_bucket_name_;
-    std::optional<std::string> s3_access_key_id_;
-    std::optional<std::string> s3_secret_access_key_;
-
+    std::optional<S3Settings> s3_settings_;
+    std::optional<CompressionSettings> compression_settings_;
     std::string custom_metadata_;
-
     ZarrDataType dtype_;
-
-    std::optional<ZarrCompressor> compressor_;
-    std::optional<ZarrCompressionCodec> compression_codec_;
-    std::optional<uint8_t> compression_level_;
-    std::optional<uint8_t> compression_shuffle_;
-
-    std::vector<ZarrDimension_s> dimensions_;
-
+    std::shared_ptr<ArrayDimensions> dimensions_;
     bool multiscale_;
 
     std::vector<uint8_t> frame_buffer_;
@@ -64,8 +63,8 @@ struct ZarrStream_s
 
     std::unordered_map<size_t, std::optional<uint8_t*>> scaled_frames_;
 
-    [[nodiscard]] bool is_s3_acquisition_() const;
-    [[nodiscard]] bool is_compressed_acquisition_() const;
+    bool is_s3_acquisition_() const;
+    bool is_compressed_acquisition_() const;
 
     /**
      * @brief Copy settings to the stream.

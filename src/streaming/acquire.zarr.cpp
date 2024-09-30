@@ -4,32 +4,65 @@
 
 #include <cstdint> // uint32_t
 
-#define ACQUIRE_ZARR_API_VERSION 0
-
 extern "C"
 {
-    uint32_t Zarr_get_api_version()
+    const char* Zarr_get_api_version()
     {
         return ACQUIRE_ZARR_API_VERSION;
     }
 
-    ZarrStatusCode Zarr_set_log_level(ZarrLogLevel level)
+    ZarrStatusCode Zarr_set_log_level(ZarrLogLevel level_)
     {
-        EXPECT_VALID_ARGUMENT(
-          level < ZarrLogLevelCount, "Invalid log level: %d", level);
+        LogLevel level;
+        switch (level_) {
+            case ZarrLogLevel_Debug:
+                level = LogLevel_Debug;
+                break;
+            case ZarrLogLevel_Info:
+                level = LogLevel_Info;
+                break;
+            case ZarrLogLevel_Warning:
+                level = LogLevel_Warning;
+                break;
+            case ZarrLogLevel_Error:
+                level = LogLevel_Error;
+                break;
+            default:
+                return ZarrStatusCode_InvalidArgument;
+        }
 
-        Logger::set_log_level(level);
+        try {
+            Logger::set_log_level(level);
+        } catch (const std::exception& e) {
+            LOG_ERROR("Error setting log level: ", e.what());
+            return ZarrStatusCode_InternalError;
+        }
         return ZarrStatusCode_Success;
     }
 
     ZarrLogLevel Zarr_get_log_level()
     {
-        return Logger::get_log_level();
+        ZarrLogLevel level;
+        switch (Logger::get_log_level()) {
+            case LogLevel_Debug:
+                level = ZarrLogLevel_Debug;
+                break;
+            case LogLevel_Info:
+                level = ZarrLogLevel_Info;
+                break;
+            case LogLevel_Warning:
+                level = ZarrLogLevel_Warning;
+                break;
+            default:
+                level = ZarrLogLevel_Error;
+                break;
+        }
+        return level;
     }
 
-    const char* Zarr_get_status_message(ZarrStatusCode error)
+    const char* Zarr_get_status_message(ZarrStatusCode code)
     {
-        switch (error) {
+        switch (code) {
             case ZarrStatusCode_Success:
                 return "Success";
             case ZarrStatusCode_InvalidArgument:
@@ -61,7 +94,7 @@ extern "C"
     {
         EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
         EXPECT_VALID_ARGUMENT(dimension_count >= 3,
-                              "Invalid dimension count: %zu",
+                              "Invalid dimension count: ",
                               dimension_count);
 
         ZarrDimensionProperties* dimensions = nullptr;
@@ -83,10 +116,15 @@ extern "C"
     void ZarrStreamSettings_destroy_dimension_array(
       struct ZarrStreamSettings_s* settings)
     {
-        if (nullptr != settings && nullptr != settings->dimensions) {
+        if (settings == nullptr) {
+            return;
+        }
+
+        if (settings->dimensions != nullptr) {
             delete[] settings->dimensions;
             settings->dimensions = nullptr;
         }
+        settings->dimension_count = 0;
     }
 
     ZarrStream_s* ZarrStream_create(struct ZarrStreamSettings_s* settings)
@@ -99,7 +137,7 @@ extern "C"
         } catch (const std::bad_alloc&) {
             LOG_ERROR("Failed to allocate memory for Zarr stream");
         } catch (const std::exception& e) {
-            LOG_ERROR("Error creating Zarr stream: %s", e.what());
+            LOG_ERROR("Error creating Zarr stream: ", e.what());
         }
 
         return stream;
@@ -122,7 +160,7 @@ extern "C"
         try {
             *bytes_out = stream->append(data, bytes_in);
         } catch (const std::exception& e) {
-            LOG_ERROR("Error appending data: %s", e.what());
+            LOG_ERROR("Error appending data: ", e.what());
             return ZarrStatusCode_InternalError;
         }
 
