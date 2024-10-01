@@ -63,18 +63,19 @@ zarr::S3Connection::put_object(std::string_view bucket_name,
                                     data.size());
     std::basic_istream stream(&buffer);
 
-    LOG_DEBUG(
-      "Putting object %s in bucket %s", object_name.data(), bucket_name.data());
+    LOG_DEBUG("Putting object ", object_name, " in bucket ", bucket_name);
     minio::s3::PutObjectArgs args(stream, static_cast<long>(data.size()), 0);
     args.bucket = bucket_name;
     args.object = object_name;
 
     auto response = client_->PutObject(args);
     if (!response) {
-        LOG_ERROR("Failed to put object %s in bucket %s: %s",
-                  object_name.data(),
-                  bucket_name.data(),
-                  response.Error().String().c_str());
+        LOG_ERROR("Failed to put object ",
+                  object_name,
+                  " in bucket ",
+                  bucket_name,
+                  ": ",
+                  response.Error().String());
         return {};
     }
 
@@ -88,19 +89,19 @@ zarr::S3Connection::delete_object(std::string_view bucket_name,
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
     EXPECT(!object_name.empty(), "Object name must not be empty.");
 
-    LOG_DEBUG("Deleting object %s from bucket %s",
-              object_name.data(),
-              bucket_name.data());
+    LOG_DEBUG("Deleting object ", object_name, " from bucket ", bucket_name);
     minio::s3::RemoveObjectArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
 
     auto response = client_->RemoveObject(args);
     if (!response) {
-        LOG_ERROR("Failed to delete object %s from bucket %s: %s",
-                  object_name.data(),
-                  bucket_name.data(),
-                  response.Error().String().c_str());
+        LOG_ERROR("Failed to delete object ",
+                  object_name,
+                  " from bucket ",
+                  bucket_name,
+                  ": ",
+                  response.Error().String());
         return false;
     }
 
@@ -191,9 +192,8 @@ zarr::S3Connection::complete_multipart_object(
     EXPECT(!upload_id.empty(), "Upload id must not be empty.");
     EXPECT(!parts.empty(), "Parts list must not be empty.");
 
-    LOG_DEBUG("Completing multipart object %s in bucket %s",
-              object_name.data(),
-              bucket_name.data());
+    LOG_DEBUG(
+      "Completing multipart object ", object_name, " in bucket ", bucket_name);
     minio::s3::CompleteMultipartUploadArgs args;
     args.bucket = bucket_name;
     args.object = object_name;
@@ -202,10 +202,12 @@ zarr::S3Connection::complete_multipart_object(
 
     auto response = client_->CompleteMultipartUpload(args);
     if (!response) {
-        LOG_ERROR("Failed to complete multipart object %s in bucket %s: %s",
-                  object_name.data(),
-                  bucket_name.data(),
-                  response.Error().String().c_str());
+        LOG_ERROR("Failed to complete multipart object ",
+                  object_name,
+                  " in bucket ",
+                  bucket_name,
+                  ": ",
+                  response.Error().String());
         return false;
     }
 

@@ -27,41 +27,41 @@ main()
     ArrayDimensions dimensions(std::move(dims), ZarrDataType_uint64);
 
     try {
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(0), 0);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(0), 0);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(0), 0);
+        EXPECT_EQ(int, dimensions.shard_internal_index(0), 0);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(1), 0);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(1), 1);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(1), 0);
+        EXPECT_EQ(int, dimensions.shard_internal_index(1), 1);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(2), 0);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(2), 2);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(2), 0);
+        EXPECT_EQ(int, dimensions.shard_internal_index(2), 2);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(3), 1);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(3), 0);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(3), 1);
+        EXPECT_EQ(int, dimensions.shard_internal_index(3), 0);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(4), 0);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(4), 3);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(4), 0);
+        EXPECT_EQ(int, dimensions.shard_internal_index(4), 3);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(5), 0);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(5), 4);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(5), 0);
+        EXPECT_EQ(int, dimensions.shard_internal_index(5), 4);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(6), 0);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(6), 5);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(6), 0);
+        EXPECT_EQ(int, dimensions.shard_internal_index(6), 5);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(7), 1);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(7), 3);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(7), 1);
+        EXPECT_EQ(int, dimensions.shard_internal_index(7), 3);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(8), 2);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(8), 0);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(8), 2);
+        EXPECT_EQ(int, dimensions.shard_internal_index(8), 0);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(9), 2);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(9), 1);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(9), 2);
+        EXPECT_EQ(int, dimensions.shard_internal_index(9), 1);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(10), 2);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(10), 2);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(10), 2);
+        EXPECT_EQ(int, dimensions.shard_internal_index(10), 2);
 
-        EXPECT_INT_EQ(dimensions.shard_index_for_chunk(11), 3);
-        EXPECT_INT_EQ(dimensions.shard_internal_index(11), 0);
+        EXPECT_EQ(int, dimensions.shard_index_for_chunk(11), 3);
+        EXPECT_EQ(int, dimensions.shard_internal_index(11), 0);
         retval = 0;
     } catch (const std::exception& exc) {
         LOG_ERROR("Exception: ", exc.what());

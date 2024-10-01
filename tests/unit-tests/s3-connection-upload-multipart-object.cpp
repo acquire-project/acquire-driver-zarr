@@ -120,7 +120,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& e) {
-        LOG_ERROR("Failed: %s", e.what());
+        LOG_ERROR("Failed: ", e.what());
     }
 
     return retval;
