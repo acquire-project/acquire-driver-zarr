@@ -263,7 +263,7 @@ zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
         const auto dirname = dir_paths.front();
         dir_paths.pop();
 
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [dirname, &latch, &all_successful](std::string& err) -> bool {
                      if (dirname.empty()) {
                          err = "Directory name must not be empty.";
@@ -328,7 +328,7 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
 
         std::unique_ptr<Sink>* psink = sinks.data() + i;
 
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [filename, psink, &latch, &all_successful](
                    std::string& err) -> bool {
                      bool success = false;
@@ -382,7 +382,7 @@ zarr::SinkCreator::make_files_(
         const std::string prefix = base_dir.empty() ? "" : base_dir + "/";
         const auto file_path = prefix + filename;
 
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [filename = file_path, psink, &latch, &all_successful](
                    std::string& err) -> bool {
                      bool success = false;
