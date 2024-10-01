@@ -8,6 +8,8 @@ set(tests
         array-dimensions-shard-index-for-chunk
         array-dimensions-shard-internal-index
         thread-pool-push-to-job-queue
+        s3-connection-bucket-exists
+        s3-connection-object-exists-check-false-positives
         s3-connection-put-object
         s3-connection-upload-multipart-object
         file-sink-write

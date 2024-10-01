@@ -18,7 +18,7 @@ main()
 
     zarr::ThreadPool pool{ 1, [](const std::string&) {} };
 
-    CHECK(pool.push_to_job_queue([&tmp_path](std::string&) {
+    CHECK(pool.push_job([&tmp_path](std::string&) {
         std::ofstream ofs(tmp_path);
         ofs << "Hello, Acquire!";
         ofs.close();
