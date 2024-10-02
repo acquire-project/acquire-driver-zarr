@@ -6,7 +6,7 @@
 #include <list>
 #include <memory>
 #include <mutex>
-#include <string_view>
+#include <string>
 #include <span>
 #include <vector>
 

@@ -36,6 +36,7 @@ class ArrayDimensions
     size_t ndims() const;
 
     const ZarrDimension& operator[](size_t idx) const;
+    const ZarrDimension& at(size_t idx) const { return operator[](idx); }
 
     const ZarrDimension& final_dim() const;
     const ZarrDimension& height_dim() const;

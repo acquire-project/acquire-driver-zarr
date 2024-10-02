@@ -65,7 +65,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exception) {
-        LOG_ERROR("%s", exception.what());
+        LOG_ERROR(exception.what());
     }
 
     // cleanup

@@ -12,6 +12,10 @@ set(tests
         s3-connection-object-exists-check-false-positives
         s3-connection-put-object
         s3-connection-upload-multipart-object
+        file-sink-write
+        s3-sink-write
+        sink-creator-make-metadata-sinks
+        sink-creator-make-data-sinks
 )
 
 foreach (name ${tests})

@@ -34,7 +34,7 @@ extern "C"
         try {
             Logger::set_log_level(level);
         } catch (const std::exception& e) {
-            LOG_ERROR("Error setting log level: %s", e.what());
+            LOG_ERROR("Error setting log level: ", e.what());
             return ZarrStatusCode_InternalError;
         }
         return ZarrStatusCode_Success;
@@ -94,7 +94,7 @@ extern "C"
     {
         EXPECT_VALID_ARGUMENT(settings, "Null pointer: settings");
         EXPECT_VALID_ARGUMENT(dimension_count >= 3,
-                              "Invalid dimension count: %zu",
+                              "Invalid dimension count: ",
                               dimension_count);
 
         ZarrDimensionProperties* dimensions = nullptr;
@@ -160,7 +160,7 @@ extern "C"
         try {
             *bytes_out = stream->append(data, bytes_in);
         } catch (const std::exception& e) {
-            LOG_ERROR("Error appending data: %s", e.what());
+            LOG_ERROR("Error appending data: ", e.what());
             return ZarrStatusCode_InternalError;
         }
 

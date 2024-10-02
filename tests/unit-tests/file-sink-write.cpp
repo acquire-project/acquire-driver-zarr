@@ -1,4 +1,4 @@
-#include "thread.pool.hh"
+#include "file.sink.hh"
 #include "unit.test.macros.hh"
 
 #include <filesystem>
@@ -11,22 +11,21 @@ int
 main()
 {
     int retval = 0;
-
     fs::path tmp_path = fs::temp_directory_path() / TEST;
 
     try {
         CHECK(!fs::exists(tmp_path));
+        {
+            char str[] = "Hello, Acquire!";
+            auto sink = std::make_unique<zarr::FileSink>(tmp_path.string());
 
-        zarr::ThreadPool pool{ 1, [](const std::string&) {} };
+            std::span data = { reinterpret_cast<std::byte*>(str),
+                               sizeof(str) - 1 };
+            CHECK(sink->write(0, data));
+            CHECK(zarr::finalize_sink(std::move(sink)));
+        }
 
-        CHECK(pool.push_job([&tmp_path](std::string&) {
-            std::ofstream ofs(tmp_path);
-            ofs << "Hello, Acquire!";
-            ofs.close();
-            return true;
-        }));
-        pool.await_stop();
-
+        // The file tmp_path should now contain the string "Hello, world!\n".
         CHECK(fs::exists(tmp_path));
 
         std::ifstream ifs(tmp_path);

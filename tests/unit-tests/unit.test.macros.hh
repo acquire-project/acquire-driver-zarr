@@ -9,15 +9,16 @@
             throw std::runtime_error(__err);                                   \
         }                                                                      \
     } while (0)
-#define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t%s", #e)
+#define CHECK(e) EXPECT(e, "Expression evaluated as false:\n\t", #e)
 
 /// Check that a==b
-/// example: `ASSERT_EQ(int,"%d",42,meaning_of_life())`
-#define EXPECT_EQ(T, fmt, a, b)                                                \
+/// example: `ASSERT_EQ(int,42,meaning_of_life())`
+#define EXPECT_EQ(T, a, b)                                                     \
     do {                                                                       \
         T a_ = (T)(a);                                                         \
         T b_ = (T)(b);                                                         \
-        EXPECT(a_ == b_, "Expected %s==%s but " fmt "!=" fmt, #a, #b, a_, b_); \
+        EXPECT(                                                                \
+          a_ == b_, "Expected ", #a, " == ", #b, " but ", a_, " != ", b_);     \
     } while (0)
 
 #define EXPECT_STR_EQ(a, b)                                                    \
@@ -25,12 +26,16 @@
         std::string a_ = (a) ? (a) : "";                                       \
         std::string b_ = (b) ? (b) : "";                                       \
         EXPECT(a_ == b_,                                                       \
-               "Expected %s==%s but \"%s\"!=\"%s\"",                           \
+               "Expected ",                                                    \
+               #a,                                                             \
+               " == ",                                                         \
+               #b,                                                             \
+               " but ",                                                        \
+               a_,                                                             \
+               " != ",                                                         \
+               b_,                                                             \
                #a,                                                             \
                #b,                                                             \
-               a_.c_str(),                                                     \
-               b_.c_str());                                                    \
+               a_,                                                             \
+               b_);                                                            \
     } while (0)
-
-#define EXPECT_INT_EQ(a, b)                                                    \
-    EXPECT((a) == (b), "Expected ", #a, " == ", #b, ", but ", a, " != ", b)
