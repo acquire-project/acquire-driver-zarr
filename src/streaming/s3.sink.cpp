@@ -19,50 +19,64 @@ zarr::S3Sink::S3Sink(std::string_view bucket_name,
     EXPECT(connection_pool_, "Null pointer: connection_pool");
 }
 
-zarr::S3Sink::~S3Sink()
+bool
+zarr::S3Sink::flush_()
 {
-    if (!is_multipart_upload_() && nbytes_buffered_ > 0) {
-        if (!put_object_()) {
-            LOG_ERROR("Failed to upload object: %s", object_key_.c_str());
-        }
-    } else if (is_multipart_upload_()) {
+    if (is_multipart_upload_()) {
+        const auto& parts = multipart_upload_->parts;
         if (nbytes_buffered_ > 0 && !flush_part_()) {
-            LOG_ERROR("Failed to upload part %zu of object %s",
-                      parts_.size() + 1,
-                      object_key_.c_str());
+            LOG_ERROR("Failed to upload part ",
+                      parts.size() + 1,
+                      " of object ",
+                      object_key_);
+            return false;
         }
         if (!finalize_multipart_upload_()) {
-            LOG_ERROR("Failed to finalize multipart upload of object %s",
-                      object_key_.c_str());
+            LOG_ERROR("Failed to finalize multipart upload of object ",
+                      object_key_);
+            return false;
+        }
+    } else if (nbytes_buffered_ > 0) {
+        if (!put_object_()) {
+            LOG_ERROR("Failed to upload object: ", object_key_);
+            return false;
         }
     }
+
+    // cleanup
+    nbytes_buffered_ = 0;
+
+    return true;
 }
 
 bool
-zarr::S3Sink::write(size_t offset, const uint8_t* data, size_t bytes_of_data)
+zarr::S3Sink::write(size_t offset, std::span<std::byte> data)
 {
-    EXPECT(data, "Null pointer: data");
-    if (bytes_of_data == 0) {
+    if (data.data() == nullptr || data.empty()) {
         return true;
     }
 
     if (offset < nbytes_flushed_) {
-        LOG_ERROR("Cannot write data at offset %zu, already flushed to %zu",
+        LOG_ERROR("Cannot write data at offset ",
                   offset,
+                  ", already flushed to ",
                   nbytes_flushed_);
         return false;
     }
     nbytes_buffered_ = offset - nbytes_flushed_;
 
+    size_t bytes_of_data = data.size();
+    std::byte* data_ptr = data.data();
     while (bytes_of_data > 0) {
         const auto bytes_to_write =
           std::min(bytes_of_data, part_buffer_.size() - nbytes_buffered_);
 
         if (bytes_to_write) {
-            std::copy_n(
-              data, bytes_to_write, part_buffer_.begin() + nbytes_buffered_);
+            std::copy_n(data_ptr,
+                        bytes_to_write,
+                        part_buffer_.begin() + nbytes_buffered_);
             nbytes_buffered_ += bytes_to_write;
-            data += bytes_to_write;
+            data_ptr += bytes_to_write;
             bytes_of_data -= bytes_to_write;
         }
 
@@ -82,25 +96,25 @@ zarr::S3Sink::put_object_()
     }
 
     auto connection = connection_pool_->get_connection();
+    std::span data(reinterpret_cast<uint8_t*>(part_buffer_.data()),
+                   nbytes_buffered_);
 
     bool retval = false;
     try {
         std::string etag =
-          connection->put_object(bucket_name_,
-                                 object_key_,
-                                 { part_buffer_.data(), nbytes_buffered_ });
-        EXPECT(
-          !etag.empty(), "Failed to upload object: %s", object_key_.c_str());
+          connection->put_object(bucket_name_, object_key_, data);
+        EXPECT(!etag.empty(), "Failed to upload object: ", object_key_);
 
         retval = true;
+
+        nbytes_flushed_ = nbytes_buffered_;
+        nbytes_buffered_ = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Error: %s", exc.what());
+        LOG_ERROR("Error: ", exc.what());
     }
 
     // cleanup
     connection_pool_->return_connection(std::move(connection));
-    nbytes_flushed_ = nbytes_buffered_;
-    nbytes_buffered_ = 0;
 
     return retval;
 }
@@ -108,19 +122,23 @@ zarr::S3Sink::put_object_()
 bool
 zarr::S3Sink::is_multipart_upload_() const
 {
-    return !upload_id_.empty() && !parts_.empty();
+    return multipart_upload_.has_value();
 }
 
-std::string
-zarr::S3Sink::get_multipart_upload_id_()
+void
+zarr::S3Sink::create_multipart_upload_()
 {
-    if (upload_id_.empty()) {
-        upload_id_ =
-          connection_pool_->get_connection()->create_multipart_object(
-            bucket_name_, object_key_);
+    if (!is_multipart_upload_()) {
+        multipart_upload_ = {};
     }
 
-    return upload_id_;
+    if (!multipart_upload_->upload_id.empty()) {
+        return;
+    }
+
+    multipart_upload_->upload_id =
+      connection_pool_->get_connection()->create_multipart_object(bucket_name_,
+                                                                  object_key_);
 }
 
 bool
@@ -132,28 +150,34 @@ zarr::S3Sink::flush_part_()
 
     auto connection = connection_pool_->get_connection();
 
+    create_multipart_upload_();
+
     bool retval = false;
     try {
-        minio::s3::Part part;
-        part.number = static_cast<unsigned int>(parts_.size()) + 1;
+        auto& parts = multipart_upload_->parts;
 
-        std::span<uint8_t> data(part_buffer_.data(), nbytes_buffered_);
+        minio::s3::Part part;
+        part.number = static_cast<unsigned int>(parts.size()) + 1;
+
+        std::span data(reinterpret_cast<uint8_t*>(part_buffer_.data()),
+                       nbytes_buffered_);
         part.etag =
           connection->upload_multipart_object_part(bucket_name_,
                                                    object_key_,
-                                                   get_multipart_upload_id_(),
+                                                   multipart_upload_->upload_id,
                                                    data,
                                                    part.number);
         EXPECT(!part.etag.empty(),
-               "Failed to upload part %u of object %s",
+               "Failed to upload part ",
                part.number,
-               object_key_.c_str());
+               " of object ",
+               object_key_);
 
-        parts_.push_back(part);
+        parts.push_back(part);
 
         retval = true;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Error: %s", exc.what());
+        LOG_ERROR("Error: ", exc.what());
     }
 
     // cleanup
@@ -167,14 +191,13 @@ zarr::S3Sink::flush_part_()
 bool
 zarr::S3Sink::finalize_multipart_upload_()
 {
-    if (!is_multipart_upload_()) {
-        return false;
-    }
-
     auto connection = connection_pool_->get_connection();
 
+    const auto& upload_id = multipart_upload_->upload_id;
+    const auto& parts = multipart_upload_->parts;
+
     bool retval = connection->complete_multipart_object(
-      bucket_name_, object_key_, upload_id_, parts_);
+      bucket_name_, object_key_, upload_id, parts);
 
     connection_pool_->return_connection(std::move(connection));
 

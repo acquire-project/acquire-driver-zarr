@@ -332,7 +332,7 @@ zarr::ArrayWriter::compress_buffers_()
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
     for (auto& chunk : chunk_buffers_) {
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [&params, buf = &chunk, bytes_per_px, &latch](
                    std::string& err) -> bool {
                      bool success = false;

@@ -29,7 +29,7 @@ zarr::SinkCreator::make_sink(std::string_view file_path)
     EXPECT(!file_path.empty(), "File path must not be empty.");
 
     fs::path path(file_path);
-    EXPECT(!path.empty(), "Invalid file path: %s", file_path.data());
+    EXPECT(!path.empty(), "Invalid file path: ", file_path);
 
     fs::path parent_path = path.parent_path();
 
@@ -53,7 +53,7 @@ zarr::SinkCreator::make_sink(std::string_view bucket_name,
     EXPECT(!object_key.empty(), "Object key must not be empty.");
     EXPECT(connection_pool_, "S3 connection pool not provided.");
     if (!bucket_exists_(bucket_name)) {
-        LOG_ERROR("Bucket '%s' does not exist.", bucket_name.data());
+        LOG_ERROR("Bucket '", bucket_name, "' does not exist.");
         return nullptr;
     }
 
@@ -78,7 +78,7 @@ zarr::SinkCreator::make_data_sinks(
         paths = make_data_sink_paths_(
           base_path, dimensions, parts_along_dimension, true);
     } catch (const std::exception& exc) {
-        LOG_ERROR("Failed to create dataset paths: %s", exc.what());
+        LOG_ERROR("Failed to create dataset paths: ", exc.what());
         return false;
     }
 
@@ -128,7 +128,7 @@ zarr::SinkCreator::make_metadata_sinks(
     EXPECT(!bucket_name.empty(), "Bucket name must not be empty.");
     EXPECT(!base_path.empty(), "Base path must not be empty.");
     if (!bucket_exists_(bucket_name)) {
-        LOG_ERROR("Bucket '%s' does not exist.", bucket_name.data());
+        LOG_ERROR("Bucket '", bucket_name, "' does not exist.");
         return false;
     }
 
@@ -148,7 +148,7 @@ zarr::SinkCreator::make_data_sink_paths_(
 
     if (create_directories) {
         EXPECT(
-          make_dirs_(paths), "Failed to create directory '%s'.", base_path);
+          make_dirs_(paths), "Failed to create directory '", base_path, "'.");
     }
 
     // create intermediate paths
@@ -172,8 +172,9 @@ zarr::SinkCreator::make_data_sink_paths_(
 
         if (create_directories) {
             EXPECT(make_dirs_(paths),
-                   "Failed to create directories for dimension '%s'.",
-                   dim.name.c_str());
+                   "Failed to create directories for dimension '",
+                   dim.name,
+                   "'.");
         }
     }
 
@@ -263,7 +264,7 @@ zarr::SinkCreator::make_dirs_(std::queue<std::string>& dir_paths)
         const auto dirname = dir_paths.front();
         dir_paths.pop();
 
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [dirname, &latch, &all_successful](std::string& err) -> bool {
                      if (dirname.empty()) {
                          err = "Directory name must not be empty.";
@@ -328,7 +329,7 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
 
         std::unique_ptr<Sink>* psink = sinks.data() + i;
 
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [filename, psink, &latch, &all_successful](
                    std::string& err) -> bool {
                      bool success = false;
@@ -382,7 +383,7 @@ zarr::SinkCreator::make_files_(
         const std::string prefix = base_dir.empty() ? "" : base_dir + "/";
         const auto file_path = prefix + filename;
 
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [filename = file_path, psink, &latch, &all_successful](
                    std::string& err) -> bool {
                      bool success = false;

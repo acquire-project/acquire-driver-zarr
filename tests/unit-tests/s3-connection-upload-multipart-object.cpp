@@ -57,7 +57,7 @@ main()
         zarr::S3Connection conn(
           s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
-        if (!conn.check_connection()) {
+        if (!conn.is_connection_valid()) {
             LOG_ERROR("Failed to connect to S3.");
             return 1;
         }
@@ -120,7 +120,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& e) {
-        LOG_ERROR("Failed: %s", e.what());
+        LOG_ERROR("Failed: ", e.what());
     }
 
     return retval;

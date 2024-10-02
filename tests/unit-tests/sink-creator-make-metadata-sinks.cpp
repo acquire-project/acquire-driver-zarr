@@ -93,12 +93,14 @@ sink_creator_make_v2_metadata_sinks(
 
     auto conn = connection_pool->get_connection();
 
-    const uint8_t data[] = { 0, 0 };
+    char data_[] = { 0, 0 };
+    std::span data(reinterpret_cast<std::byte*>(data_), sizeof(data_));
     for (auto& [key, sink] : metadata_sinks) {
         CHECK(sink);
         // we need to write some data to the sink to ensure it is created
-        CHECK(sink->write(0, data, 2));
-        sink.reset(nullptr); // close the connection
+        CHECK(sink->write(0, data));
+
+        CHECK(zarr::finalize_sink(std::move(sink))); // close the connection
 
         std::string path = test_dir + "/" + key;
         CHECK(conn->object_exists(bucket_name, path));
@@ -155,12 +157,13 @@ sink_creator_make_v3_metadata_sinks(
 
     auto conn = connection_pool->get_connection();
 
-    const uint8_t data[] = { 0, 0 };
+    char data_[] = { 0, 0 };
+    std::span data(reinterpret_cast<std::byte*>(data_), sizeof(data_));
     for (auto& [key, sink] : metadata_sinks) {
         CHECK(sink);
         // we need to write some data to the sink to ensure it is created
-        CHECK(sink->write(0, data, 2));
-        sink.reset(nullptr); // close the connection
+        CHECK(sink->write(0, data));
+        CHECK(zarr::finalize_sink(std::move(sink))); // close the connection
 
         std::string path = test_dir + "/" + key;
         CHECK(conn->object_exists(bucket_name, path));
@@ -178,13 +181,13 @@ main()
 
     auto thread_pool = std::make_shared<zarr::ThreadPool>(
       std::thread::hardware_concurrency(),
-      [](const std::string& err) { LOG_ERROR("Failed: %s", err.c_str()); });
+      [](const std::string& err) { LOG_ERROR("Failed: ", err.c_str()); });
 
     try {
         sink_creator_make_v2_metadata_sinks(thread_pool);
         sink_creator_make_v3_metadata_sinks(thread_pool);
     } catch (const std::exception& e) {
-        LOG_ERROR("Failed: %s", e.what());
+        LOG_ERROR("Failed: ", e.what());
         return 1;
     }
 
@@ -205,7 +208,7 @@ main()
         sink_creator_make_v3_metadata_sinks(
           thread_pool, connection_pool, bucket_name);
     } catch (const std::exception& e) {
-        LOG_ERROR("Failed: %s", e.what());
+        LOG_ERROR("Failed: ", e.what());
         return 1;
     }
 
