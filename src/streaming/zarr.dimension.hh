@@ -8,6 +8,7 @@
 
 struct ZarrDimension
 {
+    ZarrDimension() = default;
     ZarrDimension(std::string_view name,
                   ZarrDimensionType type,
                   uint32_t array_size_px,

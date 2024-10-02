@@ -49,7 +49,7 @@ get_credentials(std::string& endpoint,
 
 void
 sink_creator_make_chunk_sinks(std::shared_ptr<zarr::ThreadPool> thread_pool,
-                              std::shared_ptr<ArrayDimensions> dimensions)
+                              const ArrayDimensions* dimensions)
 {
     zarr::SinkCreator sink_creator(thread_pool, nullptr);
 
@@ -85,7 +85,7 @@ sink_creator_make_chunk_sinks(
   std::shared_ptr<zarr::ThreadPool> thread_pool,
   std::shared_ptr<zarr::S3ConnectionPool> connection_pool,
   const std::string& bucket_name,
-  std::shared_ptr<ArrayDimensions> dimensions)
+  const ArrayDimensions* dimensions)
 {
     zarr::SinkCreator sink_creator(thread_pool, connection_pool);
 
@@ -135,7 +135,7 @@ sink_creator_make_chunk_sinks(
 
 void
 sink_creator_make_shard_sinks(std::shared_ptr<zarr::ThreadPool> thread_pool,
-                              std::shared_ptr<ArrayDimensions> dimensions)
+                              const ArrayDimensions* dimensions)
 {
     zarr::SinkCreator sink_creator(thread_pool, nullptr);
 
@@ -171,7 +171,7 @@ sink_creator_make_shard_sinks(
   std::shared_ptr<zarr::ThreadPool> thread_pool,
   std::shared_ptr<zarr::S3ConnectionPool> connection_pool,
   const std::string& bucket_name,
-  std::shared_ptr<ArrayDimensions> dimensions)
+  const ArrayDimensions* dimensions)
 {
     zarr::SinkCreator sink_creator(thread_pool, connection_pool);
 
@@ -240,16 +240,15 @@ main()
                       12,
                       3,  // 3 columns per chunk, 4 chunks
                       2); // 2 chunks per shard (6 columns per shard, 2 shards)
-    auto dimensions =
-      std::make_shared<ArrayDimensions>(std::move(dims), ZarrDataType_int8);
+    ArrayDimensions dimensions(std::move(dims), ZarrDataType_int8);
 
     auto thread_pool = std::make_shared<zarr::ThreadPool>(
       std::thread::hardware_concurrency(),
       [](const std::string& err) { LOG_ERROR("Failed: ", err.c_str()); });
 
     try {
-        sink_creator_make_chunk_sinks(thread_pool, dimensions);
-        sink_creator_make_shard_sinks(thread_pool, dimensions);
+        sink_creator_make_chunk_sinks(thread_pool, &dimensions);
+        sink_creator_make_shard_sinks(thread_pool, &dimensions);
     } catch (const std::exception& e) {
         LOG_ERROR("Failed: ", e.what());
         return 1;
@@ -268,9 +267,9 @@ main()
 
     try {
         sink_creator_make_chunk_sinks(
-          thread_pool, connection_pool, bucket_name, dimensions);
+          thread_pool, connection_pool, bucket_name, &dimensions);
         sink_creator_make_shard_sinks(
-          thread_pool, connection_pool, bucket_name, dimensions);
+          thread_pool, connection_pool, bucket_name, &dimensions);
     } catch (const std::exception& e) {
         LOG_ERROR("Failed: ", e.what());
         return 1;
