@@ -3,11 +3,13 @@
 #include "zarr.types.h"
 
 #include <string>
+#include <string_view>
 #include <vector>
 
 struct ZarrDimension
 {
-    ZarrDimension(const char* name,
+    ZarrDimension() = default;
+    ZarrDimension(std::string_view name,
                   ZarrDimensionType type,
                   uint32_t array_size_px,
                   uint32_t chunk_size_px,
