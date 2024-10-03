@@ -91,14 +91,18 @@ main()
         };
 
         {
-            zarr::ZarrV2ArrayWriter writer(config, thread_pool, nullptr);
+            auto writer = std::make_unique<zarr::ZarrV2ArrayWriter>(
+              std::move(config), thread_pool);
 
             const size_t frame_size = array_width * array_height * nbytes_px;
-            std::vector<uint8_t> data(frame_size, 0);
+            std::vector data_(frame_size, std::byte(0));
+            std::span data(data_);
 
             for (auto i = 0; i < n_frames; ++i) { // 2 time points
-                CHECK(writer.write_frame(data.data(), frame_size));
+                CHECK(writer->write_frame(data));
             }
+
+            CHECK(finalize_array(std::move(writer)));
         }
 
         check_json();

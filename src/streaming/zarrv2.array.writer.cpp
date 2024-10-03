@@ -9,8 +9,9 @@
 #include <stdexcept>
 
 namespace {
-std::string
-sample_type_to_dtype(ZarrDataType t)
+[[nodiscard]]
+bool
+sample_type_to_dtype(ZarrDataType t, std::string& t_str)
 
 {
     const std::string dtype_prefix =
@@ -18,56 +19,57 @@ sample_type_to_dtype(ZarrDataType t)
 
     switch (t) {
         case ZarrDataType_uint8:
-            return dtype_prefix + "u1";
+            t_str = dtype_prefix + "u1";
+            break;
         case ZarrDataType_uint16:
-            return dtype_prefix + "u2";
+            t_str = dtype_prefix + "u2";
+            break;
         case ZarrDataType_uint32:
-            return dtype_prefix + "u4";
+            t_str = dtype_prefix + "u4";
+            break;
         case ZarrDataType_uint64:
-            return dtype_prefix + "u8";
+            t_str = dtype_prefix + "u8";
+            break;
         case ZarrDataType_int8:
-            return dtype_prefix + "i1";
+            t_str = dtype_prefix + "i1";
+            break;
         case ZarrDataType_int16:
-            return dtype_prefix + "i2";
+            t_str = dtype_prefix + "i2";
+            break;
         case ZarrDataType_int32:
-            return dtype_prefix + "i4";
+            t_str = dtype_prefix + "i4";
+            break;
         case ZarrDataType_int64:
-            return dtype_prefix + "i8";
+            t_str = dtype_prefix + "i8";
+            break;
         case ZarrDataType_float32:
-            return dtype_prefix + "f4";
+            t_str = dtype_prefix + "f4";
+            break;
         case ZarrDataType_float64:
-            return dtype_prefix + "f8";
+            t_str = dtype_prefix + "f8";
+            break;
         default:
-            throw std::runtime_error("Invalid data type: " +
-                                     std::to_string(static_cast<int>(t)));
+            LOG_ERROR("Unsupported sample type: ", t);
+            return false;
     }
+
+    return true;
 }
 } // namespace
 
 zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
-  const ArrayWriterConfig& config,
+  ArrayWriterConfig&& config,
+  std::shared_ptr<ThreadPool> thread_pool)
+  : ArrayWriter(std::move(config), thread_pool)
+{
+}
+
+zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
+  ArrayWriterConfig&& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
-  : ArrayWriter(config, thread_pool, s3_connection_pool)
+  : ArrayWriter(std::move(config), thread_pool, s3_connection_pool)
 {
-}
-
-zarr::ZarrV2ArrayWriter::~ZarrV2ArrayWriter()
-{
-    is_finalizing_ = true;
-    try {
-        flush_();
-    } catch (const std::exception& exc) {
-        LOG_ERROR("Failed to finalize array writer: ", exc.what());
-    } catch (...) {
-        LOG_ERROR("Failed to finalize array writer: (unknown)");
-    }
-}
-
-ZarrVersion
-zarr::ZarrV2ArrayWriter::version_() const
-{
-    return ZarrVersion_2;
 }
 
 bool
@@ -127,6 +129,11 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
 
     using json = nlohmann::json;
 
+    std::string dtype;
+    if (!sample_type_to_dtype(config_.dtype, dtype)) {
+        return false;
+    }
+
     std::vector<size_t> array_shape, chunk_shape;
 
     size_t append_size = frames_written_;
@@ -149,7 +156,7 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
     metadata["zarr_format"] = 2;
     metadata["shape"] = array_shape;
     metadata["chunks"] = chunk_shape;
-    metadata["dtype"] = sample_type_to_dtype(config_.dtype);
+    metadata["dtype"] = dtype;
     metadata["fill_value"] = 0;
     metadata["order"] = "C";
     metadata["filters"] = nullptr;

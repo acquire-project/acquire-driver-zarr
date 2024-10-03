@@ -436,3 +436,18 @@ zarr::ArrayWriter::rollover_()
     close_sinks_();
     ++append_chunk_index_;
 }
+
+bool
+zarr::finalize_array(std::unique_ptr<ArrayWriter>&& writer)
+{
+    writer->is_finalizing_ = true;
+    try {
+        writer->flush_();
+    } catch (const std::exception& exc) {
+        LOG_ERROR("Failed to finalize array writer: ", exc.what());
+        return false;
+    }
+
+    writer.reset();
+    return true;
+}
