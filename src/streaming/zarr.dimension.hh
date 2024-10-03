@@ -2,6 +2,7 @@
 
 #include "zarr.types.h"
 
+#include <string>
 #include <string_view>
 #include <vector>
 
