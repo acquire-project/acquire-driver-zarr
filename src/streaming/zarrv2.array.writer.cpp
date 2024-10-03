@@ -9,8 +9,9 @@
 #include <stdexcept>
 
 namespace {
-std::string
-sample_type_to_dtype(ZarrDataType t)
+[[nodiscard]]
+bool
+sample_type_to_dtype(ZarrDataType t, std::string& t_str)
 
 {
     const std::string dtype_prefix =
@@ -18,56 +19,57 @@ sample_type_to_dtype(ZarrDataType t)
 
     switch (t) {
         case ZarrDataType_uint8:
-            return dtype_prefix + "u1";
+            t_str = dtype_prefix + "u1";
+            break;
         case ZarrDataType_uint16:
-            return dtype_prefix + "u2";
+            t_str = dtype_prefix + "u2";
+            break;
         case ZarrDataType_uint32:
-            return dtype_prefix + "u4";
+            t_str = dtype_prefix + "u4";
+            break;
         case ZarrDataType_uint64:
-            return dtype_prefix + "u8";
+            t_str = dtype_prefix + "u8";
+            break;
         case ZarrDataType_int8:
-            return dtype_prefix + "i1";
+            t_str = dtype_prefix + "i1";
+            break;
         case ZarrDataType_int16:
-            return dtype_prefix + "i2";
+            t_str = dtype_prefix + "i2";
+            break;
         case ZarrDataType_int32:
-            return dtype_prefix + "i4";
+            t_str = dtype_prefix + "i4";
+            break;
         case ZarrDataType_int64:
-            return dtype_prefix + "i8";
+            t_str = dtype_prefix + "i8";
+            break;
         case ZarrDataType_float32:
-            return dtype_prefix + "f4";
+            t_str = dtype_prefix + "f4";
+            break;
         case ZarrDataType_float64:
-            return dtype_prefix + "f8";
+            t_str = dtype_prefix + "f8";
+            break;
         default:
-            throw std::runtime_error("Invalid data type: " +
-                                     std::to_string(static_cast<int>(t)));
+            LOG_ERROR("Unsupported sample type: ", t);
+            return false;
     }
+
+    return true;
 }
 } // namespace
 
 zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
-  const ArrayWriterConfig& config,
+  ArrayWriterConfig&& config,
+  std::shared_ptr<ThreadPool> thread_pool)
+  : ArrayWriter(std::move(config), thread_pool)
+{
+}
+
+zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
+  ArrayWriterConfig&& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
-  : ArrayWriter(config, thread_pool, s3_connection_pool)
+  : ArrayWriter(std::move(config), thread_pool, s3_connection_pool)
 {
-}
-
-zarr::ZarrV2ArrayWriter::~ZarrV2ArrayWriter()
-{
-    is_finalizing_ = true;
-    try {
-        flush_();
-    } catch (const std::exception& exc) {
-        LOG_ERROR("Failed to finalize array writer: %s", exc.what());
-    } catch (...) {
-        LOG_ERROR("Failed to finalize array writer: (unknown)");
-    }
-}
-
-ZarrVersion
-zarr::ZarrV2ArrayWriter::version_() const
-{
-    return ZarrVersion_2;
 }
 
 bool
@@ -86,14 +88,17 @@ zarr::ZarrV2ArrayWriter::flush_impl_()
         std::scoped_lock lock(buffers_mutex_);
         for (auto i = 0; i < data_sinks_.size(); ++i) {
             auto& chunk = chunk_buffers_.at(i);
-            EXPECT(thread_pool_->push_to_job_queue(
+            EXPECT(thread_pool_->push_job(
                      std::move([&sink = data_sinks_.at(i),
-                                data = chunk.data(),
+                                data_ = chunk.data(),
                                 size = chunk.size(),
                                 &latch](std::string& err) -> bool {
                          bool success = false;
                          try {
-                             CHECK(sink->write(0, data, size));
+                             std::span data{
+                                 reinterpret_cast<std::byte*>(data_), size
+                             };
+                             CHECK(sink->write(0, data));
                              success = true;
                          } catch (const std::exception& exc) {
                              err = "Failed to write chunk: " +
@@ -124,31 +129,34 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
 
     using json = nlohmann::json;
 
+    std::string dtype;
+    if (!sample_type_to_dtype(config_.dtype, dtype)) {
+        return false;
+    }
+
     std::vector<size_t> array_shape, chunk_shape;
 
     size_t append_size = frames_written_;
-    for (auto dim = config_.dimensions.rbegin() + 2;
-         dim < config_.dimensions.rend() - 1;
-         ++dim) {
-        CHECK(dim->array_size_px);
-        append_size =
-          (append_size + dim->array_size_px - 1) / dim->array_size_px;
+    for (auto i = config_.dimensions->ndims() - 3; i > 0; --i) {
+        const auto& dim = config_.dimensions->at(i);
+        const auto& array_size_px = dim.array_size_px;
+        CHECK(array_size_px);
+        append_size = (append_size + array_size_px - 1) / array_size_px;
     }
     array_shape.push_back(append_size);
 
-    chunk_shape.push_back(config_.dimensions.front().chunk_size_px);
-    for (auto dim = config_.dimensions.begin() + 1;
-         dim != config_.dimensions.end();
-         ++dim) {
-        array_shape.push_back(dim->array_size_px);
-        chunk_shape.push_back(dim->chunk_size_px);
+    chunk_shape.push_back(config_.dimensions->final_dim().chunk_size_px);
+    for (auto i = 1; i < config_.dimensions->ndims(); ++i) {
+        const auto& dim = config_.dimensions->at(i);
+        array_shape.push_back(dim.array_size_px);
+        chunk_shape.push_back(dim.chunk_size_px);
     }
 
     json metadata;
     metadata["zarr_format"] = 2;
     metadata["shape"] = array_shape;
     metadata["chunks"] = chunk_shape;
-    metadata["dtype"] = sample_type_to_dtype(config_.dtype);
+    metadata["dtype"] = dtype;
     metadata["fill_value"] = 0;
     metadata["order"] = "C";
     metadata["filters"] = nullptr;
@@ -164,10 +172,10 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
         metadata["compressor"] = nullptr;
     }
 
-    const std::string metadata_str = metadata.dump(4);
-    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-
-    return metadata_sink_->write(0, metadata_bytes, metadata_str.size());
+    std::string metadata_str = metadata.dump(4);
+    std::span data{ reinterpret_cast<std::byte*>(metadata_str.data()),
+                    metadata_str.size() };
+    return metadata_sink_->write(0, data);
 }
 
 bool

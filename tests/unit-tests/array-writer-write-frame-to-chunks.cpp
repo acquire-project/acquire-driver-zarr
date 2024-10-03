@@ -6,9 +6,9 @@ namespace {
 class TestWriter : public zarr::ArrayWriter
 {
   public:
-    TestWriter(const zarr::ArrayWriterConfig& array_spec,
+    TestWriter(zarr::ArrayWriterConfig&& array_spec,
                std::shared_ptr<zarr::ThreadPool> thread_pool)
-      : zarr::ArrayWriter(array_spec, thread_pool, nullptr)
+      : zarr::ArrayWriter(std::move(array_spec), thread_pool)
     {
     }
 
@@ -40,7 +40,7 @@ main()
     try {
         auto thread_pool = std::make_shared<zarr::ThreadPool>(
           std::thread::hardware_concurrency(),
-          [](const std::string& err) { LOG_ERROR("Error: %s", err.c_str()); });
+          [](const std::string& err) { LOG_ERROR("Error: ", err); });
 
         std::vector<ZarrDimension> dims;
         dims.emplace_back(
@@ -56,25 +56,26 @@ main()
 
         zarr::ArrayWriterConfig config = {
             .dimensions =
-              std::make_shared<ArrayDimensions>(std::move(dims), dtype),
+              std::make_unique<ArrayDimensions>(std::move(dims), dtype),
             .dtype = dtype,
             .bucket_name = std::nullopt,
             .store_path = base_dir.string(),
             .compression_params = std::nullopt,
         };
 
-        TestWriter writer(config, thread_pool);
+        TestWriter writer(std::move(config), thread_pool);
 
         const size_t frame_size = array_width * array_height * nbytes_px;
-        std::vector<uint8_t> data(frame_size, 0);
+        std::vector data_(frame_size, std::byte(0));
+        std::span data(data_.data(), data_.size());
 
         for (auto i = 0; i < n_frames; ++i) {
-            CHECK(writer.write_frame(data.data(), frame_size) == frame_size);
+            CHECK(writer.write_frame(data) == frame_size);
         }
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }

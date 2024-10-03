@@ -16,6 +16,7 @@ add_library(${tgt}
         s3.connection.hh
         s3.connection.cpp
         sink.hh
+        sink.cpp
         file.sink.hh
         file.sink.cpp
         s3.sink.hh

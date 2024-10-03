@@ -18,12 +18,12 @@ zarr::downsample(const ArrayWriterConfig& config,
                  ArrayWriterConfig& downsampled_config)
 {
     // downsample dimensions
-    std::vector<ZarrDimension> downsampled_dims;
+    std::vector<ZarrDimension> downsampled_dims(config.dimensions->ndims());
     for (auto i = 0; i < config.dimensions->ndims(); ++i) {
         const auto& dim = config.dimensions->at(i);
         // don't downsample channels
         if (dim.type == ZarrDimensionType_Channel) {
-            downsampled_dims.push_back(dim);
+            downsampled_dims[i] = dim;
         } else {
             const uint32_t array_size_px =
               (dim.array_size_px + (dim.array_size_px % 2)) / 2;
@@ -42,14 +42,14 @@ zarr::downsample(const ArrayWriterConfig& config,
                 ? 1
                 : std::min(n_chunks, dim.shard_size_chunks);
 
-            downsampled_dims.emplace_back(dim.name,
-                                          dim.type,
-                                          array_size_px,
-                                          chunk_size_px,
-                                          shard_size_chunks);
+            downsampled_dims[i] = { dim.name,
+                                    dim.type,
+                                    array_size_px,
+                                    chunk_size_px,
+                                    shard_size_chunks };
         }
     }
-    downsampled_config.dimensions = std::make_shared<ArrayDimensions>(
+    downsampled_config.dimensions = std::make_unique<ArrayDimensions>(
       std::move(downsampled_dims), config.dtype);
 
     downsampled_config.level_of_detail = config.level_of_detail + 1;
@@ -76,11 +76,17 @@ zarr::downsample(const ArrayWriterConfig& config,
 }
 
 /// Writer
+zarr::ArrayWriter::ArrayWriter(ArrayWriterConfig&& config,
+                               std::shared_ptr<ThreadPool> thread_pool)
+  : ArrayWriter(std::move(config), thread_pool, nullptr)
+{
+}
+
 zarr::ArrayWriter::ArrayWriter(
-  const ArrayWriterConfig& config,
+  ArrayWriterConfig&& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
-  : config_{ config }
+  : config_{ std::move(config) }
   , thread_pool_{ thread_pool }
   , s3_connection_pool_{ s3_connection_pool }
   , bytes_to_flush_{ 0 }
@@ -91,15 +97,18 @@ zarr::ArrayWriter::ArrayWriter(
 }
 
 size_t
-zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
+zarr::ArrayWriter::write_frame(std::span<std::byte> data)
 {
-    const size_t nbytes_frame =
+    const auto nbytes_data = data.size();
+    const auto nbytes_frame =
       bytes_of_frame(*config_.dimensions, config_.dtype);
 
-    if (nbytes_frame != nbytes) {
-        LOG_WARNING("Frame size mismatch: expected %zu, got %zu. Skipping",
-                    nbytes_frame,
-                    nbytes);
+    if (nbytes_frame != nbytes_data) {
+        LOG_ERROR("Frame size mismatch: expected ",
+                  nbytes_frame,
+                  ", got ",
+                  nbytes_data,
+                  ". Skipping");
         return 0;
     }
 
@@ -107,12 +116,12 @@ zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
         make_buffers_();
     }
 
-    // split the incoming frame into tiles and write_frame them to the chunk
+    // split the incoming frame into tiles and write them to the chunk
     // buffers
-    const auto bytes_written = write_frame_to_chunks_(data, nbytes);
-    EXPECT(bytes_written == nbytes, "Failed to write_frame frame to chunks");
+    const auto bytes_written = write_frame_to_chunks_(data);
+    EXPECT(bytes_written == nbytes_data, "Failed to write frame to chunks");
 
-    LOG_DEBUG("Wrote %zu bytes of frame %zu", bytes_written, frames_written_);
+    LOG_DEBUG("Wrote ", bytes_written, " bytes of frame ", frames_written_);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
 
@@ -121,6 +130,12 @@ zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
     }
 
     return bytes_written;
+}
+
+bool
+zarr::ArrayWriter::is_s3_array_() const
+{
+    return config_.bucket_name.has_value();
 }
 
 bool
@@ -148,21 +163,23 @@ zarr::ArrayWriter::make_data_sinks_()
 
     SinkCreator creator(thread_pool_, s3_connection_pool_);
 
-    if (config_.bucket_name && !creator.make_data_sinks(*config_.bucket_name,
-                                                        data_root,
-                                                        config_.dimensions,
-                                                        parts_along_dimension,
-                                                        data_sinks_)) {
-        LOG_ERROR("Failed to create data sinks in %s for bucket %s",
-                  data_root.c_str(),
-                  config_.bucket_name->c_str());
-        return false;
-    } else if (!config_.bucket_name &&
-               !creator.make_data_sinks(data_root,
-                                        config_.dimensions,
+    if (is_s3_array_()) {
+        if (!creator.make_data_sinks(*config_.bucket_name,
+                                     data_root,
+                                     config_.dimensions.get(),
+                                     parts_along_dimension,
+                                     data_sinks_)) {
+            LOG_ERROR("Failed to create data sinks in ",
+                      data_root,
+                      " for bucket ",
+                      *config_.bucket_name);
+            return false;
+        }
+    } else if (!creator.make_data_sinks(data_root,
+                                        config_.dimensions.get(),
                                         parts_along_dimension,
                                         data_sinks_)) {
-        LOG_ERROR("Failed to create data sinks in %s", data_root.c_str());
+        LOG_ERROR("Failed to create data sinks in ", data_root);
         return false;
     }
 
@@ -173,6 +190,7 @@ bool
 zarr::ArrayWriter::make_metadata_sink_()
 {
     if (metadata_sink_) {
+        LOG_INFO("Metadata sink already exists");
         return true;
     }
 
@@ -193,7 +211,7 @@ zarr::ArrayWriter::make_metadata_sink_()
             return false;
     }
 
-    if (config_.bucket_name) {
+    if (is_s3_array_()) {
         SinkCreator creator(thread_pool_, s3_connection_pool_);
         metadata_sink_ =
           creator.make_sink(*config_.bucket_name, metadata_path);
@@ -202,8 +220,7 @@ zarr::ArrayWriter::make_metadata_sink_()
     }
 
     if (!metadata_sink_) {
-        LOG_ERROR("Failed to create metadata sink: %s",
-                  metadata_path.c_str());
+        LOG_ERROR("Failed to create metadata sink: ", metadata_path);
         return false;
     }
 
@@ -222,14 +239,14 @@ zarr::ArrayWriter::make_buffers_() noexcept
 
     for (auto& buf : chunk_buffers_) {
         buf.resize(nbytes);
-        std::fill_n(buf.begin(), nbytes, 0);
+        std::fill_n(buf.begin(), nbytes, std::byte(0));
     }
 }
 
 size_t
-zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
+zarr::ArrayWriter::write_frame_to_chunks_(std::span<std::byte> data)
 {
-    // break the frame into tiles and write_frame them to the chunk buffers
+    // break the frame into tiles and write them to the chunk buffers
     const auto bytes_per_px = bytes_of_type(config_.dtype);
 
     const auto& dimensions = config_.dimensions;
@@ -260,15 +277,15 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
     // offset among the chunks in the lattice
     const auto group_offset = dimensions->tile_group_offset(frame_id);
     // offset within the chunk
-    const auto chunk_offset = dimensions->chunk_internal_offset(frame_id);
+    const auto chunk_offset =
+      static_cast<long long>(dimensions->chunk_internal_offset(frame_id));
 
     for (auto i = 0; i < n_tiles_y; ++i) {
         // TODO (aliddell): we can optimize this when tiles_per_frame_x_ is 1
         for (auto j = 0; j < n_tiles_x; ++j) {
             const auto c = group_offset + i * n_tiles_x + j;
             auto& chunk = chunk_buffers_[c];
-            auto chunk_it =
-              chunk.begin() + static_cast<long long>(chunk_offset);
+            auto chunk_it = chunk.begin() + chunk_offset;
 
             for (auto k = 0; k < tile_rows; ++k) {
                 const auto frame_row = i * tile_rows + k;
@@ -278,11 +295,12 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
                     const auto region_width =
                       std::min(frame_col + tile_cols, frame_cols) - frame_col;
 
-                    const auto region_start =
-                      bytes_per_px * (frame_row * frame_cols + frame_col);
-                    const auto nbytes = region_width * bytes_per_px;
+                    const auto region_start = static_cast<long long>(
+                      bytes_per_px * (frame_row * frame_cols + frame_col));
+                    const auto nbytes =
+                      static_cast<long long>(region_width * bytes_per_px);
                     const auto region_stop = region_start + nbytes;
-                    if (region_stop > buf_size) {
+                    if (region_stop > data.size()) {
                         LOG_ERROR("Buffer overflow");
                         return bytes_written;
                     }
@@ -292,7 +310,9 @@ zarr::ArrayWriter::write_frame_to_chunks_(const uint8_t* buf, size_t buf_size)
                         LOG_ERROR("Buffer overflow");
                         return bytes_written;
                     }
-                    std::copy(buf + region_start, buf + region_stop, chunk_it);
+                    std::copy(data.begin() + region_start,
+                              data.begin() + region_stop,
+                              chunk_it);
 
                     bytes_written += (region_stop - region_start);
                 }
@@ -332,7 +352,7 @@ zarr::ArrayWriter::compress_buffers_()
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
     for (auto& chunk : chunk_buffers_) {
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [&params, buf = &chunk, bytes_per_px, &latch](
                    std::string& err) -> bool {
                      bool success = false;
@@ -341,7 +361,7 @@ zarr::ArrayWriter::compress_buffers_()
                      try {
                          const auto tmp_size =
                            bytes_of_chunk + BLOSC_MAX_OVERHEAD;
-                         std::vector<uint8_t> tmp(tmp_size);
+                         std::vector<std::byte> tmp(tmp_size);
                          const auto nb =
                            blosc_compress_ctx(params.clevel,
                                               params.shuffle,
@@ -359,12 +379,8 @@ zarr::ArrayWriter::compress_buffers_()
 
                          success = true;
                      } catch (const std::exception& exc) {
-                         char msg[128];
-                         snprintf(msg,
-                                  sizeof(msg),
-                                  "Failed to compress chunk: %s",
-                                  exc.what());
-                         err = msg;
+                         err = "Failed to compress chunk: " +
+                               std::string(exc.what());
                      } catch (...) {
                          err = "Failed to compress chunk (unknown)";
                      }
@@ -386,7 +402,7 @@ zarr::ArrayWriter::flush_()
         return;
     }
 
-    // compress buffers and write_frame out
+    // compress buffers and write out
     compress_buffers_();
     CHECK(flush_impl_());
 
@@ -419,4 +435,19 @@ zarr::ArrayWriter::rollover_()
 
     close_sinks_();
     ++append_chunk_index_;
+}
+
+bool
+zarr::finalize_array(std::unique_ptr<ArrayWriter>&& writer)
+{
+    writer->is_finalizing_ = true;
+    try {
+        writer->flush_();
+    } catch (const std::exception& exc) {
+        LOG_ERROR("Failed to finalize array writer: ", exc.what());
+        return false;
+    }
+
+    writer.reset();
+    return true;
 }

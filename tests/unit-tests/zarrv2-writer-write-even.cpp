@@ -1,13 +1,10 @@
 #include "zarrv2.array.writer.hh"
-#include "macros.hh"
+#include "unit.test.macros.hh"
 #include "zarr.common.hh"
 
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-
-#define EXPECT_EQ(a, b)                                                        \
-    EXPECT((a) == (b), "Expected %s == %s, but %zu != %zu", #a, #b, a, b)
 
 namespace fs = std::filesystem;
 
@@ -47,33 +44,33 @@ check_json()
     nlohmann::json meta = nlohmann::json::parse(f);
 
     EXPECT(meta["dtype"].get<std::string>() == "<u2",
-           "Expected dtype to be '<u2', but got '%s'",
-           meta["dtype"].get<std::string>().c_str());
+           "Expected dtype to be <u2, but got ",
+           meta["dtype"].get<std::string>());
 
-    EXPECT_EQ(meta["zarr_format"].get<int>(), 2);
+    EXPECT_EQ(int, meta["zarr_format"].get<int>(), 2);
 
     const auto& array_shape = meta["shape"];
     const auto& chunk_shape = meta["chunks"];
 
-    EXPECT_EQ(array_shape.size(), 5);
-    EXPECT_EQ(array_shape[0].get<int>(), array_timepoints);
-    EXPECT_EQ(array_shape[1].get<int>(), array_channels);
-    EXPECT_EQ(array_shape[2].get<int>(), array_planes);
-    EXPECT_EQ(array_shape[3].get<int>(), array_height);
-    EXPECT_EQ(array_shape[4].get<int>(), array_width);
+    EXPECT_EQ(int, array_shape.size(), 5);
+    EXPECT_EQ(int, array_shape[0].get<int>(), array_timepoints);
+    EXPECT_EQ(int, array_shape[1].get<int>(), array_channels);
+    EXPECT_EQ(int, array_shape[2].get<int>(), array_planes);
+    EXPECT_EQ(int, array_shape[3].get<int>(), array_height);
+    EXPECT_EQ(int, array_shape[4].get<int>(), array_width);
 
-    EXPECT_EQ(chunk_shape.size(), 5);
-    EXPECT_EQ(chunk_shape[0].get<int>(), chunk_timepoints);
-    EXPECT_EQ(chunk_shape[1].get<int>(), chunk_channels);
-    EXPECT_EQ(chunk_shape[2].get<int>(), chunk_planes);
-    EXPECT_EQ(chunk_shape[3].get<int>(), chunk_height);
-    EXPECT_EQ(chunk_shape[4].get<int>(), chunk_width);
+    EXPECT_EQ(int, chunk_shape.size(), 5);
+    EXPECT_EQ(int, chunk_shape[0].get<int>(), chunk_timepoints);
+    EXPECT_EQ(int, chunk_shape[1].get<int>(), chunk_channels);
+    EXPECT_EQ(int, chunk_shape[2].get<int>(), chunk_planes);
+    EXPECT_EQ(int, chunk_shape[3].get<int>(), chunk_height);
+    EXPECT_EQ(int, chunk_shape[4].get<int>(), chunk_width);
 }
 
 int
 main()
 {
-    Logger::set_log_level(ZarrLogLevel_Debug);
+    Logger::set_log_level(LogLevel_Debug);
 
     int retval = 1;
 
@@ -83,10 +80,10 @@ main()
     try {
         auto thread_pool = std::make_shared<zarr::ThreadPool>(
           std::thread::hardware_concurrency(), [](const std::string& err) {
-              LOG_ERROR("Error: %s\n", err.c_str());
+              LOG_ERROR("Error: ", err);
           });
 
-        std::vector<zarr::Dimension> dims;
+        std::vector<ZarrDimension> dims;
         dims.emplace_back(
           "t", ZarrDimensionType_Time, array_timepoints, chunk_timepoints, 0);
         dims.emplace_back(
@@ -97,9 +94,11 @@ main()
           "y", ZarrDimensionType_Space, array_height, chunk_height, 0);
         dims.emplace_back(
           "x", ZarrDimensionType_Space, array_width, chunk_width, 0);
+        auto dimensions =
+          std::make_unique<ArrayDimensions>(std::move(dims), dtype);
 
         zarr::ArrayWriterConfig config = {
-            .dimensions = dims,
+            .dimensions = std::move(dimensions),
             .dtype = dtype,
             .level_of_detail = level_of_detail,
             .bucket_name = std::nullopt,
@@ -108,14 +107,18 @@ main()
         };
 
         {
-            zarr::ZarrV2ArrayWriter writer(config, thread_pool, nullptr);
+            auto writer = std::make_unique<zarr::ZarrV2ArrayWriter>(
+              std::move(config), thread_pool);
 
             const size_t frame_size = array_width * array_height * nbytes_px;
-            std::vector<uint8_t> data(frame_size, 0);
+            std::vector data_(frame_size, std::byte(0));
+            std::span data(data_);
 
             for (auto i = 0; i < n_frames; ++i) { // 2 time points
-                CHECK(writer.write_frame(data.data(), frame_size));
+                CHECK(writer->write_frame(data));
             }
+
+            CHECK(finalize_array(std::move(writer)));
         }
 
         check_json();
@@ -148,7 +151,7 @@ main()
                             const auto x_file = y_dir / std::to_string(x);
                             CHECK(fs::is_regular_file(x_file));
                             const auto file_size = fs::file_size(x_file);
-                            EXPECT_EQ(file_size, expected_file_size);
+                            EXPECT_EQ(int, file_size, expected_file_size);
                         }
 
                         CHECK(!fs::is_regular_file(
@@ -169,7 +172,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }

@@ -29,7 +29,7 @@ main()
           "x", ZarrDimensionType_Space, 64, 16, 2); // 4 chunks, 2 shards
 
         zarr::ArrayWriterConfig config{
-            .dimensions = std::make_shared<ArrayDimensions>(std::move(dims),
+            .dimensions = std::make_unique<ArrayDimensions>(std::move(dims),
                                                             ZarrDataType_uint8),
             .dtype = ZarrDataType_uint8,
             .level_of_detail = 0,
@@ -125,7 +125,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }
