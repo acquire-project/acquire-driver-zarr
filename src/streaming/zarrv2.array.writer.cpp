@@ -103,8 +103,6 @@ zarr::ZarrV2ArrayWriter::flush_impl_()
                          } catch (const std::exception& exc) {
                              err = "Failed to write chunk: " +
                                    std::string(exc.what());
-                         } catch (...) {
-                             err = "Failed to write chunk: (unknown)";
                          }
 
                          latch.count_down();

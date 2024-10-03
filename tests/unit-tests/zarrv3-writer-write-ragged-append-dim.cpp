@@ -1,13 +1,10 @@
 #include "zarrv3.array.writer.hh"
-#include "macros.hh"
+#include "unit.test.macros.hh"
 #include "zarr.common.hh"
 
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
-
-#define EXPECT_EQ(a, b)                                                        \
-    EXPECT((a) == (b), "Expected %s == %s, but %zu != %zu", #a, #b, a, b)
 
 namespace fs = std::filesystem;
 
@@ -58,26 +55,26 @@ check_json()
     const auto& shard_shape =
       meta["storage_transformers"][0]["configuration"]["chunks_per_shard"];
 
-    EXPECT_EQ(array_shape.size(), 3);
-    EXPECT_EQ(array_shape[0].get<int>(), array_planes);
-    EXPECT_EQ(array_shape[1].get<int>(), array_height);
-    EXPECT_EQ(array_shape[2].get<int>(), array_width);
+    EXPECT_EQ(int, array_shape.size(), 3);
+    EXPECT_EQ(int, array_shape[0].get<int>(), array_planes);
+    EXPECT_EQ(int, array_shape[1].get<int>(), array_height);
+    EXPECT_EQ(int, array_shape[2].get<int>(), array_width);
 
-    EXPECT_EQ(chunk_shape.size(), 3);
-    EXPECT_EQ(chunk_shape[0].get<int>(), chunk_planes);
-    EXPECT_EQ(chunk_shape[1].get<int>(), chunk_height);
-    EXPECT_EQ(chunk_shape[2].get<int>(), chunk_width);
+    EXPECT_EQ(int, chunk_shape.size(), 3);
+    EXPECT_EQ(int, chunk_shape[0].get<int>(), chunk_planes);
+    EXPECT_EQ(int, chunk_shape[1].get<int>(), chunk_height);
+    EXPECT_EQ(int, chunk_shape[2].get<int>(), chunk_width);
 
-    EXPECT_EQ(shard_shape.size(), 3);
-    EXPECT_EQ(shard_shape[0].get<int>(), shard_planes);
-    EXPECT_EQ(shard_shape[1].get<int>(), shard_height);
-    EXPECT_EQ(shard_shape[2].get<int>(), shard_width);
+    EXPECT_EQ(int, shard_shape.size(), 3);
+    EXPECT_EQ(int, shard_shape[0].get<int>(), shard_planes);
+    EXPECT_EQ(int, shard_shape[1].get<int>(), shard_height);
+    EXPECT_EQ(int, shard_shape[2].get<int>(), shard_width);
 }
 
 int
 main()
 {
-    Logger::set_log_level(ZarrLogLevel_Debug);
+    Logger::set_log_level(LogLevel_Debug);
 
     int retval = 1;
 
@@ -89,7 +86,7 @@ main()
           std::thread::hardware_concurrency(),
           [](const std::string& err) { LOG_ERROR("Error: %s", err.c_str()); });
 
-        std::vector<zarr::Dimension> dims;
+        std::vector<ZarrDimension> dims;
         dims.emplace_back("z",
                           ZarrDimensionType_Space,
                           array_planes,
@@ -102,9 +99,11 @@ main()
                           shard_height);
         dims.emplace_back(
           "x", ZarrDimensionType_Space, array_width, chunk_width, shard_width);
+        auto dimensions =
+          std::make_unique<ArrayDimensions>(std::move(dims), dtype);
 
         zarr::ArrayWriterConfig config = {
-            .dimensions = dims,
+            .dimensions = std::move(dimensions),
             .dtype = dtype,
             .level_of_detail = 4,
             .bucket_name = std::nullopt,
@@ -113,15 +112,18 @@ main()
         };
 
         {
-            zarr::ZarrV3ArrayWriter writer(config, thread_pool, nullptr);
+            auto writer = std::make_unique<zarr::ZarrV3ArrayWriter>(
+              std::move(config), thread_pool);
 
             const size_t frame_size = array_width * array_height * nbytes_px;
-            std::vector<uint8_t> data(frame_size, 0);
+            std::vector data_(frame_size, std::byte(0));
+            std::span data(data_);
 
-            for (auto i = 0; i < n_frames; ++i) {
-                CHECK(writer.write_frame(data.data(), frame_size) ==
-                      frame_size);
+            for (auto i = 0; i < n_frames; ++i) { // 2 time points
+                CHECK(writer->write_frame(data));
             }
+
+            CHECK(finalize_array(std::move(writer)));
         }
 
         check_json();
@@ -149,7 +151,7 @@ main()
                     const auto x_file = y_dir / std::to_string(x);
                     CHECK(fs::is_regular_file(x_file));
                     const auto file_size = fs::file_size(x_file);
-                    EXPECT_EQ(file_size, expected_file_size);
+                    EXPECT_EQ(int, file_size, expected_file_size);
                 }
 
                 CHECK(
