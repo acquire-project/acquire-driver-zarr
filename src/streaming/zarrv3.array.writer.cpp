@@ -72,22 +72,6 @@ zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
     }
 }
 
-zarr::ZarrV3ArrayWriter::~ZarrV3ArrayWriter()
-{
-    is_finalizing_ = true;
-    try {
-        flush_();
-    } catch (const std::exception& exc) {
-        LOG_ERROR("Failed to finalize array writer: %s", exc.what());
-    }
-}
-
-ZarrVersion
-zarr::ZarrV3ArrayWriter::version_() const
-{
-    return ZarrVersion_3;
-}
-
 bool
 zarr::ZarrV3ArrayWriter::flush_impl_()
 {
