@@ -76,8 +76,6 @@ main()
         retval = 0;
     } catch (const std::exception& exc) {
         LOG_ERROR("Exception: ", exc.what());
-    } catch (...) {
-        LOG_ERROR("Exception: (unknown)");
     }
 
     // cleanup
