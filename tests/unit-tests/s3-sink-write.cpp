@@ -60,7 +60,7 @@ main()
           1, s3_endpoint, s3_access_key_id, s3_secret_access_key);
 
         auto conn = pool->get_connection();
-        if (!conn->check_connection()) {
+        if (!conn->is_connection_valid()) {
             LOG_ERROR("Failed to connect to S3.");
             return 1;
         }
@@ -71,10 +71,13 @@ main()
         pool->return_connection(std::move(conn));
 
         {
-            const uint8_t str[] = "Hello, Acquire!";
+            char str[] = "Hello, Acquire!";
             auto sink =
               std::make_unique<zarr::S3Sink>(bucket_name, object_name, pool);
-            CHECK(sink->write(0, str, sizeof(str) - 1));
+            std::span data{ reinterpret_cast<std::byte*>(str),
+                            sizeof(str) - 1 };
+            CHECK(sink->write(0, data));
+            CHECK(zarr::finalize_sink(std::move(sink)));
         }
 
         conn = pool->get_connection();
@@ -105,8 +108,8 @@ main()
             minio::s3::GetObjectResponse resp = client.GetObject(args);
 
             if (contents != "Hello, Acquire!") {
-                LOG_ERROR("Expected 'Hello, Acquire!' but got '%s'",
-                          contents.c_str());
+                LOG_ERROR(
+                  "Expected 'Hello, Acquire!' but got '", contents, "'");
                 return 1;
             }
         }
@@ -117,7 +120,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& e) {
-        LOG_ERROR("Exception: %s", e.what());
+        LOG_ERROR("Exception: ", e.what());
     }
 
     return retval;

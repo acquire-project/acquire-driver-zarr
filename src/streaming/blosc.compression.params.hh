@@ -14,10 +14,10 @@ blosc_codec_to_string(ZarrCompressionCodec codec);
 struct BloscCompressionParams
 {
     std::string codec_id;
-    uint8_t clevel;
-    uint8_t shuffle;
+    uint8_t clevel{ 1 };
+    uint8_t shuffle{ 1 };
 
-    BloscCompressionParams();
+    BloscCompressionParams() = default;
     BloscCompressionParams(std::string_view codec_id,
                            uint8_t clevel,
                            uint8_t shuffle);

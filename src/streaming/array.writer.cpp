@@ -97,9 +97,11 @@ zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
       bytes_of_frame(*config_.dimensions, config_.dtype);
 
     if (nbytes_frame != nbytes) {
-        LOG_WARNING("Frame size mismatch: expected %zu, got %zu. Skipping",
+        LOG_WARNING("Frame size mismatch: expected ",
                     nbytes_frame,
-                    nbytes);
+                    " got ",
+                    nbytes,
+                    ". Skipping");
         return 0;
     }
 
@@ -112,7 +114,7 @@ zarr::ArrayWriter::write_frame(const uint8_t* data, size_t nbytes)
     const auto bytes_written = write_frame_to_chunks_(data, nbytes);
     EXPECT(bytes_written == nbytes, "Failed to write_frame frame to chunks");
 
-    LOG_DEBUG("Wrote %zu bytes of frame %zu", bytes_written, frames_written_);
+    LOG_DEBUG("Wrote ", bytes_written, " bytes of frame ", frames_written_);
     bytes_to_flush_ += bytes_written;
     ++frames_written_;
 
@@ -153,16 +155,17 @@ zarr::ArrayWriter::make_data_sinks_()
                                                         config_.dimensions,
                                                         parts_along_dimension,
                                                         data_sinks_)) {
-        LOG_ERROR("Failed to create data sinks in %s for bucket %s",
-                  data_root.c_str(),
-                  config_.bucket_name->c_str());
+        LOG_ERROR("Failed to create data sinks in ",
+                  data_root,
+                  " for bucket ",
+                  *config_.bucket_name);
         return false;
     } else if (!config_.bucket_name &&
                !creator.make_data_sinks(data_root,
                                         config_.dimensions,
                                         parts_along_dimension,
                                         data_sinks_)) {
-        LOG_ERROR("Failed to create data sinks in %s", data_root.c_str());
+        LOG_ERROR("Failed to create data sinks in ", data_root);
         return false;
     }
 
@@ -202,8 +205,7 @@ zarr::ArrayWriter::make_metadata_sink_()
     }
 
     if (!metadata_sink_) {
-        LOG_ERROR("Failed to create metadata sink: %s",
-                  metadata_path.c_str());
+        LOG_ERROR("Failed to create metadata sink: ", metadata_path);
         return false;
     }
 
@@ -332,7 +334,7 @@ zarr::ArrayWriter::compress_buffers_()
     std::scoped_lock lock(buffers_mutex_);
     std::latch latch(chunk_buffers_.size());
     for (auto& chunk : chunk_buffers_) {
-        EXPECT(thread_pool_->push_to_job_queue(
+        EXPECT(thread_pool_->push_job(
                  [&params, buf = &chunk, bytes_per_px, &latch](
                    std::string& err) -> bool {
                      bool success = false;
@@ -359,12 +361,7 @@ zarr::ArrayWriter::compress_buffers_()
 
                          success = true;
                      } catch (const std::exception& exc) {
-                         char msg[128];
-                         snprintf(msg,
-                                  sizeof(msg),
-                                  "Failed to compress chunk: %s",
-                                  exc.what());
-                         err = msg;
+                         err = "Failed to compress chunk: " + std::string(exc.what());
                      } catch (...) {
                          err = "Failed to compress chunk (unknown)";
                      }

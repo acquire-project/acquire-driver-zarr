@@ -58,7 +58,7 @@ zarr::ZarrV2ArrayWriter::~ZarrV2ArrayWriter()
     try {
         flush_();
     } catch (const std::exception& exc) {
-        LOG_ERROR("Failed to finalize array writer: %s", exc.what());
+        LOG_ERROR("Failed to finalize array writer: ", exc.what());
     } catch (...) {
         LOG_ERROR("Failed to finalize array writer: (unknown)");
     }
@@ -86,14 +86,17 @@ zarr::ZarrV2ArrayWriter::flush_impl_()
         std::scoped_lock lock(buffers_mutex_);
         for (auto i = 0; i < data_sinks_.size(); ++i) {
             auto& chunk = chunk_buffers_.at(i);
-            EXPECT(thread_pool_->push_to_job_queue(
+            EXPECT(thread_pool_->push_job(
                      std::move([&sink = data_sinks_.at(i),
-                                data = chunk.data(),
+                                data_ = chunk.data(),
                                 size = chunk.size(),
                                 &latch](std::string& err) -> bool {
                          bool success = false;
                          try {
-                             CHECK(sink->write(0, data, size));
+                             std::span data{
+                                 reinterpret_cast<std::byte*>(data_), size
+                             };
+                             CHECK(sink->write(0, data));
                              success = true;
                          } catch (const std::exception& exc) {
                              err = "Failed to write chunk: " +
@@ -127,21 +130,19 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
     std::vector<size_t> array_shape, chunk_shape;
 
     size_t append_size = frames_written_;
-    for (auto dim = config_.dimensions.rbegin() + 2;
-         dim < config_.dimensions.rend() - 1;
-         ++dim) {
-        CHECK(dim->array_size_px);
-        append_size =
-          (append_size + dim->array_size_px - 1) / dim->array_size_px;
+    for (auto i = config_.dimensions->ndims() - 3; i > 0; --i) {
+        const auto& dim = config_.dimensions->at(i);
+        const auto& array_size_px = dim.array_size_px;
+        CHECK(array_size_px);
+        append_size = (append_size + array_size_px - 1) / array_size_px;
     }
     array_shape.push_back(append_size);
 
-    chunk_shape.push_back(config_.dimensions.front().chunk_size_px);
-    for (auto dim = config_.dimensions.begin() + 1;
-         dim != config_.dimensions.end();
-         ++dim) {
-        array_shape.push_back(dim->array_size_px);
-        chunk_shape.push_back(dim->chunk_size_px);
+    chunk_shape.push_back(config_.dimensions->final_dim().chunk_size_px);
+    for (auto i = 1; i < config_.dimensions->ndims(); ++i) {
+        const auto& dim = config_.dimensions->at(i);
+        array_shape.push_back(dim.array_size_px);
+        chunk_shape.push_back(dim.chunk_size_px);
     }
 
     json metadata;
@@ -164,10 +165,10 @@ zarr::ZarrV2ArrayWriter::write_array_metadata_()
         metadata["compressor"] = nullptr;
     }
 
-    const std::string metadata_str = metadata.dump(4);
-    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-
-    return metadata_sink_->write(0, metadata_bytes, metadata_str.size());
+    std::string metadata_str = metadata.dump(4);
+    std::span data{ reinterpret_cast<std::byte*>(metadata_str.data()),
+                    metadata_str.size() };
+    return metadata_sink_->write(0, data);
 }
 
 bool

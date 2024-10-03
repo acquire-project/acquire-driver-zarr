@@ -40,7 +40,7 @@ main()
     try {
         auto thread_pool = std::make_shared<zarr::ThreadPool>(
           std::thread::hardware_concurrency(),
-          [](const std::string& err) { LOG_ERROR("Error: %s", err.c_str()); });
+          [](const std::string& err) { LOG_ERROR("Error: ", err); });
 
         std::vector<ZarrDimension> dims;
         dims.emplace_back(
@@ -74,7 +74,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     } catch (...) {
         LOG_ERROR("Exception: (unknown)");
     }
