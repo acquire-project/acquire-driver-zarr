@@ -3,7 +3,7 @@
 #include "array.writer.hh"
 
 namespace zarr {
-struct ZarrV3ArrayWriter final : public ArrayWriter
+struct ZarrV3ArrayWriter : public ArrayWriter
 {
   public:
     ZarrV3ArrayWriter(ArrayWriterConfig&& config,

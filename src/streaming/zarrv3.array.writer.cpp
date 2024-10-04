@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <algorithm> // std::fill_n
+#include <algorithm> // std::fill
 #include <latch>
 #include <stdexcept>
 
@@ -16,7 +16,6 @@
 namespace {
 std::string
 sample_type_to_dtype(ZarrDataType t)
-
 {
     switch (t) {
         case ZarrDataType_uint8:
@@ -67,8 +66,8 @@ zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
 
     for (auto& table : shard_tables_) {
         table.resize(2 * chunks_per_shard);
-        std::fill_n(
-          table.begin(), table.size(), std::numeric_limits<uint64_t>::max());
+        std::fill(
+          table.begin(), table.end(), std::numeric_limits<uint64_t>::max());
     }
 }
 
@@ -91,12 +90,12 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
     }
 
     // write out chunks to shards
-    bool write_table = is_finalizing_ || should_rollover_();
+    auto write_table = is_finalizing_ || should_rollover_();
     std::latch latch(n_shards);
     for (auto i = 0; i < n_shards; ++i) {
         const auto& chunks = chunk_in_shards.at(i);
         auto& chunk_table = shard_tables_.at(i);
-        size_t* file_offset = &shard_file_offsets_.at(i);
+        auto* file_offset = &shard_file_offsets_.at(i);
 
         EXPECT(thread_pool_->push_job([&sink = data_sinks_.at(i),
                                        &chunks,
@@ -104,7 +103,7 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
                                        file_offset,
                                        write_table,
                                        &latch,
-                                       this](std::string& err) mutable {
+                                       this](std::string& err) {
             bool success = false;
 
             try {
@@ -148,12 +147,11 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
     // reset shard tables and file offsets
     if (write_table) {
         for (auto& table : shard_tables_) {
-            std::fill_n(table.begin(),
-                        table.size(),
-                        std::numeric_limits<uint64_t>::max());
+            std::fill(
+              table.begin(), table.end(), std::numeric_limits<uint64_t>::max());
         }
 
-        std::fill_n(shard_file_offsets_.begin(), shard_file_offsets_.size(), 0);
+        std::fill(shard_file_offsets_.begin(), shard_file_offsets_.end(), 0);
     }
 
     return true;
