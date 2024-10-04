@@ -12,15 +12,15 @@ namespace zarr {
 class ThreadPool
 {
   public:
-    using JobT = std::function<bool(std::string&)>;
+    using Task = std::function<bool(std::string&)>;
+    using ErrorCallback = std::function<void(const std::string&)>;
 
     // The error handler `err` is called when a job returns false. This
     // can happen when the job encounters an error, or otherwise fails. The
     // std::string& argument to the error handler is a diagnostic message from
     // the failing job and is logged to the error stream by the Zarr driver when
     // the next call to `append()` is made.
-    ThreadPool(unsigned int n_threads,
-               std::function<void(const std::string&)> err);
+    ThreadPool(unsigned int n_threads, ErrorCallback&& err);
     ~ThreadPool() noexcept;
 
     /**
@@ -30,7 +30,7 @@ class ThreadPool
      * @return true if the job was successfully pushed onto the queue, false
      * otherwise.
      */
-    [[nodiscard]] bool push_to_job_queue(JobT&& job);
+    [[nodiscard]] bool push_job(Task&& job);
 
     /**
      * @brief Block until all jobs on the queue have processed, then spin down
@@ -40,17 +40,17 @@ class ThreadPool
     void await_stop() noexcept;
 
   private:
-    std::function<void(const std::string&)> error_handler_;
+    ErrorCallback error_handler_;
 
     std::vector<std::thread> threads_;
-    mutable std::mutex jobs_mutex_;
+    std::mutex jobs_mutex_;
     std::condition_variable cv_;
-    std::queue<JobT> jobs_;
+    std::queue<Task> jobs_;
 
-    std::atomic<bool> is_accepting_jobs_;
+    std::atomic<bool> is_accepting_jobs_{ true };
 
-    std::optional<ThreadPool::JobT> pop_from_job_queue_() noexcept;
+    std::optional<ThreadPool::Task> pop_from_job_queue_() noexcept;
     [[nodiscard]] bool should_stop_() const noexcept;
-    void thread_worker_();
+    void process_tasks_();
 };
 } // zarr

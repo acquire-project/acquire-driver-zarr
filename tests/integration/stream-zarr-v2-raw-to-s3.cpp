@@ -198,7 +198,7 @@ verify_base_metadata(const nlohmann::json& meta)
     const auto multiscales = meta["multiscales"][0];
 
     const auto axes = multiscales["axes"];
-    EXPECT_EQ(size_t, "%zu", axes.size(), 5);
+    EXPECT_EQ(size_t, axes.size(), 5);
     std::string name, type, unit;
 
     name = axes[0]["name"];
@@ -256,39 +256,39 @@ verify_base_metadata(const nlohmann::json& meta)
            type.c_str());
 
     const auto scale = coordinate_transformations["scale"];
-    EXPECT_EQ(size_t, "%zu", scale.size(), 5);
-    EXPECT_EQ(int, "%f", scale[0].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[1].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[2].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[3].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[4].get<double>(), 1.0);
+    EXPECT_EQ(size_t, scale.size(), 5);
+    EXPECT_EQ(int, scale[0].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[1].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[2].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[3].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[4].get<double>(), 1.0);
 }
 
 void
 verify_group_metadata(const nlohmann::json& meta)
 {
     const auto zarr_format = meta["zarr_format"].get<int>();
-    EXPECT_EQ(int, "%d", zarr_format, 2);
+    EXPECT_EQ(int, zarr_format, 2);
 }
 
 void
 verify_array_metadata(const nlohmann::json& meta)
 {
     const auto& shape = meta["shape"];
-    EXPECT_EQ(size_t, "%zu", shape.size(), 5);
-    EXPECT_EQ(int, "%d", shape[0].get<int>(), array_timepoints);
-    EXPECT_EQ(int, "%d", shape[1].get<int>(), array_channels);
-    EXPECT_EQ(int, "%d", shape[2].get<int>(), array_planes);
-    EXPECT_EQ(int, "%d", shape[3].get<int>(), array_height);
-    EXPECT_EQ(int, "%d", shape[4].get<int>(), array_width);
+    EXPECT_EQ(size_t, shape.size(), 5);
+    EXPECT_EQ(int, shape[0].get<int>(), array_timepoints);
+    EXPECT_EQ(int, shape[1].get<int>(), array_channels);
+    EXPECT_EQ(int, shape[2].get<int>(), array_planes);
+    EXPECT_EQ(int, shape[3].get<int>(), array_height);
+    EXPECT_EQ(int, shape[4].get<int>(), array_width);
 
     const auto& chunks = meta["chunks"];
-    EXPECT_EQ(size_t, "%zu", chunks.size(), 5);
-    EXPECT_EQ(int, "%d", chunks[0].get<int>(), chunk_timepoints);
-    EXPECT_EQ(int, "%d", chunks[1].get<int>(), chunk_channels);
-    EXPECT_EQ(int, "%d", chunks[2].get<int>(), chunk_planes);
-    EXPECT_EQ(int, "%d", chunks[3].get<int>(), chunk_height);
-    EXPECT_EQ(int, "%d", chunks[4].get<int>(), chunk_width);
+    EXPECT_EQ(size_t, chunks.size(), 5);
+    EXPECT_EQ(int, chunks[0].get<int>(), chunk_timepoints);
+    EXPECT_EQ(int, chunks[1].get<int>(), chunk_channels);
+    EXPECT_EQ(int, chunks[2].get<int>(), chunk_planes);
+    EXPECT_EQ(int, chunks[3].get<int>(), chunk_height);
+    EXPECT_EQ(int, chunks[4].get<int>(), chunk_width);
 
     const auto dtype = meta["dtype"].get<std::string>();
     EXPECT(dtype == "<i4",
@@ -317,8 +317,8 @@ verify_and_cleanup()
 
     {
         EXPECT(object_exists(client, base_metadata_path),
-               "Object does not exist: %s",
-               base_metadata_path.c_str());
+               "Object does not exist: ",
+               base_metadata_path);
         std::string contents = get_object_contents(client, base_metadata_path);
         nlohmann::json base_metadata = nlohmann::json::parse(contents);
 
@@ -327,8 +327,8 @@ verify_and_cleanup()
 
     {
         EXPECT(object_exists(client, group_metadata_path),
-               "Object does not exist: %s",
-               group_metadata_path.c_str());
+               "Object does not exist: ",
+               group_metadata_path);
         std::string contents = get_object_contents(client, group_metadata_path);
         nlohmann::json group_metadata = nlohmann::json::parse(contents);
 
@@ -375,7 +375,7 @@ verify_and_cleanup()
                                "Object does not exist: %s",
                                x_file.c_str());
                         const auto file_size = get_object_size(client, x_file);
-                        EXPECT_EQ(size_t, "%zu", file_size, expected_file_size);
+                        EXPECT_EQ(size_t, file_size, expected_file_size);
                         data_files.push_back(x_file);
                     }
 
@@ -413,7 +413,7 @@ main()
                    "Failed to append frame %d: %s",
                    i,
                    Zarr_get_status_message(status));
-            EXPECT_EQ(size_t, "%zu", bytes_out, bytes_of_frame);
+            EXPECT_EQ(size_t, bytes_out, bytes_of_frame);
         }
 
         ZarrStream_destroy(stream);
@@ -422,7 +422,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& e) {
-        LOG_ERROR("Caught exception: %s", e.what());
+        LOG_ERROR("Caught exception: ", e.what());
     }
 
     return retval;

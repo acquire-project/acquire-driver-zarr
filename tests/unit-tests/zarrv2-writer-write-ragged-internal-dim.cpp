@@ -40,8 +40,8 @@ check_json()
     nlohmann::json zarray = nlohmann::json::parse(f);
 
     EXPECT(zarray["dtype"].get<std::string>() == "<f8",
-           "Expected dtype to be '<f8', but got '%s'",
-           zarray["dtype"].get<std::string>().c_str());
+           "Expected dtype to be <f8, but got ",
+           zarray["dtype"].get<std::string>());
 
     EXPECT_EQ(int, zarray["zarr_format"].get<int>(), 2);
 
@@ -73,7 +73,7 @@ main()
     try {
         auto thread_pool = std::make_shared<zarr::ThreadPool>(
           std::thread::hardware_concurrency(), [](const std::string& err) {
-              LOG_ERROR("Error: %s\n", err.c_str());
+              LOG_ERROR("Error: ", err);
           });
 
         std::vector<ZarrDimension> dims;
@@ -96,14 +96,17 @@ main()
         };
 
         {
-            zarr::ZarrV2ArrayWriter writer(config, thread_pool, nullptr);
+            auto writer = std::make_unique<zarr::ZarrV2ArrayWriter>(
+              std::move(config), thread_pool);
 
             const size_t frame_size = array_width * array_height * nbytes_px;
-            std::vector<uint8_t> data(frame_size, 0);
+            std::vector data(frame_size, std::byte(0));
 
             for (auto i = 0; i < n_frames; ++i) { // 2 time points
-                CHECK(writer.write_frame(data.data(), frame_size));
+                CHECK(writer->write_frame(data));
             }
+
+            CHECK(finalize_array(std::move(writer)));
         }
 
         check_json();
@@ -154,8 +157,6 @@ main()
         retval = 0;
     } catch (const std::exception& exc) {
         LOG_ERROR("Exception: ", exc.what());
-    } catch (...) {
-        LOG_ERROR("Exception: (unknown)");
     }
 
     // cleanup

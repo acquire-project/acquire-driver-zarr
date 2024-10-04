@@ -14,16 +14,16 @@ namespace zarr {
 class S3Connection
 {
   public:
-    explicit S3Connection(const std::string& endpoint,
-                          const std::string& access_key_id,
-                          const std::string& secret_access_key);
+    S3Connection(const std::string& endpoint,
+                 const std::string& access_key_id,
+                 const std::string& secret_access_key);
 
     /**
      * @brief Test a connection by listing all buckets at this connection's
      * endpoint.
      * @returns True if the connection is valid, otherwise false.
      */
-    bool check_connection();
+    bool is_connection_valid();
 
     /* Bucket operations */
 
@@ -31,7 +31,6 @@ class S3Connection
      * @brief Check whether a bucket exists.
      * @param bucket_name The name of the bucket.
      * @returns True if the bucket exists, otherwise false.
-     * @throws std::runtime_error if the bucket name is empty.
      */
     bool bucket_exists(std::string_view bucket_name);
 
@@ -42,8 +41,6 @@ class S3Connection
      * @param bucket_name The name of the bucket containing the object.
      * @param object_name The name of the object.
      * @returns True if the object exists, otherwise false.
-     * @throws std::runtime_error if the bucket name is empty or the object
-     * name is empty.
      */
     bool object_exists(std::string_view bucket_name,
                        std::string_view object_name);
@@ -126,16 +123,16 @@ class S3ConnectionPool
                      const std::string& endpoint,
                      const std::string& access_key_id,
                      const std::string& secret_access_key);
-    ~S3ConnectionPool() noexcept;
+    ~S3ConnectionPool();
 
     std::unique_ptr<S3Connection> get_connection();
     void return_connection(std::unique_ptr<S3Connection>&& conn);
 
   private:
     std::vector<std::unique_ptr<S3Connection>> connections_;
-    mutable std::mutex connections_mutex_;
+    std::mutex connections_mutex_;
     std::condition_variable cv_;
 
-    std::atomic<bool> is_accepting_connections_;
+    std::atomic<bool> is_accepting_connections_{true};
 };
 } // namespace zarr

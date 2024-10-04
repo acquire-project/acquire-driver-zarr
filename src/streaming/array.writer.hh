@@ -12,7 +12,6 @@
 namespace fs = std::filesystem;
 
 namespace zarr {
-
 struct ArrayWriterConfig
 {
     std::shared_ptr<ArrayDimensions> dimensions;
@@ -23,20 +22,26 @@ struct ArrayWriterConfig
     std::optional<BloscCompressionParams> compression_params;
 };
 
-/// @brief Downsample the array writer configuration to a lower resolution.
-/// @param[in] config The original array writer configuration.
-/// @param[out] downsampled_config The downsampled array writer configuration.
-/// @return True if @p downsampled_config can be downsampled further.
-/// This is determined by the chunk size in @p config. This function will return
-/// false if and only if downsampling brings one or more dimensions lower than
-/// the chunk size along that dimension.
-[[nodiscard]] bool
+/**
+ * @brief Downsample the array writer configuration to a lower resolution.
+ * @param[in] config The original array writer configuration.
+ * @param[out] downsampled_config The downsampled array writer configuration.
+ * @return True if @p downsampled_config can be downsampled further.
+ * This is determined by the chunk size in @p config. This function will return
+ * false if and only if downsampling brings one or more dimensions lower than
+ * the chunk size along that dimension.
+ */
+[[nodiscard]]
+bool
 downsample(const ArrayWriterConfig& config,
            ArrayWriterConfig& downsampled_config);
 
 class ArrayWriter
 {
   public:
+    ArrayWriter(const ArrayWriterConfig& config,
+                std::shared_ptr<ThreadPool> thread_pool);
+
     ArrayWriter(const ArrayWriterConfig& config,
                 std::shared_ptr<ThreadPool> thread_pool,
                 std::shared_ptr<S3ConnectionPool> s3_connection_pool);
@@ -46,16 +51,15 @@ class ArrayWriter
     /**
      * @brief Write a frame to the array.
      * @param data The frame data.
-     * @param nbytes The number of bytes in the frame.
      * @return The number of bytes written.
      */
-    [[nodiscard]] size_t write_frame(const uint8_t* data, size_t nbytes);
+    [[nodiscard]] size_t write_frame(std::span<const std::byte> data);
 
   protected:
     ArrayWriterConfig config_;
 
     /// Chunking
-    std::vector<std::vector<uint8_t>> chunk_buffers_;
+    std::vector<std::vector<std::byte>> chunk_buffers_;
 
     /// Filesystem
     std::vector<std::unique_ptr<Sink>> data_sinks_;
@@ -75,6 +79,8 @@ class ArrayWriter
 
     virtual ZarrVersion version_() const = 0;
 
+    bool is_s3_array_() const;
+
     [[nodiscard]] bool make_data_sinks_();
     [[nodiscard]] bool make_metadata_sink_();
     void make_buffers_() noexcept;
@@ -82,7 +88,7 @@ class ArrayWriter
     bool should_flush_() const;
     virtual bool should_rollover_() const = 0;
 
-    size_t write_frame_to_chunks_(const uint8_t* buf, size_t buf_size);
+    size_t write_frame_to_chunks_(std::span<const std::byte> data);
     void compress_buffers_();
 
     void flush_();
@@ -92,5 +98,9 @@ class ArrayWriter
     [[nodiscard]] virtual bool write_array_metadata_() = 0;
 
     void close_sinks_();
+
+    friend bool finalize_array(std::unique_ptr<ArrayWriter>&& writer);
 };
+
+bool finalize_array(std::unique_ptr<ArrayWriter>&& writer);
 } // namespace zarr

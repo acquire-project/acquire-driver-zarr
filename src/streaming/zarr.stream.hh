@@ -16,7 +16,6 @@ struct ZarrStream_s
 {
   public:
     ZarrStream_s(struct ZarrStreamSettings_s* settings);
-    ~ZarrStream_s();
 
     /**
      * @brief Append data to the stream.
@@ -51,7 +50,7 @@ struct ZarrStream_s
     std::shared_ptr<ArrayDimensions> dimensions_;
     bool multiscale_;
 
-    std::vector<uint8_t> frame_buffer_;
+    std::vector<std::byte> frame_buffer_;
     size_t frame_buffer_offset_;
 
     std::shared_ptr<zarr::ThreadPool> thread_pool_;
@@ -61,7 +60,7 @@ struct ZarrStream_s
     std::unordered_map<std::string, std::unique_ptr<zarr::Sink>>
       metadata_sinks_;
 
-    std::unordered_map<size_t, std::optional<uint8_t*>> scaled_frames_;
+    std::unordered_map<size_t, std::optional<std::byte*>> scaled_frames_;
 
     bool is_s3_acquisition_() const;
     bool is_compressed_acquisition_() const;
@@ -94,7 +93,7 @@ struct ZarrStream_s
     [[nodiscard]] bool write_base_metadata_();
 
     /** @brief Write Zarr group metadata. */
-    bool write_group_metadata_();
+    [[nodiscard]] bool write_group_metadata_();
 
     /** @brief Write external metadata. */
     [[nodiscard]] bool write_external_metadata_();
@@ -102,5 +101,10 @@ struct ZarrStream_s
     /** @brief Construct OME metadata pertaining to the multiscale pyramid. */
     [[nodiscard]] nlohmann::json make_multiscale_metadata_() const;
 
-    void write_multiscale_frames_(const uint8_t* data, size_t bytes_of_data);
+    void write_multiscale_frames_(const std::byte* data, size_t bytes_of_data);
+
+    friend bool finalize_stream(struct ZarrStream_s* stream);
 };
+
+bool
+finalize_stream(struct ZarrStream_s* stream);

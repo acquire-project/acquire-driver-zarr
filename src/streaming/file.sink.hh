@@ -2,7 +2,6 @@
 
 #include "sink.hh"
 
-#include <memory>
 #include <fstream>
 #include <string_view>
 
@@ -12,7 +11,10 @@ class FileSink : public Sink
   public:
     explicit FileSink(std::string_view filename);
 
-    bool write(size_t offset, const uint8_t* data, size_t bytes_of_buf) override;
+    bool write(size_t offset, std::span<const std::byte> data) override;
+
+  protected:
+    bool flush_() override;
 
   private:
     std::ofstream file_;

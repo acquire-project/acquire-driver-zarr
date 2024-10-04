@@ -1,8 +1,6 @@
-#include "macros.hh"
 #include "file.sink.hh"
 
 #include <filesystem>
-#include <latch>
 
 namespace fs = std::filesystem;
 
@@ -12,15 +10,21 @@ zarr::FileSink::FileSink(std::string_view filename)
 }
 
 bool
-zarr::FileSink::write(size_t offset, const uint8_t* data, size_t bytes_of_buf)
+zarr::FileSink::write(size_t offset, std::span<const std::byte> data)
 {
-    EXPECT(data, "Null pointer: data");
-    if (bytes_of_buf == 0) {
+    const auto bytes_of_buf = data.size();
+    if (data.data() == nullptr || bytes_of_buf == 0) {
         return true;
     }
 
     file_.seekp(offset);
-    file_.write(reinterpret_cast<const char*>(data), bytes_of_buf);
+    file_.write(reinterpret_cast<const char*>(data.data()), bytes_of_buf);
+    return true;
+}
+
+bool
+zarr::FileSink::flush_()
+{
     file_.flush();
     return true;
 }

@@ -2,6 +2,7 @@
 #include "unit.test.macros.hh"
 
 #include <cstdlib>
+#include <string_view>
 
 namespace {
 bool
@@ -51,7 +52,6 @@ main()
     }
 
     int retval = 1;
-    const std::string object_name = "test-object";
 
     try {
         zarr::S3Connection conn{ s3_endpoint,
@@ -62,22 +62,13 @@ main()
             LOG_ERROR("Failed to connect to S3.");
             return 1;
         }
+
+        if (conn.bucket_exists("")) {
+            LOG_ERROR("False positive response for empty bucket name.");
+            return 1;
+        }
+
         CHECK(conn.bucket_exists(bucket_name));
-        CHECK(conn.delete_object(bucket_name, object_name));
-        CHECK(!conn.object_exists(bucket_name, object_name));
-
-        std::vector<uint8_t> data(1024, 0);
-
-        std::string etag =
-          conn.put_object(bucket_name,
-                          object_name,
-                          std::span<uint8_t>(data.data(), data.size()));
-        CHECK(!etag.empty());
-
-        CHECK(conn.object_exists(bucket_name, object_name));
-
-        // cleanup
-        CHECK(conn.delete_object(bucket_name, object_name));
 
         retval = 0;
     } catch (const std::exception& e) {

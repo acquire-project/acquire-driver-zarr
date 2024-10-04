@@ -65,7 +65,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exception) {
-        LOG_ERROR("%s", exception.what());
+        LOG_ERROR(exception.what());
     }
 
     // cleanup
@@ -73,7 +73,7 @@ main()
 
     std::error_code ec;
     if (fs::is_directory(settings.store_path) && !fs::remove_all(settings.store_path, ec)) {
-        LOG_ERROR("Failed to remove store path: %s", ec.message().c_str());
+        LOG_ERROR("Failed to remove store path: ", ec.message().c_str());
     }
     return retval;
 }

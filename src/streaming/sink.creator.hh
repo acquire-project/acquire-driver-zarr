@@ -51,7 +51,7 @@ class SinkCreator
      */
     [[nodiscard]] bool make_data_sinks(
       std::string_view base_path,
-      std::shared_ptr<ArrayDimensions> dimensions,
+      const ArrayDimensions* dimensions,
       const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
       std::vector<std::unique_ptr<Sink>>& part_sinks);
 
@@ -69,7 +69,7 @@ class SinkCreator
     [[nodiscard]] bool make_data_sinks(
       std::string_view bucket_name,
       std::string_view base_path,
-      std::shared_ptr<ArrayDimensions> dimensions,
+      const ArrayDimensions* dimensions,
       const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
       std::vector<std::unique_ptr<Sink>>& part_sinks);
 
@@ -119,7 +119,7 @@ class SinkCreator
      */
     std::queue<std::string> make_data_sink_paths_(
       std::string_view base_path,
-      std::shared_ptr<ArrayDimensions> dimensions,
+      const ArrayDimensions* dimensions,
       const std::function<size_t(const ZarrDimension&)>& parts_along_dimension,
       bool create_directories);
 

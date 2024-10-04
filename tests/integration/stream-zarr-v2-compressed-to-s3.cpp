@@ -204,97 +204,93 @@ verify_base_metadata(const nlohmann::json& meta)
     const auto multiscales = meta["multiscales"][0];
 
     const auto axes = multiscales["axes"];
-    EXPECT_EQ(size_t, "%zu", axes.size(), 5);
+    EXPECT_EQ(size_t, axes.size(), 5);
     std::string name, type, unit;
 
     name = axes[0]["name"];
     type = axes[0]["type"];
-    EXPECT(name == "t", "Expected name to be 't', but got '%s'", name.c_str());
-    EXPECT(
-      type == "time", "Expected type to be 'time', but got '%s'", type.c_str());
+    EXPECT(name == "t", "Expected name to be 't', but got '", name, "'");
+    EXPECT(type == "time", "Expected type to be 'time', but got '", type, "'");
 
     name = axes[1]["name"];
     type = axes[1]["type"];
-    EXPECT(name == "c", "Expected name to be 'c', but got '%s'", name.c_str());
-    EXPECT(type == "channel",
-           "Expected type to be 'channel', but got '%s'",
-           type.c_str());
+    EXPECT(name == "c", "Expected name to be 'c', but got '", name, "'");
+    EXPECT(
+      type == "channel", "Expected type to be 'channel', but got '", type, "'");
 
     name = axes[2]["name"];
     type = axes[2]["type"];
-    EXPECT(name == "z", "Expected name to be 'z', but got '%s'", name.c_str());
-    EXPECT(type == "space",
-           "Expected type to be 'space', but got '%s'",
-           type.c_str());
+    EXPECT(name == "z", "Expected name to be 'z', but got '", name, "'");
+    EXPECT(
+      type == "space", "Expected type to be 'space', but got '", type, "'");
 
     name = axes[3]["name"];
     type = axes[3]["type"];
     unit = axes[3]["unit"];
-    EXPECT(name == "y", "Expected name to be 'y', but got '%s'", name.c_str());
-    EXPECT(type == "space",
-           "Expected type to be 'space', but got '%s'",
-           type.c_str());
+    EXPECT(name == "y", "Expected name to be 'y', but got '", name, "'");
+    EXPECT(
+      type == "space", "Expected type to be 'space', but got '", type, "'");
     EXPECT(unit == "micrometer",
-           "Expected unit to be 'micrometer', but got '%s'",
-           unit.c_str());
+           "Expected unit to be 'micrometer', but got '",
+           unit,
+           "'");
 
     name = axes[4]["name"];
     type = axes[4]["type"];
     unit = axes[4]["unit"];
-    EXPECT(name == "x", "Expected name to be 'x', but got '%s'", name.c_str());
-    EXPECT(type == "space",
-           "Expected type to be 'space', but got '%s'",
-           type.c_str());
+    EXPECT(name == "x", "Expected name to be 'x', but got '", name, "'");
+    EXPECT(
+      type == "space", "Expected type to be 'space', but got '", type, "'");
     EXPECT(unit == "micrometer",
-           "Expected unit to be 'micrometer', but got '%s'",
-           unit.c_str());
+           "Expected unit to be 'micrometer', but got '",
+           unit,
+           "'");
 
     const auto datasets = multiscales["datasets"][0];
     const std::string path = datasets["path"].get<std::string>();
-    EXPECT(path == "0", "Expected path to be '0', but got '%s'", path.c_str());
+    EXPECT(path == "0", "Expected path to be '0', but got '", path, "'");
 
     const auto coordinate_transformations =
       datasets["coordinateTransformations"][0];
 
     type = coordinate_transformations["type"].get<std::string>();
-    EXPECT(type == "scale",
-           "Expected type to be 'scale', but got '%s'",
-           type.c_str());
+    EXPECT(
+      type == "scale", "Expected type to be 'scale', but got '", type, "'");
 
     const auto scale = coordinate_transformations["scale"];
-    EXPECT_EQ(size_t, "%zu", scale.size(), 5);
-    EXPECT_EQ(int, "%f", scale[0].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[1].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[2].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[3].get<double>(), 1.0);
-    EXPECT_EQ(int, "%f", scale[4].get<double>(), 1.0);
+    EXPECT_EQ(size_t, scale.size(), 5);
+    EXPECT_EQ(int, scale[0].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[1].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[2].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[3].get<double>(), 1.0);
+    EXPECT_EQ(int, scale[4].get<double>(), 1.0);
 }
 
 void
 verify_group_metadata(const nlohmann::json& meta)
 {
     const auto zarr_format = meta["zarr_format"].get<int>();
-    EXPECT_EQ(int, "%d", zarr_format, 2);
+    EXPECT_EQ(int, zarr_format, 2);
 }
 
 void
 verify_array_metadata(const nlohmann::json& meta)
 {
     const auto& shape = meta["shape"];
-    EXPECT_EQ(size_t, "%zu", shape.size(), 5);
-    EXPECT_EQ(int, "%d", shape[0].get<int>(), array_timepoints);
-    EXPECT_EQ(int, "%d", shape[1].get<int>(), array_channels);
-    EXPECT_EQ(int, "%d", shape[2].get<int>(), array_planes);
-    EXPECT_EQ(int, "%d", shape[3].get<int>(), array_height);
-    EXPECT_EQ(int, "%d", shape[4].get<int>(), array_width);
+    EXPECT_EQ(size_t, shape.size(), 5);
+    EXPECT_EQ(int, shape[0].get<int>(), array_timepoints);
+    EXPECT_EQ(int, shape[1].get<int>(), array_channels);
+    EXPECT_EQ(int, shape[2].get<int>(), array_planes);
+    EXPECT_EQ(int, shape[3].get<int>(), array_height);
+    EXPECT_EQ(int, shape[4].get<int>(), array_width);
 
     const auto& chunks = meta["chunks"];
-    EXPECT_EQ(size_t, "%zu", chunks.size(), 5);
-    EXPECT_EQ(int, "%d", chunks[0].get<int>(), chunk_timepoints);
-    EXPECT_EQ(int, "%d", chunks[1].get<int>(), chunk_channels);
-    EXPECT_EQ(int, "%d", chunks[2].get<int>(), chunk_planes);
-    EXPECT_EQ(int, "%d", chunks[3].get<int>(), chunk_height);
-    EXPECT_EQ(int, "%d", chunks[4].get<int>(), chunk_width);
+    EXPECT_EQ(size_t, chunks.size(), 5);
+    EXPECT_EQ(int, chunks[0].get<int>(), chunk_timepoints);
+    EXPECT_EQ(int, chunks[1].get<int>(), chunk_channels);
+    EXPECT_EQ(int, chunks[2].get<int>(), chunk_planes);
+    EXPECT_EQ(int, chunks[3].get<int>(), chunk_height);
+    EXPECT_EQ(int, chunks[4].get<int>(), chunk_width);
 
     const auto dtype = meta["dtype"].get<std::string>();
     EXPECT(dtype == "<i4",
@@ -315,10 +311,10 @@ verify_array_metadata(const nlohmann::json& meta)
            cname.c_str());
 
     const auto clevel = compressor["clevel"].get<int>();
-    EXPECT_EQ(int, "%d", clevel, 1);
+    EXPECT_EQ(int, clevel, 1);
 
     const auto shuffle = compressor["shuffle"].get<int>();
-    EXPECT_EQ(int, "%d", shuffle, 1);
+    EXPECT_EQ(int, shuffle, 1);
 }
 
 void
@@ -396,7 +392,7 @@ verify_and_cleanup()
                                "Object does not exist: %s",
                                x_file.c_str());
                         const auto file_size = get_object_size(client, x_file);
-                        EXPECT_LT(size_t, "%zu", file_size, expected_file_size);
+                        EXPECT_LT(size_t, file_size, expected_file_size);
                         data_files.push_back(x_file);
                     }
 
@@ -431,10 +427,11 @@ main()
             ZarrStatusCode status = ZarrStream_append(
               stream, frame.data(), bytes_of_frame, &bytes_out);
             EXPECT(status == ZarrStatusCode_Success,
-                   "Failed to append frame %d: %s",
+                   "Failed to append frame ",
                    i,
+                   ": ",
                    Zarr_get_status_message(status));
-            EXPECT_EQ(size_t, "%zu", bytes_out, bytes_of_frame);
+            EXPECT_EQ(size_t, bytes_out, bytes_of_frame);
         }
 
         ZarrStream_destroy(stream);
@@ -443,7 +440,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& e) {
-        LOG_ERROR("Caught exception: %s", e.what());
+        LOG_ERROR("Caught exception: ", e.what());
     }
 
     return retval;

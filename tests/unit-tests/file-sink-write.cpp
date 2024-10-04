@@ -1,7 +1,6 @@
 #include "file.sink.hh"
 #include "unit.test.macros.hh"
 
-#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -14,42 +13,41 @@ main()
     int retval = 0;
     fs::path tmp_path = fs::temp_directory_path() / TEST;
 
-    CHECK(!fs::exists(tmp_path));
-    {
-        const uint8_t str[] = "Hello, Acquire!";
-        zarr::FileSink sink(tmp_path.string());
-        CHECK(sink.write(0, str, sizeof(str) - 1));
-    }
+    try {
+        CHECK(!fs::exists(tmp_path));
+        {
+            char str[] = "Hello, Acquire!";
+            auto sink = std::make_unique<zarr::FileSink>(tmp_path.string());
 
-    // The file tmp_path should now contain the string "Hello, world!\n".
-    CHECK(fs::exists(tmp_path));
+            std::span data = { reinterpret_cast<std::byte*>(str),
+                               sizeof(str) - 1 };
+            CHECK(sink->write(0, data));
+            CHECK(zarr::finalize_sink(std::move(sink)));
+        }
 
-    std::ifstream ifs(tmp_path);
-    CHECK(ifs.is_open());
+        // The file tmp_path should now contain the string "Hello, world!\n".
+        CHECK(fs::exists(tmp_path));
 
-    std::string contents;
-    while (!ifs.eof()) {
-        std::getline(ifs, contents);
-    }
-    ifs.close();
+        std::ifstream ifs(tmp_path);
+        CHECK(ifs.is_open());
 
-    if (contents != "Hello, Acquire!") {
-        fprintf(stderr,
-                "Expected 'Hello, Acquire!' but got '%s'\n",
-                contents.c_str());
+        std::string contents;
+        while (!ifs.eof()) {
+            std::getline(ifs, contents);
+        }
+        ifs.close();
+
+        EXPECT_STR_EQ(contents.c_str(), "Hello, Acquire!");
+    } catch (const std::exception& e) {
+        LOG_ERROR("Caught exception: ", e.what());
         retval = 1;
     }
-    goto Cleanup;
 
-Finalize:
-    return retval;
-
-Cleanup:
     std::error_code ec;
     if (!fs::remove(tmp_path, ec)) {
-        fprintf(stderr, "Failed to remove file: %s\n", ec.message().c_str());
+        LOG_ERROR("Failed to remove file: ", ec.message());
         retval = 1;
     }
 
-    goto Finalize;
+    return retval;
 }
