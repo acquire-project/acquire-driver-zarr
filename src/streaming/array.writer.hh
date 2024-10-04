@@ -99,5 +99,9 @@ class ArrayWriter
     [[nodiscard]] virtual bool write_array_metadata_() = 0;
 
     void close_sinks_();
+
+    friend bool finalize_array(std::unique_ptr<ArrayWriter>&& writer);
 };
+
+bool finalize_array(std::unique_ptr<ArrayWriter>&& writer);
 } // namespace zarr

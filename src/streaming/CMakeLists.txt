@@ -25,6 +25,8 @@ add_library(${tgt}
         sink.creator.cpp
         array.writer.hh
         array.writer.cpp
+        zarrv2.array.writer.hh
+        zarrv2.array.writer.cpp
 )
 
 target_include_directories(${tgt}

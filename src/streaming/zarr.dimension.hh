@@ -23,11 +23,11 @@ struct ZarrDimension
     }
 
     std::string name;
-    ZarrDimensionType type;
+    ZarrDimensionType type{ ZarrDimensionType_Space };
 
-    uint32_t array_size_px;
-    uint32_t chunk_size_px;
-    uint32_t shard_size_chunks;
+    uint32_t array_size_px{ 0 };
+    uint32_t chunk_size_px{ 0 };
+    uint32_t shard_size_chunks{ 0 };
 };
 
 class ArrayDimensions
