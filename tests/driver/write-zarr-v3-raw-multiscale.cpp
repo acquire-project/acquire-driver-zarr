@@ -132,31 +132,31 @@ configure(AcquireRuntime* runtime)
     // configure storage dimensions
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
-                                           SIZED("x") + 1,
-                                           DimensionType_Space,
-                                           frame_width,
-                                           chunk_width,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           chunk_planes,
                                            1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
-                                           SIZED("y") + 1,
-                                           DimensionType_Space,
-                                           frame_height,
-                                           chunk_height,
-                                           1));
-    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           2,
                                            SIZED("c") + 1,
                                            DimensionType_Channel,
                                            1,
                                            1,
                                            1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           frame_height,
+                                           chunk_height,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            3,
-                                           SIZED("t") + 1,
-                                           DimensionType_Time,
-                                           0,
-                                           chunk_planes,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           frame_width,
+                                           chunk_width,
                                            1));
 
     // configure acquisition

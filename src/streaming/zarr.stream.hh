@@ -15,7 +15,7 @@
 struct ZarrStream_s
 {
   public:
-    ZarrStream_s(struct ZarrStreamSettings_s* settings);
+    explicit ZarrStream_s(struct ZarrStreamSettings_s* settings);
 
     /**
      * @brief Append data to the stream.

@@ -94,30 +94,30 @@ configure(AcquireRuntime* runtime)
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
-                                           SIZED("x") + 1,
-                                           DimensionType_Space,
-                                           64,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
                                            32,
                                            1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
-                                           SIZED("y") + 1,
-                                           DimensionType_Space,
-                                           48,
-                                           32,
-                                           1));
-    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
-                                           2,
                                            SIZED("c") + 1,
                                            DimensionType_Channel,
                                            1,
                                            1,
                                            1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
+                                           2,
+                                           SIZED("y") + 1,
+                                           DimensionType_Space,
+                                           48,
+                                           32,
+                                           1));
+    CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            3,
-                                           SIZED("t") + 1,
-                                           DimensionType_Time,
-                                           0,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           64,
                                            32,
                                            1));
 
@@ -164,10 +164,6 @@ validate(AcquireRuntime* runtime)
     // check the group metadata file
     metadata_path = test_path / "meta" / "root.group.json";
     CHECK(fs::is_regular_file(metadata_path));
-
-    f = std::ifstream(metadata_path);
-    metadata = json::parse(f);
-    CHECK("" == metadata["attributes"]["acquire"]);
 
     // check the array metadata file
     metadata_path = test_path / "meta" / "root" / "0.array.json";

@@ -251,13 +251,13 @@ configure(AcquireRuntime* runtime)
         CHECK(bucket_exists(client));
     }
 
-    std::string uri = s3_endpoint + ("/" + s3_bucket_name);
+    std::string uri = s3_endpoint + ("/" + s3_bucket_name) + ("/" TEST);
     storage_properties_init(&props.video[0].storage.settings,
                             0,
                             uri.c_str(),
                             uri.length() + 1,
-                            nullptr,
-                            0,
+                            R"({"hello":"world"})",
+                            sizeof(R"({"hello":"world"})"),
                             {},
                             3);
     CHECK(storage_properties_set_access_key_and_secret(
@@ -270,10 +270,10 @@ configure(AcquireRuntime* runtime)
 
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            0,
-                                           SIZED("x") + 1,
-                                           DimensionType_Space,
-                                           1920,
-                                           1920,
+                                           SIZED("t") + 1,
+                                           DimensionType_Time,
+                                           0,
+                                           5,
                                            1));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            1,
@@ -284,10 +284,10 @@ configure(AcquireRuntime* runtime)
                                            2));
     CHECK(storage_properties_set_dimension(&props.video[0].storage.settings,
                                            2,
-                                           SIZED("t") + 1,
-                                           DimensionType_Time,
-                                           0,
-                                           5,
+                                           SIZED("x") + 1,
+                                           DimensionType_Space,
+                                           1920,
+                                           1920,
                                            1));
 
     OK(acquire_configure(runtime, &props));
@@ -304,14 +304,14 @@ void
 validate_and_cleanup(AcquireRuntime* runtime)
 {
     std::vector<std::string> paths{
-        ".zgroup",
-        ".zattrs",
-        "0/.zarray",
-        "0/.zattrs",
+        (TEST "/.zgroup"),
+        (TEST "/.zattrs"),
+        (TEST "/0/.zarray"),
+        (TEST "/acquire.json"),
     };
     for (auto i = 0; i < 20; ++i) {
-        paths.push_back("0/" + std::to_string(i) + "/0/0");
-        paths.push_back("0/" + std::to_string(i) + "/1/0");
+        paths.push_back((TEST "/0/") + std::to_string(i) + "/0/0");
+        paths.push_back((TEST "/0/") + std::to_string(i) + "/1/0");
     }
 
     minio::s3::BaseUrl url(s3_endpoint);
@@ -325,7 +325,10 @@ validate_and_cleanup(AcquireRuntime* runtime)
 
     try {
         for (const auto& path : paths) {
-            CHECK(object_exists(client, path));
+            EXPECT(object_exists(client, path),
+                   "Object %s does not exist in bucket %s",
+                   path.c_str(),
+                   s3_bucket_name.c_str());
         }
     } catch (const std::exception& e) {
         ERR("Exception: %s", e.what());

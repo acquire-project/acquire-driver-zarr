@@ -12,7 +12,6 @@ set(project acquire-driver-zarr) # CMAKE_PROJECT_NAME gets overridden if this is
 #
 set(tests
         list-devices
-        unit-tests
         get
         get-meta
         get-set-get
