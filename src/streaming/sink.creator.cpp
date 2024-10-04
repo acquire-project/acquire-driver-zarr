@@ -342,9 +342,6 @@ zarr::SinkCreator::make_files_(std::queue<std::string>& file_paths,
                      } catch (const std::exception& exc) {
                          err = "Failed to create file '" + filename +
                                "': " + exc.what();
-                     } catch (...) {
-                         err = "Failed to create file '" + filename +
-                               "': (unknown).";
                      }
 
                      latch.count_down();
@@ -396,9 +393,6 @@ zarr::SinkCreator::make_files_(
                      } catch (const std::exception& exc) {
                          err = "Failed to create file '" + filename +
                                "': " + exc.what();
-                     } catch (...) {
-                         err = "Failed to create file '" + filename +
-                               "': (unknown).";
                      }
 
                      latch.count_down();

@@ -421,9 +421,7 @@ ZarrStream_s::create_writers_()
 void
 ZarrStream_s::create_scaled_frames_()
 {
-    if (multiscale_) {
-        // TODO (aliddell): implement this
-    }
+    // TODO (aliddell): implement this
 }
 
 bool
@@ -465,9 +463,5 @@ void
 ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
                                        size_t bytes_of_data)
 {
-    if (multiscale_) {
-        return;
-    }
-
     // TODO (aliddell): implement this
 }

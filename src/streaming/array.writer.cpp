@@ -381,8 +381,6 @@ zarr::ArrayWriter::compress_buffers_()
                      } catch (const std::exception& exc) {
                          err = "Failed to compress chunk: " +
                                std::string(exc.what());
-                     } catch (...) {
-                         err = "Failed to compress chunk (unknown)";
                      }
                      latch.count_down();
 
