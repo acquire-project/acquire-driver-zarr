@@ -5,7 +5,7 @@
 
 #include <nlohmann/json.hpp>
 
-#include <algorithm> // std::fill_n
+#include <algorithm> // std::fill
 #include <latch>
 #include <stdexcept>
 
@@ -16,7 +16,6 @@
 namespace {
 std::string
 sample_type_to_dtype(ZarrDataType t)
-
 {
     switch (t) {
         case ZarrDataType_uint8:
@@ -47,38 +46,29 @@ sample_type_to_dtype(ZarrDataType t)
 } // namespace
 
 zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
-  const ArrayWriterConfig& array_spec,
+  const ArrayWriterConfig& config,
+  std::shared_ptr<ThreadPool> thread_pool)
+  : ZarrV3ArrayWriter(config, thread_pool, nullptr)
+{
+}
+
+zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
+  const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
-  : ArrayWriter(array_spec, thread_pool, s3_connection_pool)
-  , shard_file_offsets_(array_spec.dimensions->number_of_shards(), 0)
-  , shard_tables_{ array_spec.dimensions->number_of_shards() }
+  : ArrayWriter(config, thread_pool, s3_connection_pool)
 {
-    const auto cps = array_spec.dimensions->chunks_per_shard();
+    const auto number_of_shards = config_.dimensions->number_of_shards();
+    const auto chunks_per_shard = config_.dimensions->chunks_per_shard();
+
+    shard_file_offsets_.resize(number_of_shards, 0);
+    shard_tables_.resize(number_of_shards);
 
     for (auto& table : shard_tables_) {
-        table.resize(2 * cps);
-        std::fill_n(
-          table.begin(), table.size(), std::numeric_limits<uint64_t>::max());
+        table.resize(2 * chunks_per_shard);
+        std::fill(
+          table.begin(), table.end(), std::numeric_limits<uint64_t>::max());
     }
-}
-
-zarr::ZarrV3ArrayWriter::~ZarrV3ArrayWriter()
-{
-    is_finalizing_ = true;
-    try {
-        flush_();
-    } catch (const std::exception& exc) {
-        LOG_ERROR("Failed to finalize array writer: %s", exc.what());
-    } catch (...) {
-        LOG_ERROR("Failed to finalize array writer: (unknown)");
-    }
-}
-
-ZarrVersion
-zarr::ZarrV3ArrayWriter::version_() const
-{
-    return ZarrVersion_3;
 }
 
 bool
@@ -100,28 +90,28 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
     }
 
     // write out chunks to shards
-    bool write_table = is_finalizing_ || should_rollover_();
+    auto write_table = is_finalizing_ || should_rollover_();
     std::latch latch(n_shards);
     for (auto i = 0; i < n_shards; ++i) {
         const auto& chunks = chunk_in_shards.at(i);
         auto& chunk_table = shard_tables_.at(i);
-        size_t* file_offset = &shard_file_offsets_.at(i);
+        auto* file_offset = &shard_file_offsets_.at(i);
 
-        EXPECT(thread_pool_->push_to_job_queue([&sink = data_sinks_.at(i),
-                                                &chunks,
-                                                &chunk_table,
-                                                file_offset,
-                                                write_table,
-                                                &latch,
-                                                this](
-                                                 std::string& err) mutable {
+        EXPECT(thread_pool_->push_job([&sink = data_sinks_.at(i),
+                                       &chunks,
+                                       &chunk_table,
+                                       file_offset,
+                                       write_table,
+                                       &latch,
+                                       this](std::string& err) {
             bool success = false;
 
             try {
                 for (const auto& chunk_idx : chunks) {
                     auto& chunk = chunk_buffers_.at(chunk_idx);
-                    success =
-                      sink->write(*file_offset, chunk.data(), chunk.size());
+                    std::span data{ reinterpret_cast<std::byte*>(chunk.data()),
+                                    chunk.size() };
+                    success = sink->write(*file_offset, data);
                     if (!success) {
                         break;
                     }
@@ -135,17 +125,14 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
                 }
 
                 if (success && write_table) {
-                    const auto* table =
-                      reinterpret_cast<const uint8_t*>(chunk_table.data());
-                    success =
-                      sink->write(*file_offset,
-                                  table,
-                                  chunk_table.size() * sizeof(uint64_t));
+                    auto* table =
+                      reinterpret_cast<std::byte*>(chunk_table.data());
+                    std::span data{ table,
+                                    chunk_table.size() * sizeof(uint64_t) };
+                    success = sink->write(*file_offset, data);
                 }
             } catch (const std::exception& exc) {
                 err = "Failed to write chunk: " + std::string(exc.what());
-            } catch (...) {
-                err = "Failed to write chunk: (unknown)";
             }
 
             latch.count_down();
@@ -160,12 +147,11 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
     // reset shard tables and file offsets
     if (write_table) {
         for (auto& table : shard_tables_) {
-            std::fill_n(table.begin(),
-                        table.size(),
-                        std::numeric_limits<uint64_t>::max());
+            std::fill(
+              table.begin(), table.end(), std::numeric_limits<uint64_t>::max());
         }
 
-        std::fill_n(shard_file_offsets_.begin(), shard_file_offsets_.size(), 0);
+        std::fill(shard_file_offsets_.begin(), shard_file_offsets_.end(), 0);
     }
 
     return true;
@@ -185,13 +171,15 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
     size_t append_size = frames_written_;
     for (auto i = config_.dimensions->ndims() - 3; i > 0; --i) {
         const auto& dim = config_.dimensions->at(i);
-        CHECK(dim.array_size_px);
-        append_size = (append_size + dim.array_size_px - 1) / dim.array_size_px;
+        const auto& array_size_px = dim.array_size_px;
+        CHECK(array_size_px);
+        append_size = (append_size + array_size_px - 1) / array_size_px;
     }
     array_shape.push_back(append_size);
 
-    chunk_shape.push_back(config_.dimensions->final_dim().chunk_size_px);
-    shard_shape.push_back(config_.dimensions->final_dim().shard_size_chunks);
+    const auto& final_dim = config_.dimensions->final_dim();
+    chunk_shape.push_back(final_dim.chunk_size_px);
+    shard_shape.push_back(final_dim.shard_size_chunks);
     for (auto i = 1; i < config_.dimensions->ndims(); ++i) {
         const auto& dim = config_.dimensions->at(i);
         array_shape.push_back(dim.array_size_px);
@@ -243,10 +231,11 @@ zarr::ZarrV3ArrayWriter::write_array_metadata_()
         }) },
     });
 
-    const std::string metadata_str = metadata.dump(4);
-    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    std::string metadata_str = metadata.dump(4);
+    std::span data = { reinterpret_cast<std::byte*>(metadata_str.data()),
+                       metadata_str.size() };
 
-    return metadata_sink_->write(0, metadata_bytes, metadata_str.size());
+    return metadata_sink_->write(0, data);
 }
 
 bool

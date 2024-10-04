@@ -1,22 +1,20 @@
 #include "thread.pool.hh"
 
-zarr::ThreadPool::ThreadPool(unsigned int n_threads,
-                             std::function<void(const std::string&)> err)
-  : error_handler_{ err }
-  , is_accepting_jobs_{ true }
+zarr::ThreadPool::ThreadPool(unsigned int n_threads, ErrorCallback&& err)
+  : error_handler_{ std::move(err) }
 {
-    n_threads = std::clamp(
-      n_threads, 1u, std::max(std::thread::hardware_concurrency(), 1u));
+    const auto max_threads = std::max(std::thread::hardware_concurrency(), 1u);
+    n_threads = std::clamp(n_threads, 1u, max_threads);
 
     for (auto i = 0; i < n_threads; ++i) {
-        threads_.emplace_back([this] { thread_worker_(); });
+        threads_.emplace_back([this] { process_tasks_(); });
     }
 }
 
 zarr::ThreadPool::~ThreadPool() noexcept
 {
     {
-        std::scoped_lock lock(jobs_mutex_);
+        std::unique_lock lock(jobs_mutex_);
         while (!jobs_.empty()) {
             jobs_.pop();
         }
@@ -26,7 +24,7 @@ zarr::ThreadPool::~ThreadPool() noexcept
 }
 
 bool
-zarr::ThreadPool::push_to_job_queue(JobT&& job)
+zarr::ThreadPool::push_job(Task&& job)
 {
     std::unique_lock lock(jobs_mutex_);
     if (!is_accepting_jobs_) {
@@ -57,7 +55,7 @@ zarr::ThreadPool::await_stop() noexcept
     }
 }
 
-std::optional<zarr::ThreadPool::JobT>
+std::optional<zarr::ThreadPool::Task>
 zarr::ThreadPool::pop_from_job_queue_() noexcept
 {
     if (jobs_.empty()) {
@@ -76,7 +74,7 @@ zarr::ThreadPool::should_stop_() const noexcept
 }
 
 void
-zarr::ThreadPool::thread_worker_()
+zarr::ThreadPool::process_tasks_()
 {
     while (true) {
         std::unique_lock lock(jobs_mutex_);

@@ -293,8 +293,8 @@ dimension_type_to_string(ZarrDimensionType type)
 
 template<typename T>
 [[nodiscard]]
-uint8_t*
-scale_image(const uint8_t* const src,
+std::byte*
+scale_image(const std::byte* const src,
             size_t& bytes_of_src,
             size_t& width,
             size_t& height)
@@ -308,19 +308,20 @@ scale_image(const uint8_t* const src,
            bytes_of_src);
 
     const int downscale = 2;
-    constexpr size_t bytes_of_type = sizeof(T);
+    constexpr auto bytes_of_type = static_cast<double>(sizeof(T));
     const double factor = 0.25;
 
-    const auto w_pad = width + (width % downscale);
-    const auto h_pad = height + (height % downscale);
+    const auto w_pad = static_cast<double>(width + (width % downscale));
+    const auto h_pad = static_cast<double>(height + (height % downscale));
 
     const auto size_downscaled =
       static_cast<uint32_t>(w_pad * h_pad * factor * bytes_of_type);
 
-    auto* dst = new uint8_t[size_downscaled];
+    auto* dst = new T[size_downscaled];
     EXPECT(dst,
-           "Failed to allocate %zu bytes for destination frame",
-           size_downscaled);
+           "Failed to allocate ",
+           size_downscaled,
+           " bytes for destination frame");
 
     memset(dst, 0, size_downscaled);
 
@@ -332,13 +333,14 @@ scale_image(const uint8_t* const src,
             size_t src_idx = row * width + col;
             const bool pad_width = (col == width - 1 && width != w_pad);
 
-            double here = src[src_idx];
-            double right = src[src_idx + (1 - static_cast<int>(pad_width))];
-            double down =
-              src[src_idx + width * (1 - static_cast<int>(pad_height))];
-            double diag =
+            auto here = static_cast<double>(src[src_idx]);
+            auto right = static_cast<double>(
+              src[src_idx + (1 - static_cast<int>(pad_width))]);
+            auto down = static_cast<double>(
+              src[src_idx + width * (1 - static_cast<int>(pad_height))]);
+            auto diag = static_cast<double>(
               src[src_idx + width * (1 - static_cast<int>(pad_height)) +
-                  (1 - static_cast<int>(pad_width))];
+                  (1 - static_cast<int>(pad_width))]);
 
             dst[dst_idx++] =
               static_cast<T>(factor * (here + right + down + diag));
@@ -346,10 +348,10 @@ scale_image(const uint8_t* const src,
     }
 
     bytes_of_src = size_downscaled;
-    width = w_pad / 2;
-    height = h_pad / 2;
+    width = static_cast<size_t>(w_pad) / 2;
+    height = static_cast<size_t>(h_pad) / 2;
 
-    return dst;
+    return reinterpret_cast<std::byte*>(dst);
 }
 
 template<typename T>
@@ -421,29 +423,6 @@ ZarrStream::ZarrStream_s(struct ZarrStreamSettings_s* settings)
     EXPECT(write_external_metadata_(), error_);
 }
 
-ZarrStream_s::~ZarrStream_s()
-{
-    try {
-        // must precede close of chunk file
-        write_group_metadata_();
-    } catch (const std::exception& e) {
-        LOG_ERROR("Error finalizing Zarr stream: ", e.what());
-    }
-    if (!write_group_metadata_()) {
-        LOG_ERROR("Error finalizing Zarr stream: ", error_.c_str());
-    }
-    metadata_sinks_.clear();
-
-    writers_.clear(); // flush before shutting down thread pool
-    thread_pool_->await_stop();
-
-    for (auto& [_, frame] : scaled_frames_) {
-        if (frame) {
-            delete[] *frame;
-        }
-    }
-}
-
 size_t
 ZarrStream::append(const void* data_, size_t nbytes)
 {
@@ -453,7 +432,7 @@ ZarrStream::append(const void* data_, size_t nbytes)
         return 0;
     }
 
-    auto* data = static_cast<const uint8_t*>(data_);
+    auto* data = static_cast<const std::byte*>(data_);
 
     const size_t bytes_of_frame = frame_buffer_.size();
     size_t bytes_written = 0;
@@ -473,7 +452,7 @@ ZarrStream::append(const void* data_, size_t nbytes)
             // ready to flush the frame buffer
             if (frame_buffer_offset_ == bytes_of_frame) {
                 const size_t bytes_written_this_frame =
-                  writers_[0]->write_frame(data, bytes_of_frame);
+                  writers_[0]->write_frame({ data, bytes_of_frame });
                 if (bytes_written_this_frame == 0) {
                     break;
                 }
@@ -488,7 +467,7 @@ ZarrStream::append(const void* data_, size_t nbytes)
             bytes_written += bytes_remaining;
         } else { // at least one full frame
             const size_t bytes_written_this_frame =
-              writers_[0]->write_frame(data, bytes_of_frame);
+              writers_[0]->write_frame({ data, bytes_of_frame });
             if (bytes_written_this_frame == 0) {
                 break;
             }
@@ -586,7 +565,7 @@ ZarrStream_s::create_store_()
 
         // test the S3 connection
         auto conn = s3_connection_pool_->get_connection();
-        if (!conn->check_connection()) {
+        if (!conn->is_connection_valid()) {
             set_error_("Failed to connect to S3");
             return false;
         }
@@ -743,9 +722,10 @@ ZarrStream_s::write_base_metadata_()
     }
 
     const std::string metadata_str = metadata.dump(4);
-    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
+    std::span data{ reinterpret_cast<const std::byte*>(metadata_str.data()),
+                    metadata_str.size() };
 
-    if (!sink->write(0, metadata_bytes, metadata_str.size())) {
+    if (!sink->write(0, data)) {
         set_error_("Error writing base metadata");
         return false;
     }
@@ -776,8 +756,9 @@ ZarrStream_s::write_group_metadata_()
     }
 
     const std::string metadata_str = metadata.dump(4);
-    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    if (!sink->write(0, metadata_bytes, metadata_str.size())) {
+    std::span data{ reinterpret_cast<const std::byte*>(metadata_str.data()),
+                    metadata_str.size() };
+    if (!sink->write(0, data)) {
         set_error_("Error writing group metadata");
         return false;
     }
@@ -810,8 +791,9 @@ ZarrStream_s::write_external_metadata_()
     }
 
     const std::string metadata_str = metadata.dump(4);
-    const auto* metadata_bytes = (const uint8_t*)metadata_str.c_str();
-    if (!sink->write(0, metadata_bytes, metadata_str.size())) {
+    std::span data{ reinterpret_cast<const std::byte*>(metadata_str.data()),
+                    metadata_str.size() };
+    if (!sink->write(0, data)) {
         set_error_("Error writing external metadata");
         return false;
     }
@@ -893,14 +875,14 @@ ZarrStream_s::make_multiscale_metadata_() const
 }
 
 void
-ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
+ZarrStream_s::write_multiscale_frames_(const std::byte* data,
                                        size_t bytes_of_data)
 {
     if (!multiscale_) {
         return;
     }
 
-    std::function<uint8_t*(const uint8_t*, size_t&, size_t&, size_t&)> scale;
+    std::function<std::byte*(const std::byte*, size_t&, size_t&, size_t&)> scale;
     std::function<void(void*, size_t, const void*, size_t)> average2;
 
     switch (dtype_) {
@@ -952,7 +934,7 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
     size_t frame_width = dimensions_->width_dim().array_size_px;
     size_t frame_height = dimensions_->height_dim().array_size_px;
 
-    uint8_t* dst;
+    std::byte* dst;
     for (auto i = 1; i < writers_.size(); ++i) {
         dst = scale(data, bytes_of_data, frame_width, frame_height);
 
@@ -961,7 +943,9 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
 
         if (scaled_frames_[i]) {
             average2(dst, bytes_of_data, *scaled_frames_[i], bytes_of_data);
-            EXPECT(writers_[i]->write_frame(dst, bytes_of_data),
+            std::span frame_data{ reinterpret_cast<const std::byte*>(dst),
+                                  bytes_of_data };
+            EXPECT(writers_[i]->write_frame(frame_data),
                    "Failed to write frame to writer %zu",
                    i);
 
@@ -980,4 +964,45 @@ ZarrStream_s::write_multiscale_frames_(const uint8_t* data,
             break;
         }
     }
+}
+
+bool
+finalize_stream(struct ZarrStream_s* stream)
+{
+    if (stream == nullptr) {
+        LOG_INFO("Stream is null. Nothing to finalize.");
+        return true;
+    }
+
+    if (!stream->write_group_metadata_()) {
+        LOG_ERROR("Error finalizing Zarr stream: ", stream->error_);
+        return false;
+    }
+
+    for (auto& [sink_name, sink] : stream->metadata_sinks_) {
+        if (!finalize_sink(std::move(sink))) {
+            LOG_ERROR("Error finalizing Zarr stream. Failed to write ",
+                      sink_name);
+            return false;
+        }
+    }
+    stream->metadata_sinks_.clear();
+
+    for (auto i = 0; i < stream->writers_.size(); ++i) {
+        if (!finalize_array(std::move(stream->writers_[i]))) {
+            LOG_ERROR("Error finalizing Zarr stream. Failed to write array ",
+                      i);
+            return false;
+        }
+    }
+    stream->writers_.clear(); // flush before shutting down thread pool
+    stream->thread_pool_->await_stop();
+
+    for (auto& [_, frame] : stream->scaled_frames_) {
+        if (frame) {
+            delete[] *frame;
+        }
+    }
+
+    return true;
 }

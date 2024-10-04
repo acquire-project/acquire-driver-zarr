@@ -1,7 +1,8 @@
 #pragma once
 
-#include <cstdint> // uint8_t
-#include <cstddef> // size_t
+#include <cstddef> // size_t, std::byte
+#include <memory>  // std::unique_ptr
+#include <span>    // std::span
 
 namespace zarr {
 class Sink
@@ -15,10 +16,16 @@ class Sink
      * @param buf The buffer to write to the sink.
      * @param bytes_of_buf The number of bytes to write from @p buf.
      * @return True if the write was successful, false otherwise.
-     * @throws std::runtime_error if @p buf is nullptr or the write fails.
      */
     [[nodiscard]] virtual bool write(size_t offset,
-                                     const uint8_t* buf,
-                                     size_t bytes_of_buf) = 0;
+                                     std::span<const std::byte> buf) = 0;
+
+  protected:
+    [[nodiscard]] virtual bool flush_() = 0;
+
+    friend bool finalize_sink(std::unique_ptr<Sink>&& sink);
 };
+
+bool
+finalize_sink(std::unique_ptr<Sink>&& sink);
 } // namespace zarr

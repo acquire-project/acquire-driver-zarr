@@ -145,6 +145,10 @@ extern "C"
 
     void ZarrStream_destroy(struct ZarrStream_s* stream)
     {
+        if (!finalize_stream(stream)) {
+            return;
+        }
+
         delete stream;
     }
 
