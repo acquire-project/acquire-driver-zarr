@@ -55,8 +55,8 @@ check_json()
     nlohmann::json meta = nlohmann::json::parse(f);
 
     EXPECT(meta["data_type"].get<std::string>() == "float64",
-           "Expected dtype to be 'uint16', but got '%s'",
-           meta["data_type"].get<std::string>().c_str());
+           "Expected dtype to be uint16, but got ",
+           meta["data_type"].get<std::string>());
 
     const auto& array_shape = meta["shape"];
     const auto& chunk_shape = meta["chunk_grid"]["chunk_shape"];
@@ -95,7 +95,7 @@ main()
     try {
         auto thread_pool = std::make_shared<zarr::ThreadPool>(
           std::thread::hardware_concurrency(),
-          [](const std::string& err) { LOG_ERROR("Error: %s", err.c_str()); });
+          [](const std::string& err) { LOG_ERROR("Error: ", err.c_str()); });
 
         std::vector<ZarrDimension> dims;
         dims.emplace_back("t",
@@ -115,11 +115,9 @@ main()
                           shard_height);
         dims.emplace_back(
           "x", ZarrDimensionType_Space, array_width, chunk_width, shard_width);
-        auto dimensions =
-          std::make_unique<ArrayDimensions>(std::move(dims), dtype);
 
         zarr::ArrayWriterConfig config = {
-            .dimensions = std::move(dimensions),
+            .dimensions = std::make_shared<ArrayDimensions>(std::move(dims), dtype),
             .dtype = dtype,
             .level_of_detail = 5,
             .bucket_name = std::nullopt,
@@ -132,8 +130,7 @@ main()
               std::move(config), thread_pool);
 
             const size_t frame_size = array_width * array_height * nbytes_px;
-            std::vector data_(frame_size, std::byte(0));
-            std::span data(data_);
+            std::vector data(frame_size, std::byte(0));;
 
             for (auto i = 0; i < n_frames; ++i) { // 2 time points
                 CHECK(writer->write_frame(data));
@@ -171,7 +168,7 @@ main()
                         const auto x_file = y_dir / std::to_string(x);
                         CHECK(fs::is_regular_file(x_file));
                         const auto file_size = fs::file_size(x_file);
-                        CHECK(file_size == expected_file_size);
+                        EXPECT_EQ(int, file_size, expected_file_size);
                     }
 
                     CHECK(!fs::is_regular_file(y_dir /
@@ -189,7 +186,7 @@ main()
 
         retval = 0;
     } catch (const std::exception& exc) {
-        LOG_ERROR("Exception: %s\n", exc.what());
+        LOG_ERROR("Exception: ", exc.what());
     }
 
     // cleanup

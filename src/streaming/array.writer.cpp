@@ -49,7 +49,7 @@ zarr::downsample(const ArrayWriterConfig& config,
                                     shard_size_chunks };
         }
     }
-    downsampled_config.dimensions = std::make_unique<ArrayDimensions>(
+    downsampled_config.dimensions = std::make_shared<ArrayDimensions>(
       std::move(downsampled_dims), config.dtype);
 
     downsampled_config.level_of_detail = config.level_of_detail + 1;
@@ -76,17 +76,17 @@ zarr::downsample(const ArrayWriterConfig& config,
 }
 
 /// Writer
-zarr::ArrayWriter::ArrayWriter(ArrayWriterConfig&& config,
+zarr::ArrayWriter::ArrayWriter(const ArrayWriterConfig& config,
                                std::shared_ptr<ThreadPool> thread_pool)
   : ArrayWriter(std::move(config), thread_pool, nullptr)
 {
 }
 
 zarr::ArrayWriter::ArrayWriter(
-  ArrayWriterConfig&& config,
+  const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
-  : config_{ std::move(config) }
+  : config_{ config }
   , thread_pool_{ thread_pool }
   , s3_connection_pool_{ s3_connection_pool }
   , bytes_to_flush_{ 0 }
@@ -97,7 +97,7 @@ zarr::ArrayWriter::ArrayWriter(
 }
 
 size_t
-zarr::ArrayWriter::write_frame(std::span<std::byte> data)
+zarr::ArrayWriter::write_frame(std::span<const std::byte> data)
 {
     const auto nbytes_data = data.size();
     const auto nbytes_frame =
@@ -239,12 +239,12 @@ zarr::ArrayWriter::make_buffers_() noexcept
 
     for (auto& buf : chunk_buffers_) {
         buf.resize(nbytes);
-        std::fill_n(buf.begin(), nbytes, std::byte(0));
+        std::fill(buf.begin(), buf.end(), std::byte(0));
     }
 }
 
 size_t
-zarr::ArrayWriter::write_frame_to_chunks_(std::span<std::byte> data)
+zarr::ArrayWriter::write_frame_to_chunks_(std::span<const std::byte> data)
 {
     // break the frame into tiles and write them to the chunk buffers
     const auto bytes_per_px = bytes_of_type(config_.dtype);
@@ -423,6 +423,11 @@ zarr::ArrayWriter::flush_()
 void
 zarr::ArrayWriter::close_sinks_()
 {
+    for (auto i = 0; i < data_sinks_.size(); ++i) {
+        EXPECT(finalize_sink(std::move(data_sinks_[i])),
+               "Failed to finalize sink ",
+               i);
+    }
     data_sinks_.clear();
 }
 
@@ -438,11 +443,21 @@ zarr::ArrayWriter::rollover_()
 bool
 zarr::finalize_array(std::unique_ptr<ArrayWriter>&& writer)
 {
+    if (writer == nullptr) {
+        LOG_INFO("Array writer is null. Nothing to finalize.");
+        return true;
+    }
+
     writer->is_finalizing_ = true;
     try {
-        writer->flush_();
+        writer->flush_(); // data sinks finalized here
     } catch (const std::exception& exc) {
         LOG_ERROR("Failed to finalize array writer: ", exc.what());
+        return false;
+    }
+
+    if (!finalize_sink(std::move(writer->metadata_sink_))) {
+        LOG_ERROR("Failed to finalize metadata sink");
         return false;
     }
 

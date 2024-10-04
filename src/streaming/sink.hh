@@ -18,7 +18,7 @@ class Sink
      * @return True if the write was successful, false otherwise.
      */
     [[nodiscard]] virtual bool write(size_t offset,
-                                     std::span<std::byte> buf) = 0;
+                                     std::span<const std::byte> buf) = 0;
 
   protected:
     [[nodiscard]] virtual bool flush_() = 0;

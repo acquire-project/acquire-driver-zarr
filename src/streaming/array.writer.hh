@@ -1,6 +1,6 @@
 #pragma once
 
-#include "zarr.stream.hh"
+#include "zarr.dimension.hh"
 #include "thread.pool.hh"
 #include "s3.connection.hh"
 #include "blosc.compression.params.hh"
@@ -12,10 +12,9 @@
 namespace fs = std::filesystem;
 
 namespace zarr {
-
 struct ArrayWriterConfig
 {
-    std::unique_ptr<ArrayDimensions> dimensions;
+    std::shared_ptr<ArrayDimensions> dimensions;
     ZarrDataType dtype;
     int level_of_detail;
     std::optional<std::string> bucket_name;
@@ -40,10 +39,10 @@ downsample(const ArrayWriterConfig& config,
 class ArrayWriter
 {
   public:
-    ArrayWriter(ArrayWriterConfig&& config,
+    ArrayWriter(const ArrayWriterConfig& config,
                 std::shared_ptr<ThreadPool> thread_pool);
 
-    ArrayWriter(ArrayWriterConfig&& config,
+    ArrayWriter(const ArrayWriterConfig& config,
                 std::shared_ptr<ThreadPool> thread_pool,
                 std::shared_ptr<S3ConnectionPool> s3_connection_pool);
 
@@ -54,7 +53,7 @@ class ArrayWriter
      * @param data The frame data.
      * @return The number of bytes written.
      */
-    [[nodiscard]] size_t write_frame(std::span<std::byte> data);
+    [[nodiscard]] size_t write_frame(std::span<const std::byte> data);
 
   protected:
     ArrayWriterConfig config_;
@@ -89,7 +88,7 @@ class ArrayWriter
     bool should_flush_() const;
     virtual bool should_rollover_() const = 0;
 
-    size_t write_frame_to_chunks_(std::span<std::byte> data);
+    size_t write_frame_to_chunks_(std::span<const std::byte> data);
     void compress_buffers_();
 
     void flush_();

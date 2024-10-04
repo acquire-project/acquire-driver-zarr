@@ -78,11 +78,9 @@ main()
           "y", ZarrDimensionType_Space, array_height, chunk_height, 0);
         dims.emplace_back(
           "x", ZarrDimensionType_Space, array_width, chunk_width, 0);
-        auto dimensions =
-          std::make_unique<ArrayDimensions>(std::move(dims), dtype);
 
         zarr::ArrayWriterConfig config = {
-            .dimensions = std::move(dimensions),
+            .dimensions = std::make_shared<ArrayDimensions>(std::move(dims), dtype),
             .dtype = dtype,
             .level_of_detail = level_of_detail,
             .bucket_name = std::nullopt,
@@ -95,8 +93,7 @@ main()
               std::move(config), thread_pool);
 
             const size_t frame_size = array_width * array_height * nbytes_px;
-            std::vector data_(frame_size, std::byte(0));
-            std::span data(data_);
+            std::vector data(frame_size, std::byte(0));
 
             for (auto i = 0; i < n_frames; ++i) { // 2 time points
                 CHECK(writer->write_frame(data));

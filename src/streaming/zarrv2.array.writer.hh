@@ -6,10 +6,10 @@ namespace zarr {
 class ZarrV2ArrayWriter final : public ArrayWriter
 {
   public:
-    ZarrV2ArrayWriter(ArrayWriterConfig&& config,
+    ZarrV2ArrayWriter(const ArrayWriterConfig& config,
                       std::shared_ptr<ThreadPool> thread_pool);
 
-    ZarrV2ArrayWriter(ArrayWriterConfig&& config,
+    ZarrV2ArrayWriter(const ArrayWriterConfig& config,
                       std::shared_ptr<ThreadPool> thread_pool,
                       std::shared_ptr<S3ConnectionPool> s3_connection_pool);
 

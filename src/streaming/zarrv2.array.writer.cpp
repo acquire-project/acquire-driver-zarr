@@ -58,17 +58,17 @@ sample_type_to_dtype(ZarrDataType t, std::string& t_str)
 } // namespace
 
 zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
-  ArrayWriterConfig&& config,
+  const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool)
-  : ArrayWriter(std::move(config), thread_pool)
+  : ArrayWriter(config, thread_pool)
 {
 }
 
 zarr::ZarrV2ArrayWriter::ZarrV2ArrayWriter(
-  ArrayWriterConfig&& config,
+  const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
-  : ArrayWriter(std::move(config), thread_pool, s3_connection_pool)
+  : ArrayWriter(config, thread_pool, s3_connection_pool)
 {
 }
 

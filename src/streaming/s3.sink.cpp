@@ -50,7 +50,7 @@ zarr::S3Sink::flush_()
 }
 
 bool
-zarr::S3Sink::write(size_t offset, std::span<std::byte> data)
+zarr::S3Sink::write(size_t offset, std::span<const std::byte> data)
 {
     if (data.data() == nullptr || data.empty()) {
         return true;
@@ -66,7 +66,7 @@ zarr::S3Sink::write(size_t offset, std::span<std::byte> data)
     nbytes_buffered_ = offset - nbytes_flushed_;
 
     size_t bytes_of_data = data.size();
-    std::byte* data_ptr = data.data();
+    const std::byte* data_ptr = data.data();
     while (bytes_of_data > 0) {
         const auto bytes_to_write =
           std::min(bytes_of_data, part_buffer_.size() - nbytes_buffered_);

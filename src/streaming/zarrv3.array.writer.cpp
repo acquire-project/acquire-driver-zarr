@@ -46,17 +46,17 @@ sample_type_to_dtype(ZarrDataType t)
 } // namespace
 
 zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
-  ArrayWriterConfig&& config,
+  const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool)
-  : ZarrV3ArrayWriter(std::move(config), thread_pool, nullptr)
+  : ZarrV3ArrayWriter(config, thread_pool, nullptr)
 {
 }
 
 zarr::ZarrV3ArrayWriter::ZarrV3ArrayWriter(
-  ArrayWriterConfig&& config,
+  const ArrayWriterConfig& config,
   std::shared_ptr<ThreadPool> thread_pool,
   std::shared_ptr<S3ConnectionPool> s3_connection_pool)
-  : ArrayWriter(std::move(config), thread_pool, s3_connection_pool)
+  : ArrayWriter(config, thread_pool, s3_connection_pool)
 {
     const auto number_of_shards = config_.dimensions->number_of_shards();
     const auto chunks_per_shard = config_.dimensions->chunks_per_shard();
@@ -86,7 +86,7 @@ zarr::ZarrV3ArrayWriter::flush_impl_()
     std::vector<std::vector<size_t>> chunk_in_shards(n_shards);
     for (auto i = 0; i < chunk_buffers_.size(); ++i) {
         const auto index = config_.dimensions->shard_index_for_chunk(i);
-        chunk_in_shards.at(index).push_back(i);
+        chunk_in_shards[index].push_back(i);
     }
 
     // write out chunks to shards
