@@ -574,11 +574,11 @@ sink::Zarr::set(const StorageProperties* props)
         }
 
         dimension_names_.emplace_back(dim->name.str);
-        dimensions_.emplace_back(nullptr,
-                                 type,
-                                 dim->array_size_px,
-                                 dim->chunk_size_px,
-                                 dim->shard_size_chunks);
+        dimensions_.push_back({ nullptr,
+                                type,
+                                dim->array_size_px,
+                                dim->chunk_size_px,
+                                dim->shard_size_chunks });
     }
 
     multiscale_ = props->enable_multiscale;
