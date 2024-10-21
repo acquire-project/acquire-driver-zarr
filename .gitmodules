@@ -1,3 +1,6 @@
 [submodule "acquire-common"]
 	path = acquire-common
 	url = ../acquire-common.git
+[submodule "acquire-zarr"]
+	path = acquire-zarr
+	url = ../acquire-zarr.git
