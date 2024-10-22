@@ -5,7 +5,9 @@
 #include "device/hal/storage.h"
 #include "device/hal/driver.h"
 
+#include <chrono>
 #include <cstdio>
+#include <iostream>
 #include <filesystem>
 #include <stdexcept>
 #include <string_view>
@@ -123,6 +125,11 @@ cleanup()
         delete lib;
         lib = nullptr;
     }
+
+    const auto file_path = (fs::temp_directory_path() / "test.zarr").string();
+    if (fs::exists(file_path)) {
+        fs::remove_all(file_path);
+    }
 }
 } // namespace
 
@@ -149,9 +156,36 @@ configure(struct Storage* storage)
     storage_properties_destroy(&props);
 }
 
-int
-main()
+void
+print_usage(const char* program_name)
 {
+    std::cerr << "Usage: " << program_name << " <number_of_iterations>\n"
+              << "Example: " << program_name << " 100\n";
+}
+
+int
+main(int argc, char* argv[])
+{
+    if (argc != 2) {
+        print_usage(argv[0]);
+        return 1;
+    }
+
+    long iters;
+
+    {
+        char* end;
+        iters = std::strtol(argv[1], &end, 10);
+
+        // Validate the input
+        if (*end != '\0' || iters <= 0) {
+            std::cerr << "Error: Please provide a valid positive number of "
+                         "iterations\n";
+            print_usage(argv[0]);
+            return 1;
+        }
+    }
+
     struct Storage* storage = get_zarr_v3();
     CHECK(storage);
 
@@ -165,20 +199,27 @@ main()
     frame->shape = {
         .dims = { .channels = 1, .width = 14192, .height = 10640, .planes = 1, },
         .strides = { .channels = 1,
-                     .width = 1,
-                     .height = 14192,
-                     .planes = 14192 * 10640, },
+          .width = 1,
+          .height = 14192,
+          .planes = 14192 * 10640, },
         .type = SampleType_u16,
     };
 
     CHECK(storage_reserve_image_shape(storage, &frame->shape) == Device_Ok);
 
     CHECK(storage_start(storage) == Device_Ok);
-    for (auto i = 0; i < 100; ++i) {
+
+    auto start = std::chrono::high_resolution_clock::now();
+    for (auto i = 0; i < iters; ++i) {
         frame->frame_id = i;
-        CHECK(storage_append(storage, frame, frame + 1) ==
-              Device_Ok);
+        CHECK(storage_append(storage, frame, frame + 1) == Device_Ok);
     }
+    auto end = std::chrono::high_resolution_clock::now();
+    auto duration =
+      std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+    std::cout << "Execution time of the loop: " << duration.count()
+              << " milliseconds" << std::endl;
+
     CHECK(storage_stop(storage) == Device_Ok);
 
     cleanup();
