@@ -20,10 +20,15 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 option(NOTEST "Disable all tests" OFF)
-option(BUILD_ACQUIRE_DRIVER_ZARR "Build the Acquire Zarr driver" ON)
+option(NO_UNIT_TESTS "Disable unit tests" OFF)
+option(WITH_EXAMPLES "Build examples" OFF)
 
 add_subdirectory(src)
-add_subdirectory(tests)
-add_subdirectory(examples)
+if (NOT NOTEST)
+    add_subdirectory(tests)
+endif ()
+if (WITH_EXAMPLES)
+    add_subdirectory(examples)
+endif ()
 
 include(CPack)
