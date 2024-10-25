@@ -4,7 +4,10 @@ if (NOT TARGET acquire-core-logger)
 endif ()
 
 if (NOT TARGET acquire-zarr)
+    set(BUILD_TESTING_TMP ${BUILD_TESTING})
+    set(BUILD_TESTING OFF)
     add_subdirectory(${CMAKE_SOURCE_DIR}/acquire-zarr ${CMAKE_CURRENT_BINARY_DIR}/acquire-zarr)
+    set(BUILD_TESTING ${BUILD_TESTING_TMP})
 endif ()
 
 set(tgt acquire-driver-zarr)
