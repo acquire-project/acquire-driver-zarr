@@ -19,11 +19,22 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-option(NOTEST "Disable all tests" OFF)
-option(BUILD_ACQUIRE_DRIVER_ZARR "Build the Acquire Zarr driver" ON)
+option(NO_UNIT_TESTS "Disable unit tests" OFF)
+option(WITH_EXAMPLES "Build examples" OFF)
+
+if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
+    include(CTest)
+endif ()
 
 add_subdirectory(src)
-add_subdirectory(tests)
-add_subdirectory(examples)
+if (BUILD_TESTING)
+    add_subdirectory(tests)
+else ()
+    message(STATUS "Skipping test targets")
+endif ()
+
+if (WITH_EXAMPLES)
+    add_subdirectory(examples)
+endif ()
 
 include(CPack)
