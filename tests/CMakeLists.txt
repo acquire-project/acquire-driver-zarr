@@ -1,6 +1,5 @@
-set(NOTEST "TRUE")
+set(NOTEST ON)
 add_subdirectory(${CMAKE_SOURCE_DIR}/acquire-common ${CMAKE_CURRENT_BINARY_DIR}/acquire-common)
-set(NOTEST "FALSE")
 
 #
 # PARAMETERS

@@ -1,4 +1,5 @@
 if (NOT TARGET acquire-core-logger)
+    set(NOTEST ON)
     add_subdirectory(${CMAKE_SOURCE_DIR}/acquire-common/acquire-core-libs ${CMAKE_CURRENT_BINARY_DIR}/acquire-core-libs)
 endif ()
 
