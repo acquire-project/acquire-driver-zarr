@@ -1,0 +1,65 @@
+name: Release (test)
+
+on: push
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        platform:
+          - "ubuntu-latest"
+        include:
+          - platform: "ubuntu-latest"
+            vcpkg_triplet: "x64-linux"
+
+    runs-on: ${{ matrix.platform }}
+
+    permissions:
+      actions: write
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git
+          cd vcpkg && ./bootstrap-vcpkg.sh
+          echo "VCPKG_ROOT=${{github.workspace}}/vcpkg" >> $GITHUB_ENV
+          echo "${{github.workspace}}/vcpkg" >> $GITHUB_PATH
+          ./vcpkg integrate install
+        shell: bash
+
+      - name: Package
+        run: |
+          cmake --preset=default -DVCPKG_TARGET_TRIPLET=${{matrix.vcpkg_triplet}} -B ${{github.workspace}}/pack -DCMAKE_BUILD_TYPE=Release -DNOTEST=1
+          cmake --build ${{github.workspace}}/pack --config Release
+          cpack --config ${{github.workspace}}/pack/CPackConfig.cmake -C Release -G ZIP
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.platform}} binaries
+          path: ${{github.workspace}}/*.zip
+
+  release:
+    needs:
+      - build
+    name: "Release"
+    runs-on: "ubuntu-latest"
+
+    permissions: write-all
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: actions/download-artifact@v4
+        id: download
+        with:
+          path: ${{ github.workspace }}/artifacts
+
+      - name: List artifacts
+        run: ls -l ${{ github.workspace }}/artifacts
