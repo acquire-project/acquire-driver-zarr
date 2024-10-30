@@ -63,3 +63,13 @@ jobs:
 
       - name: List artifacts
         run: ls -l ${{ github.workspace }}/artifacts
+
+      - name: Test release
+        uses: marvinpinto/action-automatic-releases@latest
+        with:
+          repo_token: ${{ secrets.PAT }}
+          automatic_release_tag: "fake-release"
+          prerelease: true
+          title: "Fake Release"
+          files: |
+            ${{steps.download.outputs.download-path}}/*/*.zip
