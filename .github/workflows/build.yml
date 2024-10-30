@@ -55,7 +55,7 @@ jobs:
           cmake --build ${{github.workspace}}/build --config ${{matrix.build_type}}
           cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: ${{matrix.platform}} ${{matrix.build_type}} binaries
           path: ${{github.workspace}}/*.zip
@@ -111,7 +111,7 @@ jobs:
         run: |
           cpack --config ${{github.workspace}}/build/CPackConfig.cmake -C ${{matrix.build_type}} -G ZIP
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: macos-latest ${{matrix.build_type}} binaries
           path: ${{github.workspace}}/*.zip
