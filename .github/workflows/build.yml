@@ -26,12 +26,11 @@ jobs:
     permissions:
       actions: write
 
-    steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.10.0
-        with:
-          access_token: ${{ github.token }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.platform }}-${{ matrix.build_type }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+    steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
@@ -72,12 +71,11 @@ jobs:
     permissions:
       actions: write
 
-    steps:
-      - name: Cancel Previous Runs
-        uses: styfle/cancel-workflow-action@0.10.0
-        with:
-          access_token: ${{ github.token }}
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.ref }}-macos-latest-${{ matrix.build_type }}
+      cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
+    steps:
       - uses: actions/checkout@v3
         with:
           submodules: true

@@ -453,6 +453,7 @@ sink::Zarr::Zarr(ZarrVersion version,
   , multiscale_(false)
   , stream_(nullptr)
 {
+    Zarr_set_log_level(ZarrLogLevel_Error);
     EXPECT(
       version_ < ZarrVersionCount, "Unsupported Zarr version: %d", version);
     EXPECT(compression_codec_ < ZarrCompressionCodecCount,
