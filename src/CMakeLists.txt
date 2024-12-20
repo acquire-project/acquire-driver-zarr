@@ -27,7 +27,6 @@ target_link_libraries(${tgt} PRIVATE
         acquire-core-platform
         acquire-device-kit
         acquire-device-properties
-        acquire-logger
         acquire-zarr
         blosc_static
         nlohmann_json::nlohmann_json
