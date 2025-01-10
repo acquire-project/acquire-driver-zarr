@@ -228,19 +228,10 @@ validate()
     std::ifstream f(metadata_path);
     json metadata = json::parse(f);
 
-    CHECK(metadata["extensions"].empty());
-    CHECK("https://purl.org/zarr/spec/protocol/core/3.0" ==
-          metadata["metadata_encoding"]);
-    CHECK(".json" == metadata["metadata_key_suffix"]);
-    CHECK("https://purl.org/zarr/spec/protocol/core/3.0" ==
-          metadata["zarr_format"]);
-
-    // check the group metadata file
-    metadata_path = test_path / "meta" / "root.group.json";
-    CHECK(fs::is_regular_file(metadata_path));
+    CHECK(metadata["zarr_format"].get<int>() == 3);
 
     // check the external metadata file
-    metadata_path = test_path / "meta" / "acquire.json";
+    metadata_path = test_path / "acquire.json";
     CHECK(fs::is_regular_file(metadata_path));
 
     f = std::ifstream(metadata_path);
@@ -248,66 +239,67 @@ validate()
     CHECK(metadata.empty());
 
     // check the array metadata file
-    metadata_path = test_path / "meta" / "root" / "0.array.json";
+    metadata_path = test_path / "0" / "zarr.json";
     CHECK(fs::is_regular_file(metadata_path));
 
     f = std::ifstream(metadata_path);
     metadata = json::parse(f);
 
     const auto chunk_grid = metadata["chunk_grid"];
-    CHECK("/" == chunk_grid["separator"]);
-    CHECK("regular" == chunk_grid["type"]);
+    CHECK("regular" == chunk_grid["name"]);
 
-    const auto chunk_shape = chunk_grid["chunk_shape"];
-    ASSERT_EQ(int, "%d", frames_per_chunk, chunk_shape[0]);
-    ASSERT_EQ(int, "%d", chunk_height, chunk_shape[1]);
-    ASSERT_EQ(int, "%d", chunk_width, chunk_shape[2]);
-
-    CHECK("C" == metadata["chunk_memory_layout"]);
-    CHECK("uint8" == metadata["data_type"]);
-    CHECK(metadata["extensions"].empty());
+    const auto chunk_key_encoding = metadata["chunk_key_encoding"];
+    CHECK("/" == chunk_key_encoding["configuration"]["separator"]);
 
     const auto array_shape = metadata["shape"];
     ASSERT_EQ(int, "%d", max_frame_count, array_shape[0]);
     ASSERT_EQ(int, "%d", frame_height, array_shape[1]);
     ASSERT_EQ(int, "%d", frame_width, array_shape[2]);
 
+    const auto chunk_shape = chunk_grid["configuration"]["chunk_shape"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunk_shape[0]);
+    ASSERT_EQ(int, "%d", chunk_height* shard_height, chunk_shape[1]);
+    ASSERT_EQ(int, "%d", chunk_width* shard_width, chunk_shape[2]);
+
+    CHECK("uint8" == metadata["data_type"]);
+    CHECK(metadata["extensions"].empty());
+
     // sharding
-    const auto storage_transformers = metadata["storage_transformers"];
-    const auto configuration = storage_transformers[0]["configuration"];
-    const auto& cps = configuration["chunks_per_shard"];
-    ASSERT_EQ(int, "%d", 1, cps[0]);
-    ASSERT_EQ(int, "%d", shard_height, cps[1]);
-    ASSERT_EQ(int, "%d", shard_width, cps[2]);
+    const auto& sharding_codec = metadata["codecs"][0];
+    const auto& shard_shape = sharding_codec["configuration"]["chunk_shape"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, shard_shape[0]);
+    ASSERT_EQ(int, "%d", chunk_height, shard_shape[1]);
+    ASSERT_EQ(int, "%d", chunk_width, shard_shape[2]);
+    const auto chunks_per_shard =
+      (chunk_shape[0].get<int>() / shard_shape[0].get<int>()) *
+      (chunk_shape[1].get<int>() / shard_shape[1].get<int>()) *
+      (chunk_shape[2].get<int>() / shard_shape[2].get<int>());
 
-    const size_t chunks_per_full_shard =
-      cps[0].get<size_t>() * cps[1].get<size_t>() * cps[2].get<size_t>();
-    ASSERT_EQ(
-      int, "%d", shard_width* shard_height, chunks_per_full_shard); // 42 chunks
+    const auto index_size = 2 * sizeof(uint64_t);
+    const auto checksum_size = sizeof(uint32_t);
 
-    const size_t index_size = 2 * chunks_per_full_shard * sizeof(uint64_t);
-
-    const uint32_t bytes_per_chunk = chunk_shape[0].get<uint32_t>() *
-                                     chunk_shape[1].get<uint32_t>() *
-                                     chunk_shape[2].get<uint32_t>();
+    const uint32_t bytes_per_chunk =
+      frames_per_chunk * chunk_height * chunk_width * sizeof(uint8_t);
 
     // 1st shard is full
     {
-        const fs::path shard_path =
-          test_path / "data" / "root" / "0" / "c0" / "0" / "0";
+        const fs::path shard_path = test_path / "0" / "c" / "0" / "0" / "0";
         CHECK(fs::is_regular_file(shard_path));
 
         const int expected_file_size =
-          chunks_per_full_shard * bytes_per_chunk + // 42 chunks
-          index_size;                               // 42 indices
+          chunks_per_shard * bytes_per_chunk + // 42 chunks
+          index_size * chunks_per_shard +      // 42 indices
+          checksum_size;
         const int file_size = fs::file_size(shard_path);
         ASSERT_EQ(int, "%d", expected_file_size, file_size);
 
         // check the indices at the end of the file
         std::ifstream shard_file(shard_path, std::ios::binary);
-        shard_file.seekg(-index_size, std::ios::end);
-        std::vector<uint64_t> indices(2 * chunks_per_full_shard);
-        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+        shard_file.seekg(-(checksum_size + index_size * chunks_per_shard),
+                         std::ios::end);
+        std::vector<uint64_t> indices(2 * chunks_per_shard);
+        shard_file.read(reinterpret_cast<char*>(indices.data()),
+                        index_size * chunks_per_shard);
 
         for (auto i = 0; i < indices.size(); i += 2) {
             ASSERT_EQ(
@@ -322,21 +314,23 @@ validate()
     {
         const size_t chunks_this_shard = 14;
 
-        const fs::path shard_path =
-          test_path / "data" / "root" / "0" / "c0" / "0" / "1";
+        const fs::path shard_path = test_path / "0" / "c" / "0" / "0" / "1";
         CHECK(fs::is_regular_file(shard_path));
 
         const int expected_file_size =
           chunks_this_shard * bytes_per_chunk + // 14 chunks
-          index_size;                           // 42 indices
+          index_size * chunks_per_shard +       // 42 indices (full size)
+          checksum_size;
         const int file_size = fs::file_size(shard_path);
         ASSERT_EQ(int, "%d", expected_file_size, file_size);
 
         // check the indices at the end of the file
         std::ifstream shard_file(shard_path, std::ios::binary);
-        shard_file.seekg(-index_size, std::ios::end);
-        std::vector<uint64_t> indices(2 * chunks_per_full_shard);
-        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+        shard_file.seekg(-(checksum_size + index_size * chunks_per_shard),
+                         std::ios::end);
+        std::vector<uint64_t> indices(2 * chunks_per_shard);
+        shard_file.read(reinterpret_cast<char*>(indices.data()),
+                        index_size * chunks_per_shard);
 
         size_t offset = 0;
         for (auto i = 0; i < indices.size(); i += 12) {
@@ -363,20 +357,23 @@ validate()
         const size_t chunks_this_shard = 6;
 
         const fs::path shard_path =
-          test_path / "data" / "root" / "0" / "c0" / "1" / "0";
+          test_path / "0" / "c" / "0" / "1" / "0";
         CHECK(fs::is_regular_file(shard_path));
 
         const int expected_file_size =
           chunks_this_shard * bytes_per_chunk + // 6 chunks
-          index_size;                           // 42 indices
+          index_size * chunks_per_shard +       // 42 indices (full size)
+          checksum_size;
         const int file_size = fs::file_size(shard_path);
         ASSERT_EQ(int, "%d", expected_file_size, file_size);
 
         // check the indices at the end of the file
         std::ifstream shard_file(shard_path, std::ios::binary);
-        shard_file.seekg(-index_size, std::ios::end);
-        std::vector<uint64_t> indices(2 * chunks_per_full_shard);
-        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+        shard_file.seekg(-(checksum_size + index_size * chunks_per_shard),
+                         std::ios::end);
+        std::vector<uint64_t> indices(2 * chunks_per_shard);
+        shard_file.read(reinterpret_cast<char*>(indices.data()),
+                        index_size * chunks_per_shard);
 
         for (auto i = 0; i < 12; i += 2) {
             ASSERT_EQ(
@@ -398,20 +395,23 @@ validate()
         const size_t chunks_this_shard = 2;
 
         const fs::path shard_path =
-          test_path / "data" / "root" / "0" / "c0" / "1" / "1";
+          test_path / "0" / "c" / "0" / "1" / "1";
         CHECK(fs::is_regular_file(shard_path));
 
         const int expected_file_size =
           chunks_this_shard * bytes_per_chunk + // 2 chunks
-          index_size;                           // 42 indices
+          index_size * chunks_per_shard +       // 42 indices (full size)
+          checksum_size;
         const int file_size = fs::file_size(shard_path);
         ASSERT_EQ(int, "%d", expected_file_size, file_size);
 
         // check the indices at the end of the file
         std::ifstream shard_file(shard_path, std::ios::binary);
-        shard_file.seekg(-index_size, std::ios::end);
-        std::vector<uint64_t> indices(2 * chunks_per_full_shard);
-        shard_file.read(reinterpret_cast<char*>(indices.data()), index_size);
+        shard_file.seekg(-(checksum_size + index_size * chunks_per_shard),
+                         std::ios::end);
+        std::vector<uint64_t> indices(2 * chunks_per_shard);
+        shard_file.read(reinterpret_cast<char*>(indices.data()),
+                        index_size * chunks_per_shard);
 
         ASSERT_EQ(uint64_t, "%zu", 0, indices.at(0));
         ASSERT_EQ(uint64_t, "%zu", bytes_per_chunk, indices.at(1));

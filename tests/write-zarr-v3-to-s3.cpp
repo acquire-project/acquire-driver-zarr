@@ -305,12 +305,15 @@ validate_and_cleanup(AcquireRuntime* runtime)
 {
     CHECK(runtime);
 
-    std::vector<std::string> paths{ (TEST "/zarr.json"),
-                                    (TEST "/meta/root.group.json"),
-                                    (TEST "/meta/root/0.array.json"),
-                                    (TEST "/meta/acquire.json") };
+    std::vector<std::string> paths{
+        (TEST "/zarr.json"),
+        (TEST "/0/zarr.json"),
+        (TEST "/acquire.json")
+    };
+
+    // Add data paths
     for (auto i = 0; i < 20; ++i) {
-        paths.push_back((TEST "/data/root/0/c") + std::to_string(i) + "/0/0");
+        paths.push_back(std::string(TEST) + "/0/c/" + std::to_string(i) + "/0/0");
     }
 
     minio::s3::BaseUrl url(s3_endpoint);
