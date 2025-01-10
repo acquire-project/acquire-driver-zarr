@@ -196,8 +196,7 @@ verify_layer(const LayerTestCase& test_case)
     const auto frames_per_layer = test_case.frames_per_layer;
     const auto frames_per_chunk = test_case.frames_per_chunk;
 
-    const auto array_meta_path = fs::path(TEST ".zarr") / "meta" / "root" /
-                                 (std::to_string(layer) + ".array.json");
+    const auto array_meta_path = fs::path(TEST ".zarr") / std::to_string(layer) / "zarr.json";
     CHECK(fs::is_regular_file(array_meta_path));
     CHECK(fs::file_size(array_meta_path) > 0);
 
@@ -211,19 +210,24 @@ verify_layer(const LayerTestCase& test_case)
     ASSERT_EQ(int, "%d", layer_frame_height, shape[2]);
     ASSERT_EQ(int, "%d", layer_frame_width, shape[3]);
 
-    const auto chunk_shape = array_meta["chunk_grid"]["chunk_shape"];
-    ASSERT_EQ(int, "%d", frames_per_chunk, chunk_shape[0].get<int>());
-    ASSERT_EQ(int, "%d", 1, chunk_shape[1].get<int>());
-    ASSERT_EQ(int, "%d", layer_tile_height, chunk_shape[2].get<int>());
-    ASSERT_EQ(int, "%d", layer_tile_width, chunk_shape[3].get<int>());
+    const auto chunk_grid = array_meta["chunk_grid"];
+    CHECK("regular" == chunk_grid["name"]);
+
+    const auto chunk_shape = chunk_grid["configuration"]["chunk_shape"];
+    ASSERT_EQ(int, "%d", frames_per_chunk, chunk_shape[0]);
+    ASSERT_EQ(int, "%d", 1, chunk_shape[1]);
+    ASSERT_EQ(int, "%d", layer_tile_height, chunk_shape[2]);
+    ASSERT_EQ(int, "%d", layer_tile_width, chunk_shape[3]);
+
+    const auto chunk_key_encoding = array_meta["chunk_key_encoding"];
+    CHECK("/" == chunk_key_encoding["configuration"]["separator"]);
 
     // check chunked data
     size_t chunk_size = chunk_shape[0].get<int>() * chunk_shape[1].get<int>() *
                         chunk_shape[2].get<int>() * chunk_shape[3].get<int>();
-    size_t shard_file_size =
-      chunk_size + // 1 chunk per shard
-      2 *
-        sizeof(uint64_t); // 2 uint64_t for the chunk size and the chunk offset
+    const size_t index_size = 2 * sizeof(uint64_t);
+    const auto checksum_size = sizeof(uint32_t);
+    const size_t shard_file_size = chunk_size + index_size + checksum_size;
 
     const auto shards_in_x =
       (layer_frame_width + layer_tile_width - 1) / layer_tile_width;
@@ -231,13 +235,10 @@ verify_layer(const LayerTestCase& test_case)
     const auto shards_in_y =
       (layer_frame_height + layer_tile_height - 1) / layer_tile_height;
 
-    const fs::path data_root = fs::path(TEST ".zarr") / "data" / "root";
-    CHECK(fs::is_directory(data_root));
-
-    const fs::path layer_root = data_root / std::to_string(layer);
+    const fs::path layer_root = fs::path(TEST ".zarr") / std::to_string(layer);
     CHECK(fs::is_directory(layer_root));
 
-    const fs::path t_path = layer_root / "c0";
+    const fs::path t_path = layer_root / "c" / "0";
     CHECK(fs::is_directory(t_path));
 
     const fs::path c_path = t_path / "0";
@@ -250,14 +251,12 @@ verify_layer(const LayerTestCase& test_case)
         for (auto j = 0; j < shards_in_x; ++j) {
             const auto shard_file_path = y_path / std::to_string(j);
             CHECK(fs::is_regular_file(shard_file_path));
-
-            const auto file_size = fs::file_size(shard_file_path);
-            ASSERT_EQ(int, "%d", shard_file_size, file_size);
+            ASSERT_EQ(int, "%d", shard_file_size, fs::file_size(shard_file_path));
         }
     }
 
     // check there's not a second shard in t
-    auto missing_path = layer_root / "c1";
+    auto missing_path = layer_root / "c" / "1";
     CHECK(!fs::is_regular_file(missing_path));
 
     // check there's not a second shard in c
@@ -278,14 +277,15 @@ validate()
 {
     CHECK(fs::is_directory(TEST ".zarr"));
 
-    const auto group_meta_path =
-      fs::path(TEST ".zarr") / "meta" / "root.group.json";
+    const auto group_meta_path = fs::path(TEST ".zarr") / "zarr.json";
     CHECK(fs::is_regular_file(group_meta_path));
     CHECK(fs::file_size(group_meta_path) > 0);
 
     // check metadata
     std::ifstream f(group_meta_path);
     json group_meta = json::parse(f);
+
+    CHECK(group_meta["zarr_format"].get<int>() == 3);
 
     const auto multiscales = group_meta["attributes"]["multiscales"][0];
 

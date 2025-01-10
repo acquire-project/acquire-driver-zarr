@@ -276,7 +276,7 @@ validate_array_v3(const json& j)
     ASSERT_EQ(int, "%d", array_height, j["shape"][3]);
     ASSERT_EQ(int, "%d", array_width, j["shape"][4]);
 
-    const auto chunk_shape = j["chunk_grid"]["chunk_shape"];
+    const auto chunk_shape = j["chunk_grid"]["configuration"]["chunk_shape"];
     ASSERT_EQ(int, "%d", 5, chunk_shape.size());
     ASSERT_EQ(int, "%d", chunk_timepoints, chunk_shape[0]);
     ASSERT_EQ(int, "%d", chunk_channels, chunk_shape[1]);
@@ -320,8 +320,7 @@ validate(AcquireRuntime* runtime)
     CHECK(fs::is_directory(stream1_path));
 
     // OME metadata in Zarr V3
-    const fs::path group_metadata_path =
-      stream1_path / "meta" / "root.group.json";
+    const fs::path group_metadata_path = stream1_path / "zarr.json";
     {
         CHECK(fs::is_regular_file(group_metadata_path));
 
@@ -333,7 +332,7 @@ validate(AcquireRuntime* runtime)
     }
 
     // Array metadata in Zarr V3
-    const fs::path array_metadata_path = stream1_path / "meta" / "root" / "0.array.json";
+    const fs::path array_metadata_path = stream1_path / "0" / "zarr.json";
     {
         CHECK(fs::is_regular_file(array_metadata_path));
 
